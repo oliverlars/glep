@@ -136,6 +136,13 @@ parse_pointer :: (p: *Parser) {
 	print("declarator has % pointers\n", count);
 }
 
+parse_assignment_expr :: (p: *Parser) {
+	// This needs to be done properly, currently it only does a single number...
+	if look_ahead(p, 0).type == .Number {
+		advance(p);
+	}
+}
+
 parse_direct_declarator :: (p: *Parser) {
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		print("parsing function pointer\n");
@@ -153,9 +160,12 @@ parse_direct_declarator :: (p: *Parser) {
 		} else if look_ahead(p, 0).type == .LeftBracket {
 			print("parsing array declarator\n");
 			advance(p);
-			whiel true {
-				parse_d
+			if look_ahead(p, 0).view == "static" then advance(p);
+			if is_type_qualifier(look_ahead(p, 0)) {
+				advance(p);
 			}
+			parse_assignment_expr(p);
+			advance(p);
 		}
 	}
 }
@@ -255,7 +265,7 @@ main :: ()
 	
 	STRING
 
-	basic_decl :: "extern int *a, * const *b;";
+	basic_decl :: "extern int *a, * const *b[10];";
 
 	tokeniser: Tokeniser;
 	tokeniser.source = basic_decl;
