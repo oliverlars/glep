@@ -33,6 +33,7 @@ Tokeniser :: struct {
 Parser :: struct {
 	t: *Tokeniser;
 	at: int;
+	some_array: [256]float;
 }
 
 tokenise :: (t: *Tokeniser) {
@@ -146,26 +147,34 @@ parse_assignment_expr :: (p: *Parser) {
 parse_direct_declarator :: (p: *Parser) {
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		print("parsing function pointer\n");
+		advance(p); // LeftParenthesis
+		parse_declarator(p);
+		advance(p); // RightParenthesis
 	} else if look_ahead(p, 0).type == .Identifier {
 		advance(p);
+	}
+
+	while true {
 		if look_ahead(p, 0).type == .LeftParenthesis {
 			print("parsing function decl\n");
 			advance(p);
-			while true {
-				parse_decl(p);
-				if look_ahead(p, 0).type == .RightParenthesis then break;
-				assert(look_ahead(p, 0).type == .Comma);
-				advance(p);
-			}
+			// parse_decl(p);
+			// if look_ahead(p, 0).type == .RightParenthesis then break;
+			// assert(look_ahead(p, 0).type == .Comma);
+			advance(p);
 		} else if look_ahead(p, 0).type == .LeftBracket {
 			print("parsing array declarator\n");
-			advance(p);
+			advance(p); // LeftBracket
 			if look_ahead(p, 0).view == "static" then advance(p);
 			if is_type_qualifier(look_ahead(p, 0)) {
 				advance(p);
 			}
+			// VLAs
+			if look_ahead(p, 0).type == .Asterisk then advance(p);
 			parse_assignment_expr(p);
-			advance(p);
+			advance(p); // RightBracket
+		} else {
+			break;
 		}
 	}
 }
@@ -176,6 +185,10 @@ parse_declarator :: (p: *Parser) {
 }
 
 parse_decl :: (p: *Parser) {
+	
+	x := New([256]float);
+	y := x.(*u8);
+	memcpy(y, *p.some_array, 256*4);
 	parse_declaration_specifiers(p);
 	// Once we've parsed the declaration specifiers we now need to determine what we are parsing
 	// next. A '(' implies we are parsing a function pointer, an identifier followed by '(' would be a function
@@ -189,8 +202,13 @@ parse_decl :: (p: *Parser) {
 	}
 
 }
-main :: ()
-{
+
+test :: (p: Parser) {
+	x := New([256]float);
+	y := x.(*u8);
+	memcpy(*p.some_array, y, 256*4);
+}
+main :: () {
 	input := #string STRING
 	int x;
 	int y = 5;
@@ -222,7 +240,6 @@ main :: ()
 	double *ret_vec(int n);
 	int (*ret_array(void))[10];
 	int (*ret_func(void))(int);
-
 	int   add(int a, int b);
 	void  notify(int code);
 	int  (*pf_add)(int, int);
@@ -265,7 +282,7 @@ main :: ()
 	
 	STRING
 
-	basic_decl :: "extern int *a, * const *b[10];";
+	basic_decl :: "extern int (*c)(), *a, * const *b[static 10];";
 
 	tokeniser: Tokeniser;
 	tokeniser.source = basic_decl;
@@ -279,6 +296,8 @@ main :: ()
 	parser.t = *tokeniser;
 	
 	parse_decl(*parser);
+
+	test(parser);
 
 	print("abc");
 }
