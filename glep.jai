@@ -144,6 +144,11 @@ parse_assignment_expr :: (p: *Parser) {
 	}
 }
 
+parse_param_decl :: (p: *Parser) {
+	parse_declaration_specifiers(p);
+	parse_declarator(p);
+}
+
 parse_direct_declarator :: (p: *Parser) {
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		print("parsing function pointer\n");
@@ -158,9 +163,10 @@ parse_direct_declarator :: (p: *Parser) {
 		if look_ahead(p, 0).type == .LeftParenthesis {
 			print("parsing function decl\n");
 			advance(p);
-			// parse_decl(p);
-			// if look_ahead(p, 0).type == .RightParenthesis then break;
-			// assert(look_ahead(p, 0).type == .Comma);
+			while look_ahead(p, 0).type != .RightParenthesis {
+				parse_param_decl(p);
+				if look_ahead(p, 0).type == .Comma then advance(p);
+			}
 			advance(p);
 		} else if look_ahead(p, 0).type == .LeftBracket {
 			print("parsing array declarator\n");
@@ -282,10 +288,10 @@ main :: () {
 	
 	STRING
 
-	basic_decl :: "extern int (*c)(), *a, * const *b[static 10];";
+	basic_decl :: "extern int (*c)(int a, int b), *a, * const *b[static 10];";
 
 	tokeniser: Tokeniser;
-	tokeniser.source = basic_decl;
+	tokeniser.source = input;
 	tokenise(*tokeniser);
 
 	for tokeniser.tokens {
