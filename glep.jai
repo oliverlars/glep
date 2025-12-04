@@ -33,7 +33,30 @@ Tokeniser :: struct {
 Parser :: struct {
 	t: *Tokeniser;
 	at: int;
-	some_array: [256]float;
+}
+
+Node :: struct {
+
+}
+
+Node_Type_Info :: struct {
+	qualifiers: [..]string;
+	specifiers: [..]string;
+	storage_class: string;
+}
+
+Node_Variable_Decl :: struct {
+	using node: Node;
+	name: string;
+	init: *Node;
+	type: Node_Type_Info;
+}
+
+Node_Function_Decl :: struct {
+	using node: Node;
+	name: string;
+	params: [..]*Node_Variable_Decl;
+	ret_type: Node_Type_Info;
 }
 
 tokenise :: (t: *Tokeniser) {
@@ -105,7 +128,7 @@ is_type_qualifier :: (token: Token) -> bool {
 	return token.view == "const" || token.view == "volatile" || token.view == "restrict";
 }
 
-parse_declaration_specifiers :: (p: *Parser) {
+parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	is_storage_specifier :: (token: Token) -> bool {
 		return token.view == "static" || token.view == "auto" || token.view == "extern" || token.view == "register";
 	}
@@ -123,6 +146,13 @@ parse_declaration_specifiers :: (p: *Parser) {
 		   is_type_specifier(look_ahead(p, 0)) ||
 		   is_function_specifier(look_ahead(p, 0)) ||
 		   look_ahead(p, 0).view == "typedef" {
+		if is_type_qualifier(look_ahead(p, 0)) {
+			array_add(*info.qualifiers, look_ahead(p, 0).view);
+		} else if is_storage_specifier(look_ahead(p, 0)) {
+			info.storage_class = look_ahead(p, 0).view;
+		} else {
+			array_add(*info.qualifiers, look_ahead(p, 0).view);
+		}
 		advance(p);
 	}
 }
@@ -134,7 +164,6 @@ parse_pointer :: (p: *Parser) {
 		count += (look_ahead(p, 0).type == .Asterisk).(int);
 		advance(p);
 	}
-	print("declarator has % pointers\n", count);
 }
 
 parse_assignment_expr :: (p: *Parser) {
@@ -144,14 +173,15 @@ parse_assignment_expr :: (p: *Parser) {
 	}
 }
 
-parse_param_decl :: (p: *Parser) {
-	parse_declaration_specifiers(p);
+parse_param_decl :: (p: *Parser) -> *Node_Variable_Decl {
+	decl := New(Node_Variable_Decl);
+	parse_declaration_specifiers(p, *decl.type);
 	parse_declarator(p);
+	return null;
 }
 
 parse_direct_declarator :: (p: *Parser) {
 	if look_ahead(p, 0).type == .LeftParenthesis {
-		print("parsing function pointer\n");
 		advance(p); // LeftParenthesis
 		parse_declarator(p);
 		advance(p); // RightParenthesis
@@ -161,7 +191,6 @@ parse_direct_declarator :: (p: *Parser) {
 
 	while true {
 		if look_ahead(p, 0).type == .LeftParenthesis {
-			print("parsing function decl\n");
 			advance(p);
 			while look_ahead(p, 0).type != .RightParenthesis {
 				if look_ahead(p, 0).type == .Ellipses {
@@ -173,7 +202,6 @@ parse_direct_declarator :: (p: *Parser) {
 			}
 			advance(p);
 		} else if look_ahead(p, 0).type == .LeftBracket {
-			print("parsing array declarator\n");
 			advance(p); // LeftBracket
 			if look_ahead(p, 0).view == "static" then advance(p);
 			if is_type_qualifier(look_ahead(p, 0)) {
@@ -193,15 +221,16 @@ parse_declarator :: (p: *Parser) {
 	parse_direct_declarator(p);
 }
 
-parse_decl :: (p: *Parser) {
-	
-	parse_declaration_specifiers(p);
+parse_decl :: (p: *Parser) -> *Node_Variable_Decl {
+
+	decl := New(Node_Variable_Decl);
+	parse_declaration_specifiers(p, *decl.type);
 	// Once we've parsed the declaration specifiers we now need to determine what we are parsing
 	// next. A '(' implies we are parsing a function pointer, an identifier followed by '(' would be a function
 	// and just an identifier would mean a normal declaration.
 
+	start := p.at;
 	while true {
-		start := p.at;
 		parse_declarator(p);
 		if look_ahead(p, 0).type == .Semicolon {
 			advance(p);
@@ -209,8 +238,13 @@ parse_decl :: (p: *Parser) {
 		}
 		assert(look_ahead(p, 0).type == .Comma);
 		advance(p);
-		end := p.at;
 	}
+	end := p.at;
+	print("Decl tokens: ");
+	for start..end-1 {
+		print("% ", p.t.tokens[it]);
+	}
+	print("\n");
 }
 
 main :: () {
@@ -234,6 +268,7 @@ main :: () {
 	static inline int max(int a, int b);
 	extern void log_message(const char *msg);
 	int (*ret_array(void))[10];
+	int qsort(void *a, void *b, int (*cmp)(void*, void*));
 	STRING
 	// int fdef(int x);
 	// static void helper(void);
