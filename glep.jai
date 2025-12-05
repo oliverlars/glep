@@ -82,10 +82,6 @@ Node_Decl :: struct {
 	base_info: Node_Type_Info;
 }
 
-Node_Array_Decl :: struct {
-	
-}
-
 Node_Function_Decl :: struct {
 	#as using node: Node;
 	type = Node_Function_Decl;
@@ -192,11 +188,17 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	}
 }
 
-parse_assignment_expr :: (p: *Parser) {
+// Temporarily return integer
+parse_assignment_expr :: (p: *Parser) -> int {
 	// This needs to be done properly, currently it only does a single number...
+	result: int;
 	if look_ahead(p, 0).type == .Number {
+		for look_ahead(p, 0).view {
+			result = result * 10 + it - #char "0";
+		}
 		advance(p);
 	}
+	return result;
 }
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
@@ -242,7 +244,9 @@ parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
 				advance(p);
 			}
 			if look_ahead(p, 0).type == .Asterisk then advance(p);
-			parse_assignment_expr(p);
+			
+			declarator.count = parse_assignment_expr(p);
+			array_add(*decl.declarators, declarator);
 			advance(p); // RightBracket
 		} else {
 			break;
@@ -292,6 +296,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		case Node_Identifier_Declarator;
 			print("% ", it.(*Node_Identifier_Declarator).name);
 		case Node_Array_Declarator;
+			print("[%]", it.(*Node_Array_Declarator).count);
 		}
 	}
 	print("\n");
