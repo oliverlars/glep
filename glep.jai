@@ -66,7 +66,7 @@ Node_Array_Declarator :: struct {
 
 Node_Pointer_Declarator :: struct {
 	#as using declarator: Node_Declarator;
-	declarator_type = Node_Function_Declarator;
+	declarator_type = Node_Pointer_Declarator;
 }
 
 Node_Identifier_Declarator :: struct {
@@ -250,12 +250,15 @@ parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
 	}
 }
 
-parse_declarator :: (p: *Parser, decl: *Node_Decl) -> *Node_Declarator {
-	while true {
-		if !is_type_qualifier(look_ahead(p, 0)) && look_ahead(p, 0).type != .Asterisk then break;
+parse_declarator :: (p: *Parser, decl: *Node_Decl) {
+	while is_type_qualifier(look_ahead(p, 0)) || look_ahead(p, 0).type == .Asterisk {
 		pointer := New(Node_Pointer_Declarator);
+		while is_type_qualifier(look_ahead(p, 0)) {
+			array_add(*pointer.qualifiers, look_ahead(p, 0).view);
+			advance(p);
+		}
 		array_add(*decl.declarators, pointer);
-		advance(p);
+		advance(p); // '*'
 	}
 	parse_direct_declarator(p, decl);
 }
@@ -269,9 +272,8 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	// next. A '(' implies we are parsing a function pointer, an identifier followed by '(' would be a function
 	// and just an identifier would mean a normal declaration.
 
-	decl: *Node_Decl;
-	decl = New(Node_Decl);
-	pointers: int;
+	decl := New(Node_Decl);
+	decl.base_info = type;
 	parse_declarator(p, decl);
 	if look_ahead(p, 0).type == .Semicolon {
 		advance(p);
@@ -279,12 +281,26 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		assert(look_ahead(p, 0).type == .Comma);
 		advance(p);
 	}
+
+	print("% ", type);
+	for decl.declarators {
+		if it.declarator_type == {
+		case Node_Pointer_Declarator;
+			print("*");
+		case Node_Function_Declarator;
+			func := it.(*Node_Function_Declarator);
+		case Node_Identifier_Declarator;
+			print("% ", it.(*Node_Identifier_Declarator).name);
+		case Node_Array_Declarator;
+		}
+	}
+	print("\n");
 	return decl;
 }
 
 main :: () {
 	input := #string STRING
-	int x;
+	int x, z;
 	int y;
 	const int cz;
 	int const cx;
@@ -293,7 +309,7 @@ main :: () {
 	volatile int vx;
 	int *p;
 	int **pp;
-	int * const cp ;
+	int * const cp;
 	const int *q;
 	int * volatile vp;
 
