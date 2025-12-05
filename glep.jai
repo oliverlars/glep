@@ -116,11 +116,11 @@ tokenise :: (t: *Tokeniser) {
 				case "*"; t.at += 1; token.type = .Asterisk;
 				case "."; {
 					t.at += 1;
-					token.type == .Period;
+					token.type = .Period;
 					if t.at + 2 < t.source.count {
-						if t.source.data[t.at + 1] == #char "." &&
-						   t.source.data[t.at + 2] == #char "." {
-							token.type == .Ellipses;
+						if t.source.data[t.at] == #char "." &&
+						   t.source.data[t.at + 1] == #char "." {
+							token.type = .Ellipses;
 							t.at += 2;
 						}
 					}
@@ -128,7 +128,8 @@ tokenise :: (t: *Tokeniser) {
 				case; {
 					if is_ident(t.source[t.at]) {
 						token.type = .Identifier;
-						while is_ident(t.source[t.at]) || t.source[t.at] == #char "_" {
+						while is_ident(t.source[t.at]) || t.source[t.at] == #char "_"  ||
+							  is_num(t.source[t.at]) {
 							t.at += 1;
 						}
 						token.view.count = t.source.data + t.at - token.view.data;
@@ -234,7 +235,7 @@ parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
 				}
 				if look_ahead(p, 0).type == .Comma then advance(p);
 			}
-			advance(p);
+			advance(p); // ')'
 			array_add(*decl.declarators, declarator);
 		} else if look_ahead(p, 0).type == .LeftBracket {
 			declarator := New(Node_Array_Declarator);
@@ -335,61 +336,59 @@ main :: () {
 	extern void log_message(const char *msg);
 	int (*ret_array(void))[10];
 	int qsort(void *a, void *b, int (*cmp)(void*, void*));
-	STRING
-	// int fdef(int x);
-	// static void helper(void);
 
-	// int printf(const char *fmt, ...);
-	// void logf(int level, const char *fmt, ...);
-	// double average(int count, ...);
+	int fdef(int x);
+	static void helper(void);
 
-	// int *ret_int_ptr(void);
-	// double *ret_vec(int n);
-	// int (*ret_array(void))[10];
-	// int (*ret_func(void))(int);
-	// int   add(int a, int b);
-	// void  notify(int code);
-	// int  (*pf_add)(int, int);
-	// void (*pf_notify)(int);
+	int printf(const char *fmt, ...);
+	void logf(int level, const char *fmt, ...);
+	double average(int count, ...);
 
-	// void takes_fp1(int (*cb)(int));
-	// void takes_fp2(int cb(int));
+	int *ret_int_ptr(void);
+	double *ret_vec(int n);
+	int (*ret_array(void))[10];
+	int (*ret_func(void))(int);
+	int   add(int a, int b);
+	void  notify(int code);
+	int  (*pf_add)(int, int);
+	void (*pf_notify)(int);
 
-	// static int (*pf_static)(int, int);
-	// int (* const pf_const)(int);
-	// int (* volatile pf_volatile)(void);
+	void takes_fp1(int (*cb)(int));
+	void takes_fp2(int cb(int));
 
-	// void (*handlers[3])(int);
-	// int  (*ops[4])(int, int);
-	// int  (*(*table)[5])(void);
+	static int (*pf_static)(int, int);
+	int (* const pf_const)(int);
+	int (* volatile pf_volatile)(void);
 
-	// void apply_unary(int *arr, int n, int (*f)(int));
-	// void for_each(void **items, int count, void (*fn)(void *));
-	// void register_handlers(int n, void (*handlers[])(int));
-	// void run_all(int count, int (*ops[])(int, int));
+	void (*handlers[3])(int);
+	int  (*ops[4])(int, int);
+	int  (*(*table)[5])(void);
 
-	// int (*choose_op(char op))(int, int);
-	// void (*signal(int sig, void (*handler)(int)))(int);
+	void apply_unary(int *arr, int n, int (*f)(int));
+	void for_each(void **items, int count, void (*fn)(void *));
+	void register_handlers(int n, void (*handlers[])(int));
+	void run_all(int count, int (*ops[])(int, int));
 
-	// typedef int (*binary_op)(int, int);
-	// typedef void (*void_cb)(void);
-	// typedef double (*unary_double)(double);
-	// binary_op   get_op(char op);
-	// void        set_callback(void_cb cb);
-	// void        register_many(int n, void_cb callbacks[]);
-	// unary_double choose_transform(int kind);
+	int (*choose_op(char op))(int, int);
+	void (*signal(int sig, void (*handler)(int)))(int);
 
-	// int *f1(int);
-	// int (*f2)(int);
-	// int (*f3[5])(double);
+	typedef int (*binary_op)(int, int);
+	typedef void (*void_cb)(void);
+	typedef double (*unary_double)(double);
+	int     get_op(char op);
+	void    set_callback(void_cb cb);
+	void    register_many(int n, void_cb callbacks[0]);
+	int     choose_transform(int kind);
 
-	// int *a1[5];
-	// int (*a2)[5];
-	// int (*(*a3)[5])(void);
+	int *f1(int);
+	int (*f2)(int);
+	int (*f3[5])(double);
+
+	int *a1[5];
+	int (*a2)[5];
+	int (*(*a3)[5])(void);
 	
-	// STRING
-
-	basic_decl :: "extern int (*c)(int a, int b), *a, * const *b[static 10];";
+	STRING
 
 	tokeniser: Tokeniser;
 	tokeniser.source = input;
@@ -402,7 +401,4 @@ main :: () {
 	while parser.at < parser.t.tokens.count {
 		parse_decl(*parser);
 	}
-
-
-	print("abc");
 }
