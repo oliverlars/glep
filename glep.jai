@@ -286,20 +286,30 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		advance(p);
 	}
 
-	print("% ", type);
-	for decl.declarators {
-		if it.declarator_type == {
-		case Node_Pointer_Declarator;
-			print("*");
-		case Node_Function_Declarator;
-			func := it.(*Node_Function_Declarator);
-		case Node_Identifier_Declarator;
-			print("% ", it.(*Node_Identifier_Declarator).name);
-		case Node_Array_Declarator;
-			print("[%]", it.(*Node_Array_Declarator).count);
+	print_decl :: (decl: *Node_Decl) {
+		print("% ", decl.base_info);
+		for decl.declarators {
+			if it.declarator_type == {
+			case Node_Pointer_Declarator;
+				print("*");
+			case Node_Function_Declarator;
+				func := it.(*Node_Function_Declarator);
+				print("(");
+				for func.params {
+					print_decl(it);
+					print(", ");
+				}
+				print(")");
+			case Node_Identifier_Declarator;
+				print("% ", it.(*Node_Identifier_Declarator).name);
+			case Node_Array_Declarator;
+				print("[%]", it.(*Node_Array_Declarator).count);
+			}
 		}
 	}
-	print("\n");
+
+	print_decl(decl); print("\n");
+	
 	return decl;
 }
 
