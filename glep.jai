@@ -36,7 +36,7 @@ Parser :: struct {
 }
 
 Node :: struct {
-
+	type: Type;
 }
 
 Node_Type_Info :: struct {
@@ -45,17 +45,52 @@ Node_Type_Info :: struct {
 	storage_class: string;
 }
 
-Node_Variable_Decl :: struct {
-	using node: Node;
-	name: string;
+Node_Declarator :: struct {
+	#as using node: Node;
+	qualifiers: [..]string;
+	declarator_type: Type;
 	init: *Node;
-	type: Node_Type_Info;
+}
+
+Node_Function_Declarator :: struct {
+	#as using declarator: Node_Declarator;
+	declarator_type = Node_Function_Declarator;
+	params: [..]*Node_Decl;
+}
+
+Node_Array_Declarator :: struct {
+	#as using declarator: Node_Declarator;
+	declarator_type = Node_Array_Declarator;
+	count: int;
+}
+
+Node_Pointer_Declarator :: struct {
+	#as using declarator: Node_Declarator;
+	declarator_type = Node_Function_Declarator;
+}
+
+Node_Identifier_Declarator :: struct {
+	#as using declarator: Node_Declarator;
+	declarator_type = Node_Identifier_Declarator;
+	name: string;
+}
+
+Node_Decl :: struct {
+	#as using node: Node;
+	type = Node_Decl;
+	declarators: [..]*Node_Declarator;
+	base_info: Node_Type_Info;
+}
+
+Node_Array_Decl :: struct {
+	
 }
 
 Node_Function_Decl :: struct {
-	using node: Node;
+	#as using node: Node;
+	type = Node_Function_Decl;
 	name: string;
-	params: [..]*Node_Variable_Decl;
+	params: [..]*Node_Decl;
 	ret_type: Node_Type_Info;
 }
 
@@ -157,15 +192,6 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	}
 }
 
-parse_pointer :: (p: *Parser) {
-	count := (0).(int);
-	while true {
-		if !is_type_qualifier(look_ahead(p, 0)) && look_ahead(p, 0).type != .Asterisk then break;
-		count += (look_ahead(p, 0).type == .Asterisk).(int);
-		advance(p);
-	}
-}
-
 parse_assignment_expr :: (p: *Parser) {
 	// This needs to be done properly, currently it only does a single number...
 	if look_ahead(p, 0).type == .Number {
@@ -173,35 +199,43 @@ parse_assignment_expr :: (p: *Parser) {
 	}
 }
 
-parse_param_decl :: (p: *Parser) -> *Node_Variable_Decl {
-	decl := New(Node_Variable_Decl);
-	parse_declaration_specifiers(p, *decl.type);
-	parse_declarator(p);
-	return null;
+parse_param_decl :: (p: *Parser) -> *Node_Decl {
+	decl := New(Node_Decl);
+	parse_declaration_specifiers(p, *decl.base_info);
+	parse_declarator(p, decl);
+	return decl;
 }
 
-parse_direct_declarator :: (p: *Parser) {
+parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
+	is_function_pointer: bool;
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		advance(p); // LeftParenthesis
-		parse_declarator(p);
+		parse_declarator(p, decl);
 		advance(p); // RightParenthesis
+		is_function_pointer = true;
 	} else if look_ahead(p, 0).type == .Identifier {
+		declarator := New(Node_Identifier_Declarator);
+		declarator.name = look_ahead(p, 0).view;
+		array_add(*decl.declarators, declarator);
 		advance(p);
 	}
 
 	while true {
 		if look_ahead(p, 0).type == .LeftParenthesis {
 			advance(p);
+			declarator := New(Node_Function_Declarator);
 			while look_ahead(p, 0).type != .RightParenthesis {
 				if look_ahead(p, 0).type == .Ellipses {
 					advance(p);
 				} else {
-					parse_param_decl(p);
+					array_add(*declarator.params, parse_param_decl(p));
 				}
 				if look_ahead(p, 0).type == .Comma then advance(p);
 			}
 			advance(p);
+			array_add(*decl.declarators, declarator);
 		} else if look_ahead(p, 0).type == .LeftBracket {
+			declarator := New(Node_Array_Declarator);
 			advance(p); // LeftBracket
 			if look_ahead(p, 0).view == "static" then advance(p);
 			if is_type_qualifier(look_ahead(p, 0)) {
@@ -216,35 +250,36 @@ parse_direct_declarator :: (p: *Parser) {
 	}
 }
 
-parse_declarator :: (p: *Parser) {
-	parse_pointer(p);
-	parse_direct_declarator(p);
+parse_declarator :: (p: *Parser, decl: *Node_Decl) -> *Node_Declarator {
+	while true {
+		if !is_type_qualifier(look_ahead(p, 0)) && look_ahead(p, 0).type != .Asterisk then break;
+		pointer := New(Node_Pointer_Declarator);
+		array_add(*decl.declarators, pointer);
+		advance(p);
+	}
+	parse_direct_declarator(p, decl);
 }
 
-parse_decl :: (p: *Parser) -> *Node_Variable_Decl {
+parse_decl :: (p: *Parser) -> *Node_Decl {
 
-	decl := New(Node_Variable_Decl);
-	parse_declaration_specifiers(p, *decl.type);
+
+	type: Node_Type_Info;
+	parse_declaration_specifiers(p, *type);
 	// Once we've parsed the declaration specifiers we now need to determine what we are parsing
 	// next. A '(' implies we are parsing a function pointer, an identifier followed by '(' would be a function
 	// and just an identifier would mean a normal declaration.
 
-	start := p.at;
-	while true {
-		parse_declarator(p);
-		if look_ahead(p, 0).type == .Semicolon {
-			advance(p);
-			break;
-		}
+	decl: *Node_Decl;
+	decl = New(Node_Decl);
+	pointers: int;
+	parse_declarator(p, decl);
+	if look_ahead(p, 0).type == .Semicolon {
+		advance(p);
+	} else {
 		assert(look_ahead(p, 0).type == .Comma);
 		advance(p);
 	}
-	end := p.at;
-	print("Decl tokens: ");
-	for start..end-1 {
-		print("% ", p.t.tokens[it]);
-	}
-	print("\n");
+	return decl;
 }
 
 main :: () {
