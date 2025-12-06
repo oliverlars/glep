@@ -56,23 +56,27 @@ Node_Function_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Function_Declarator;
 	params: [..]*Node_Decl;
+	inner: *Node_Declarator;
 }
 
 Node_Array_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Array_Declarator;
 	count: int;
+	inner: *Node_Declarator;
 }
 
 Node_Pointer_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Pointer_Declarator;
+	inner: *Node_Declarator;
 }
 
 Node_Identifier_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Identifier_Declarator;
 	name: string;
+	inner: *Node_Declarator;
 }
 
 Node_Decl :: struct {
@@ -287,8 +291,20 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		advance(p);
 	}
 
+	print_type :: (info: Node_Type_Info) {
+		
+		print("% ", info.storage_class);
+		
+		for info.qualifiers {
+			print("% ", it);
+		}
+		for info.specifiers {
+			print("% ", it);
+		}
+	}
+
 	print_decl :: (decl: *Node_Decl) {
-		print("% ", decl.base_info);
+		print_type(decl.base_info);
 		for decl.declarators {
 			if it.declarator_type == {
 			case Node_Pointer_Declarator;
@@ -302,7 +318,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 				}
 				print(")");
 			case Node_Identifier_Declarator;
-				print("% ", it.(*Node_Identifier_Declarator).name);
+				print("%", it.(*Node_Identifier_Declarator).name);
 			case Node_Array_Declarator;
 				print("[%]", it.(*Node_Array_Declarator).count);
 			}
