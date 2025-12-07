@@ -50,39 +50,36 @@ Node_Declarator :: struct {
 	qualifiers: [..]string;
 	declarator_type: Type;
 	init: *Node;
+	inner: *Node_Declarator;
 }
 
 Node_Function_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Function_Declarator;
 	params: [..]*Node_Decl;
-	inner: *Node_Declarator;
 }
 
 Node_Array_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Array_Declarator;
 	count: int;
-	inner: *Node_Declarator;
 }
 
 Node_Pointer_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Pointer_Declarator;
-	inner: *Node_Declarator;
 }
 
 Node_Identifier_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = Node_Identifier_Declarator;
 	name: string;
-	inner: *Node_Declarator;
 }
 
 Node_Decl :: struct {
 	#as using node: Node;
 	type = Node_Decl;
-	declarators: [..]*Node_Declarator;
+	declarators: *Node_Declarator;
 	base_info: Node_Type_Info;
 }
 
@@ -209,40 +206,40 @@ parse_assignment_expr :: (p: *Parser) -> int {
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
 	parse_declaration_specifiers(p, *decl.base_info);
-	parse_declarator(p, decl);
+	parse_declarator(p);
 	return decl;
 }
 
-parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
-	is_function_pointer: bool;
+parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
+	declarator: *Node_Declarator;
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		advance(p); // LeftParenthesis
-		parse_declarator(p, decl);
+		declarator = New(Node_Function_Declarator);
+		declarator.inner = parse_declarator(p);
 		advance(p); // RightParenthesis
-		is_function_pointer = true;
 	} else if look_ahead(p, 0).type == .Identifier {
-		declarator := New(Node_Identifier_Declarator);
-		declarator.name = look_ahead(p, 0).view;
-		array_add(*decl.declarators, declarator);
+		declarator = New(Node_Identifier_Declarator);
+		declarator.(*Node_Identifier_Declarator).name = look_ahead(p, 0).view;
 		advance(p);
 	}
 
 	while true {
 		if look_ahead(p, 0).type == .LeftParenthesis {
 			advance(p);
-			declarator := New(Node_Function_Declarator);
+			func := New(Node_Function_Declarator);
 			while look_ahead(p, 0).type != .RightParenthesis {
 				if look_ahead(p, 0).type == .Ellipses {
 					advance(p);
 				} else {
-					array_add(*declarator.params, parse_param_decl(p));
+					array_add(*declarator.(*Node_Function_Declarator).params, parse_param_decl(p));
 				}
 				if look_ahead(p, 0).type == .Comma then advance(p);
 			}
 			advance(p); // ')'
-			array_add(*decl.declarators, declarator);
+			func.inner = declarator;
+			declarator = func;
 		} else if look_ahead(p, 0).type == .LeftBracket {
-			declarator := New(Node_Array_Declarator);
+			array := New(Node_Array_Declarator);
 			advance(p); // LeftBracket
 			if look_ahead(p, 0).view == "static" then advance(p);
 			if is_type_qualifier(look_ahead(p, 0)) {
@@ -250,26 +247,39 @@ parse_direct_declarator :: (p: *Parser, decl: *Node_Decl) {
 			}
 			if look_ahead(p, 0).type == .Asterisk then advance(p);
 			
-			declarator.count = parse_assignment_expr(p);
-			array_add(*decl.declarators, declarator);
+			array.count = parse_assignment_expr(p);
+			array.inner = declarator;
+			declarator = array.inner;
 			advance(p); // RightBracket
 		} else {
 			break;
 		}
 	}
+	return declarator;
 }
 
-parse_declarator :: (p: *Parser, decl: *Node_Decl) {
+parse_declarator :: (p: *Parser) -> *Node_Declarator {
+	pointer: *Node_Pointer_Declarator;
 	while is_type_qualifier(look_ahead(p, 0)) || look_ahead(p, 0).type == .Asterisk {
-		pointer := New(Node_Pointer_Declarator);
+		next_pointer := New(Node_Pointer_Declarator);
 		while is_type_qualifier(look_ahead(p, 0)) {
 			array_add(*pointer.qualifiers, look_ahead(p, 0).view);
 			advance(p);
 		}
-		array_add(*decl.declarators, pointer);
+		if !pointer then {
+			pointer = next_pointer;
+		} else {
+			pointer.inner = next_pointer;
+			pointer = next_pointer;
+		}
 		advance(p); // '*'
 	}
-	parse_direct_declarator(p, decl);
+	if pointer {
+		pointer.inner = parse_direct_declarator(p);
+		return pointer;
+	} else {
+		return parse_direct_declarator(p);
+	}
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
@@ -283,7 +293,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	decl := New(Node_Decl);
 	decl.base_info = type;
-	parse_declarator(p, decl);
+	decl.declarators = parse_declarator(p);
 	if look_ahead(p, 0).type == .Semicolon {
 		advance(p);
 	} else {
@@ -305,7 +315,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	print_decl :: (decl: *Node_Decl) {
 		print_type(decl.base_info);
-		for decl.declarators {
+		it := decl.declarators;
+		while it {
+			defer it = it.inner;
 			if it.declarator_type == {
 			case Node_Pointer_Declarator;
 				print("*");
