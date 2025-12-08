@@ -206,7 +206,7 @@ parse_assignment_expr :: (p: *Parser) -> int {
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
 	parse_declaration_specifiers(p, *decl.base_info);
-	parse_declarator(p);
+	decl.declarators = parse_declarator(p);
 	return decl;
 }
 
@@ -214,8 +214,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 	declarator: *Node_Declarator;
 	if look_ahead(p, 0).type == .LeftParenthesis {
 		advance(p); // LeftParenthesis
-		declarator = New(Node_Function_Declarator);
-		declarator.inner = parse_declarator(p);
+		declarator = parse_declarator(p);
 		advance(p); // RightParenthesis
 	} else if look_ahead(p, 0).type == .Identifier {
 		declarator = New(Node_Identifier_Declarator);
@@ -231,7 +230,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 				if look_ahead(p, 0).type == .Ellipses {
 					advance(p);
 				} else {
-					array_add(*declarator.(*Node_Function_Declarator).params, parse_param_decl(p));
+					array_add(*func.(*Node_Function_Declarator).params, parse_param_decl(p));
 				}
 				if look_ahead(p, 0).type == .Comma then advance(p);
 			}
@@ -249,7 +248,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			
 			array.count = parse_assignment_expr(p);
 			array.inner = declarator;
-			declarator = array.inner;
+			declarator = array;
 			advance(p); // RightBracket
 		} else {
 			break;
@@ -259,27 +258,30 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 }
 
 parse_declarator :: (p: *Parser) -> *Node_Declarator {
-	pointer: *Node_Pointer_Declarator;
-	while is_type_qualifier(look_ahead(p, 0)) || look_ahead(p, 0).type == .Asterisk {
-		next_pointer := New(Node_Pointer_Declarator);
+	first: *Node_Pointer_Declarator;
+	last: *Node_Pointer_Declarator;
+	while look_ahead(p, 0).type == .Asterisk {
+		advance(p);
+		next := New(Node_Pointer_Declarator);
 		while is_type_qualifier(look_ahead(p, 0)) {
-			array_add(*pointer.qualifiers, look_ahead(p, 0).view);
+			array_add(*next.qualifiers, look_ahead(p, 0).view);
 			advance(p);
 		}
-		if !pointer then {
-			pointer = next_pointer;
+		if !first {
+			first = next;
 		} else {
-			pointer.inner = next_pointer;
-			pointer = next_pointer;
+			last.inner = next;
 		}
-		advance(p); // '*'
+		last = next;
 	}
-	if pointer {
-		pointer.inner = parse_direct_declarator(p);
-		return pointer;
-	} else {
-		return parse_direct_declarator(p);
+
+	base := parse_direct_declarator(p);
+	if first {
+		last.inner = base;
+		return first;
 	}
+
+	return base;
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
@@ -357,7 +359,7 @@ main :: () {
 	const int *q;
 	int * volatile vp;
 
-	void f(void);
+	void f(void a);
 	int g(int a, double b);
 	double h(int, int);
 	static inline int max(int a, int b);
