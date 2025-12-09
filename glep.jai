@@ -315,31 +315,43 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		}
 	}
 
-	print_decl :: (decl: *Node_Decl) {
-		print_type(decl.base_info);
-		it := decl.declarators;
-		while it {
-			defer it = it.inner;
-			if it.declarator_type == {
-			case Node_Pointer_Declarator;
-				print("*");
-			case Node_Function_Declarator;
-				func := it.(*Node_Function_Declarator);
+	print_declarator :: (declarator: *Node_Declarator, previous: *Node_Declarator = null) {
+		if !declarator then return;
+		if declarator.declarator_type == {
+		case Node_Pointer_Declarator;
+			print("*");
+			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
 				print("(");
-				for func.params {
-					print_decl(it);
-					print(", ");
-				}
-				print(")");
-			case Node_Identifier_Declarator;
-				print("%", it.(*Node_Identifier_Declarator).name);
-			case Node_Array_Declarator;
-				print("[%]", it.(*Node_Array_Declarator).count);
 			}
+			print_declarator(declarator.inner, declarator);
+			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
+				print(")");
+			}
+		case Node_Function_Declarator;
+			print_declarator(declarator.inner, declarator);
+			func := declarator.(*Node_Function_Declarator);
+			print("(");
+			for func.params {
+				if !it break;
+				print_type(it.base_info);
+				print_declarator(it.declarators, null);
+				if it_index < func.params.count - 1 then print(", ");
+			}
+			print(")");
+		case Node_Identifier_Declarator;
+			print_declarator(declarator.inner, declarator);
+			print("%", declarator.(*Node_Identifier_Declarator).name);
+		case Node_Array_Declarator;
+			print_declarator(declarator.inner, declarator);
+			print("[%]", declarator.(*Node_Array_Declarator).count);
 		}
 	}
 
-	print_decl(decl); print("\n");
+	print_type(decl.base_info);
+	print_declarator(decl.declarators);
+
+	
+	print("\n");
 	
 	return decl;
 }
