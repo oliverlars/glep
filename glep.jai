@@ -153,6 +153,15 @@ advance :: (p: *Parser, amount := 1) {
 	p.at += amount;
 }
 
+expect :: (p: *Parser, type: Token_Type) {
+	if p.t.tokens[p.at].type != type {
+		print("Expected: %\n", type);
+		exit(1);
+	} else {
+		p.at += 1;
+	}
+}
+
 look_ahead :: (p: *Parser, count: int) -> Token {
 	return p.t.tokens[p.at + count];
 }
@@ -179,9 +188,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		   is_type_specifier(look_ahead(p, 0)) ||
 		   is_function_specifier(look_ahead(p, 0)) ||
 		   look_ahead(p, 0).view == "typedef" {
-		if is_type_qualifier(look_ahead(p, 0)) {
-			array_add(*info.qualifiers, look_ahead(p, 0).view);
-		} else if is_storage_specifier(look_ahead(p, 0)) {
+		if is_storage_specifier(look_ahead(p, 0)) {
 			info.storage_class = look_ahead(p, 0).view;
 		} else {
 			array_add(*info.qualifiers, look_ahead(p, 0).view);
@@ -213,9 +220,9 @@ parse_param_decl :: (p: *Parser) -> *Node_Decl {
 parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 	declarator: *Node_Declarator;
 	if look_ahead(p, 0).type == .LeftParenthesis {
-		advance(p); // LeftParenthesis
+		advance(p);
 		declarator = parse_declarator(p);
-		advance(p); // RightParenthesis
+		expect(p, .RightParenthesis);
 	} else if look_ahead(p, 0).type == .Identifier {
 		declarator = New(Node_Identifier_Declarator);
 		declarator.(*Node_Identifier_Declarator).name = look_ahead(p, 0).view;
@@ -224,7 +231,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 
 	while true {
 		if look_ahead(p, 0).type == .LeftParenthesis {
-			advance(p);
+			expect(p, .LeftParenthesis);
 			func := New(Node_Function_Declarator);
 			while look_ahead(p, 0).type != .RightParenthesis {
 				if look_ahead(p, 0).type == .Ellipses {
@@ -234,12 +241,12 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 				}
 				if look_ahead(p, 0).type == .Comma then advance(p);
 			}
-			advance(p); // ')'
+			expect(p, .RightParenthesis);
 			func.inner = declarator;
 			declarator = func;
 		} else if look_ahead(p, 0).type == .LeftBracket {
 			array := New(Node_Array_Declarator);
-			advance(p); // LeftBracket
+			expect(p, .LeftBracket);
 			if look_ahead(p, 0).view == "static" then advance(p);
 			if is_type_qualifier(look_ahead(p, 0)) {
 				advance(p);
@@ -249,7 +256,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			array.count = parse_assignment_expr(p);
 			array.inner = declarator;
 			declarator = array;
-			advance(p); // RightBracket
+			expect(p, .RightBracket);
 		} else {
 			break;
 		}
@@ -317,12 +324,15 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	print_declarator :: (declarator: *Node_Declarator, previous: *Node_Declarator = null) {
 		if !declarator then return;
+		for declarator.qualifiers {
+			print("% ", it);
+		}
 		if declarator.declarator_type == {
 		case Node_Pointer_Declarator;
-			print("*");
 			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
 				print("(");
 			}
+			print("*");
 			print_declarator(declarator.inner, declarator);
 			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
 				print(")");
