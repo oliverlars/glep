@@ -79,7 +79,7 @@ Node_Identifier_Declarator :: struct {
 Node_Decl :: struct {
 	#as using node: Node;
 	type = Node_Decl;
-	declarators: *Node_Declarator;
+	declarators: [..]*Node_Declarator;
 	base_info: Node_Type_Info;
 }
 
@@ -213,7 +213,7 @@ parse_assignment_expr :: (p: *Parser) -> int {
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
 	parse_declaration_specifiers(p, *decl.base_info);
-	decl.declarators = parse_declarator(p);
+	array_add(*decl.declarators, parse_declarator(p));
 	return decl;
 }
 
@@ -302,13 +302,13 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	decl := New(Node_Decl);
 	decl.base_info = type;
-	decl.declarators = parse_declarator(p);
-	if look_ahead(p, 0).type == .Semicolon {
-		advance(p);
-	} else {
-		assert(look_ahead(p, 0).type == .Comma);
-		advance(p);
+	while look_ahead(p, 0).type != .Semicolon {
+		array_add(*decl.declarators, parse_declarator(p));
+		if look_ahead(p, 0).type != .Semicolon {
+			expect(p, .Comma);
+		}
 	}
+	expect(p, .Semicolon);
 
 	print_type :: (info: Node_Type_Info) {
 		
@@ -344,7 +344,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			for func.params {
 				if !it break;
 				print_type(it.base_info);
-				print_declarator(it.declarators, null);
+				print_declarator(it.declarators[0], null);
 				if it_index < func.params.count - 1 then print(", ");
 			}
 			print(")");
@@ -358,8 +358,11 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	}
 
 	print_type(decl.base_info);
-	print_declarator(decl.declarators);
-
+	for decl.declarators {
+		print_declarator(it);
+		if it_index < decl.declarators.count - 1 then print(", ");
+	}
+	print(";");
 	
 	print("\n");
 	
