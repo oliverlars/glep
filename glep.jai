@@ -229,7 +229,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 		advance(p);
 	}
 
-	while true {
+	while look_ahead(p, 0).type == .LeftParenthesis || look_ahead(p, 0).type == .LeftBracket {
 		if look_ahead(p, 0).type == .LeftParenthesis {
 			expect(p, .LeftParenthesis);
 			func := New(Node_Function_Declarator);
@@ -257,8 +257,6 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);
-		} else {
-			break;
 		}
 	}
 	return declarator;
@@ -324,15 +322,15 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	print_declarator :: (declarator: *Node_Declarator, previous: *Node_Declarator = null) {
 		if !declarator then return;
-		for declarator.qualifiers {
-			print("% ", it);
-		}
 		if declarator.declarator_type == {
 		case Node_Pointer_Declarator;
 			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
 				print("(");
 			}
 			print("*");
+			for declarator.qualifiers {
+				print("% ", it);
+			}
 			print_declarator(declarator.inner, declarator);
 			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
 				print(")");
@@ -442,6 +440,8 @@ main :: () {
 	int *a1[5];
 	int (*a2)[5];
 	int (*(*a3)[5])(void);
+
+	int (*const (*volatile (*f[3])(double))[5])(char);
 	
 	STRING
 
