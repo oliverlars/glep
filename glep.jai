@@ -149,7 +149,7 @@ tokenise :: (t: *Tokeniser) {
 	}
 }
 
-advance :: (p: *Parser, amount := 1) {
+skip :: (p: *Parser, amount := 1) {
 	p.at += amount;
 }
 
@@ -162,8 +162,12 @@ expect :: (p: *Parser, type: Token_Type) {
 	}
 }
 
-look_ahead :: (p: *Parser, count: int) -> Token {
-	return p.t.tokens[p.at + count];
+current :: (p: *Parser) -> Token {
+	return p.t.tokens[p.at];
+}
+
+next :: (p: *Parser) -> Token {
+	return p.t.tokens[p.at + 1];
 }
 
 is_type_qualifier :: (token: Token) -> bool {
@@ -183,17 +187,17 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		return token.view == "inline";
 	}
 
-	while  is_storage_specifier(look_ahead(p, 0)) ||
-		   is_type_qualifier(look_ahead(p, 0)) ||
-		   is_type_specifier(look_ahead(p, 0)) ||
-		   is_function_specifier(look_ahead(p, 0)) ||
-		   look_ahead(p, 0).view == "typedef" {
-		if is_storage_specifier(look_ahead(p, 0)) {
-			info.storage_class = look_ahead(p, 0).view;
+	while  is_storage_specifier(current(p)) ||
+		   is_type_qualifier(current(p)) ||
+		   is_type_specifier(current(p)) ||
+		   is_function_specifier(current(p)) ||
+		   current(p).view == "typedef" {
+		if is_storage_specifier(current(p)) {
+			info.storage_class = current(p).view;
 		} else {
-			array_add(*info.qualifiers, look_ahead(p, 0).view);
+			array_add(*info.qualifiers, current(p).view);
 		}
-		advance(p);
+		skip(p);
 	}
 }
 
@@ -201,11 +205,11 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 parse_assignment_expr :: (p: *Parser) -> int {
 	// This needs to be done properly, currently it only does a single number...
 	result: int;
-	if look_ahead(p, 0).type == .Number {
-		for look_ahead(p, 0).view {
+	if current(p).type == .Number {
+		for current(p).view {
 			result = result * 10 + it - #char "0";
 		}
-		advance(p);
+		skip(p);
 	}
 	return result;
 }
@@ -219,39 +223,39 @@ parse_param_decl :: (p: *Parser) -> *Node_Decl {
 
 parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 	declarator: *Node_Declarator;
-	if look_ahead(p, 0).type == .LeftParenthesis {
-		advance(p);
+	if current(p).type == .LeftParenthesis {
+		skip(p);
 		declarator = parse_declarator(p);
 		expect(p, .RightParenthesis);
-	} else if look_ahead(p, 0).type == .Identifier {
+	} else if current(p).type == .Identifier {
 		declarator = New(Node_Identifier_Declarator);
-		declarator.(*Node_Identifier_Declarator).name = look_ahead(p, 0).view;
-		advance(p);
+		declarator.(*Node_Identifier_Declarator).name = current(p).view;
+		skip(p);
 	}
 
 	while true {
-		if look_ahead(p, 0).type == .LeftParenthesis {
+		if current(p).type == .LeftParenthesis {
 			expect(p, .LeftParenthesis);
 			func := New(Node_Function_Declarator);
-			while look_ahead(p, 0).type != .RightParenthesis {
-				if look_ahead(p, 0).type == .Ellipses {
-					advance(p);
+			while current(p).type != .RightParenthesis {
+				if current(p).type == .Ellipses {
+					skip(p);
 				} else {
 					array_add(*func.(*Node_Function_Declarator).params, parse_param_decl(p));
 				}
-				if look_ahead(p, 0).type == .Comma then advance(p);
+				if current(p).type == .Comma then skip(p);
 			}
 			expect(p, .RightParenthesis);
 			func.inner = declarator;
 			declarator = func;
-		} else if look_ahead(p, 0).type == .LeftBracket {
+		} else if current(p).type == .LeftBracket {
 			array := New(Node_Array_Declarator);
 			expect(p, .LeftBracket);
-			if look_ahead(p, 0).view == "static" then advance(p);
-			if is_type_qualifier(look_ahead(p, 0)) {
-				advance(p);
+			if current(p).view == "static" then skip(p);
+			if is_type_qualifier(current(p)) {
+				skip(p);
 			}
-			if look_ahead(p, 0).type == .Asterisk then advance(p);
+			if current(p).type == .Asterisk then skip(p);
 			
 			array.count = parse_assignment_expr(p);
 			array.inner = declarator;
@@ -267,12 +271,12 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 parse_declarator :: (p: *Parser) -> *Node_Declarator {
 	first: *Node_Pointer_Declarator;
 	last: *Node_Pointer_Declarator;
-	while look_ahead(p, 0).type == .Asterisk {
-		advance(p);
+	while current(p).type == .Asterisk {
+		skip(p);
 		next := New(Node_Pointer_Declarator);
-		while is_type_qualifier(look_ahead(p, 0)) {
-			array_add(*next.qualifiers, look_ahead(p, 0).view);
-			advance(p);
+		while is_type_qualifier(current(p)) {
+			array_add(*next.qualifiers, current(p).view);
+			skip(p);
 		}
 		if !first {
 			first = next;
@@ -302,9 +306,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	decl := New(Node_Decl);
 	decl.base_info = type;
-	while look_ahead(p, 0).type != .Semicolon {
+	while current(p).type != .Semicolon {
 		array_add(*decl.declarators, parse_declarator(p));
-		if look_ahead(p, 0).type != .Semicolon {
+		if current(p).type != .Semicolon {
 			expect(p, .Comma);
 		}
 	}
