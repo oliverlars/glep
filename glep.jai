@@ -31,7 +31,7 @@ Tokeniser :: struct {
 }
 
 Parser :: struct {
-	t: *Tokeniser;
+	tokens: [..]Token;
 	at: int;
 }
 
@@ -154,7 +154,7 @@ skip :: (p: *Parser, amount := 1) {
 }
 
 expect :: (p: *Parser, type: Token_Type) {
-	if p.t.tokens[p.at].type != type {
+	if p.tokens[p.at].type != type {
 		print("Expected: %\n", type);
 		exit(1);
 	} else {
@@ -163,11 +163,11 @@ expect :: (p: *Parser, type: Token_Type) {
 }
 
 current :: (p: *Parser) -> Token {
-	return p.t.tokens[p.at];
+	return p.tokens[p.at];
 }
 
 next :: (p: *Parser) -> Token {
-	return p.t.tokens[p.at + 1];
+	return p.tokens[p.at + 1];
 }
 
 is_type_qualifier :: (token: Token) -> bool {
@@ -233,7 +233,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 		skip(p);
 	}
 
-	while true {
+	while current(p).type == .LeftParenthesis || current(p).type == .LeftBracket {
 		if current(p).type == .LeftParenthesis {
 			expect(p, .LeftParenthesis);
 			func := New(Node_Function_Declarator);
@@ -261,8 +261,6 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);
-		} else {
-			break;
 		}
 	}
 	return declarator;
@@ -296,13 +294,8 @@ parse_declarator :: (p: *Parser) -> *Node_Declarator {
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
-
-
 	type: Node_Type_Info;
 	parse_declaration_specifiers(p, *type);
-	// Once we've parsed the declaration specifiers we now need to determine what we are parsing
-	// next. A '(' implies we are parsing a function pointer, an identifier followed by '(' would be a function
-	// and just an identifier would mean a normal declaration.
 
 	decl := New(Node_Decl);
 	decl.base_info = type;
@@ -326,37 +319,37 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		}
 	}
 
-	print_declarator :: (declarator: *Node_Declarator, previous: *Node_Declarator = null) {
+	print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
 		if !declarator then return;
-		for declarator.qualifiers {
-			print("% ", it);
-		}
 		if declarator.declarator_type == {
 		case Node_Pointer_Declarator;
-			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
+			if parent_was_function_or_array {
 				print("(");
 			}
 			print("*");
-			print_declarator(declarator.inner, declarator);
-			if previous && (previous.declarator_type == Node_Function_Declarator || previous.declarator_type == Node_Array_Declarator) {
+			for declarator.qualifiers {
+				print("% ", it);
+			}
+			print_declarator(declarator.inner, false);
+			if parent_was_function_or_array {
 				print(")");
 			}
 		case Node_Function_Declarator;
-			print_declarator(declarator.inner, declarator);
+			print_declarator(declarator.inner, true);
 			func := declarator.(*Node_Function_Declarator);
 			print("(");
 			for func.params {
 				if !it break;
 				print_type(it.base_info);
-				print_declarator(it.declarators[0], null);
+				print_declarator(it.declarators[0], false);
 				if it_index < func.params.count - 1 then print(", ");
 			}
 			print(")");
 		case Node_Identifier_Declarator;
-			print_declarator(declarator.inner, declarator);
+			print_declarator(declarator.inner, false);
 			print("%", declarator.(*Node_Identifier_Declarator).name);
 		case Node_Array_Declarator;
-			print_declarator(declarator.inner, declarator);
+			print_declarator(declarator.inner, true);
 			print("[%]", declarator.(*Node_Array_Declarator).count);
 		}
 	}
@@ -446,6 +439,8 @@ main :: () {
 	int *a1[5];
 	int (*a2)[5];
 	int (*(*a3)[5])(void);
+
+	int (*const (*volatile (*f[3])(double))[5])(char);
 	
 	STRING
 
@@ -454,10 +449,10 @@ main :: () {
 	tokenise(*tokeniser);
 
 	parser: Parser;
-	parser.t = *tokeniser;
+	parser.tokens = tokeniser.tokens;
 	
 
-	while parser.at < parser.t.tokens.count {
+	while parser.at < parser.tokens.count {
 		parse_decl(*parser);
 	}
 }
