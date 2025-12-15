@@ -171,17 +171,44 @@ next :: (p: *Parser) -> Token {
 }
 
 is_type_qualifier :: (token: Token) -> bool {
-	return token.view == "const" || token.view == "volatile" || token.view == "restrict";
+	if token.view == {
+	case "const";    #through;
+	case "volatile"; #through;
+	case "restrict";
+		return true;
+	case;
+		return false;
+	}
 }
 
 parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	is_storage_specifier :: (token: Token) -> bool {
-		return token.view == "static" || token.view == "auto" || token.view == "extern" || token.view == "register";
+		if token.view == {
+		case "static";   #through;
+		case "auto";     #through;
+		case "extern";   #through;
+		case "register";
+			return true;
+		case;
+			return false;
+		}
 	}
 	is_type_specifier :: (token: Token) -> bool {
-		return token.view == "void" || token.view == "char" || token.view == "short" || token.view == "int" || 
-			   token.view == "long" || token.view == "float" || token.view == "double" || token.view == "signed" ||
-			   token.view == "unsigned" || token.view == "bool";
+		if token.view { 
+		case "void";     #through;
+		case "char";     #through;
+		case "short";    #through;
+		case "int";      #through;
+		case "long";     #through;
+		case "float";    #through;
+		case "double";   #through;
+		case "signed";   #through;
+		case "unsigned"; #through;
+		case "bool";
+			return true;
+		case;
+			return false;
+		}
 	}
 	is_function_specifier :: (token: Token) -> bool {
 		return token.view == "inline";
