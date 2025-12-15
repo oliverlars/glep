@@ -105,42 +105,40 @@ tokenise :: (t: *Tokeniser) {
 			continue;
 		} else {
 			if t.source[t.at] == {
-				case "="; t.at += 1; token.type = .Equals;
-				case ";"; t.at += 1; token.type = .Semicolon;
-				case ","; t.at += 1; token.type = .Comma;
-				case "("; t.at += 1; token.type = .LeftParenthesis;
-				case ")"; t.at += 1; token.type = .RightParenthesis;
-				case "{"; t.at += 1; token.type = .LeftBrace;
-				case "}"; t.at += 1; token.type = .RightBrace;
-				case "["; t.at += 1; token.type = .LeftBracket;
-				case "]"; t.at += 1; token.type = .RightBracket;
-				case "*"; t.at += 1; token.type = .Asterisk;
-				case "."; {
-					t.at += 1;
-					token.type = .Period;
-					if t.at + 2 < t.source.count {
-						if t.source.data[t.at] == #char "." &&
-						   t.source.data[t.at + 1] == #char "." {
-							token.type = .Ellipses;
-							t.at += 2;
-						}
+			case "="; t.at += 1; token.type = .Equals;
+			case ";"; t.at += 1; token.type = .Semicolon;
+			case ","; t.at += 1; token.type = .Comma;
+			case "("; t.at += 1; token.type = .LeftParenthesis;
+			case ")"; t.at += 1; token.type = .RightParenthesis;
+			case "{"; t.at += 1; token.type = .LeftBrace;
+			case "}"; t.at += 1; token.type = .RightBrace;
+			case "["; t.at += 1; token.type = .LeftBracket;
+			case "]"; t.at += 1; token.type = .RightBracket;
+			case "*"; t.at += 1; token.type = .Asterisk;
+			case ".";
+				t.at += 1;
+				token.type = .Period;
+				if t.at + 2 < t.source.count {
+					if t.source.data[t.at] == #char "." &&
+						t.source.data[t.at + 1] == #char "." {
+						token.type = .Ellipses;
+						t.at += 2;
 					}
 				}
-				case; {
-					if is_ident(t.source[t.at]) {
-						token.type = .Identifier;
-						while is_ident(t.source[t.at]) || t.source[t.at] == #char "_"  ||
-							  is_num(t.source[t.at]) {
-							t.at += 1;
-						}
-						token.view.count = t.source.data + t.at - token.view.data;
-					} else if is_num(t.source[t.at]) {
-						token.type = .Number;
-						while is_num(t.source[t.at]) {
-							t.at += 1;
-						}
-						token.view.count = t.source.data + t.at - token.view.data;
+			case;
+				if is_ident(t.source[t.at]) {
+					token.type = .Identifier;
+					while is_ident(t.source[t.at]) || t.source[t.at] == #char "_"  ||
+							is_num(t.source[t.at]) {
+						t.at += 1;
 					}
+					token.view.count = t.source.data + t.at - token.view.data;
+				} else if is_num(t.source[t.at]) {
+					token.type = .Number;
+					while is_num(t.source[t.at]) {
+						t.at += 1;
+					}
+					token.view.count = t.source.data + t.at - token.view.data;
 				}
 			}
 		}
@@ -194,7 +192,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		}
 	}
 	is_type_specifier :: (token: Token) -> bool {
-		if token.view { 
+		if token.view == { 
 		case "void";     #through;
 		case "char";     #through;
 		case "short";    #through;
