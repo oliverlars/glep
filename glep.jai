@@ -83,6 +83,38 @@ Node_Decl :: struct {
 	base_info: Node_Type_Info;
 }
 
+Node_Expr :: struct {
+	#as using node: Node;
+	type = Node_Expr;
+	expr_type: Type;
+}
+
+Node_Binary :: struct {
+	#as using node: Node_Expr;
+	op: string;
+	left: *Node_Expr;
+	right: *Node_Expr;
+	expr_type = Node_Binary;
+}
+
+Node_Unary :: struct {
+	#as using node: Node_Expr;
+	right: *Node_Expr;
+	expr_type = Node_Unary;
+}
+
+Node_Id :: struct {
+	#as using node: Node_Expr;
+	id: string;
+	expr_type = Node_Id;
+}
+
+Node_Number :: struct {
+	#as using node: Node_Expr;
+	expr_type = Node_Number;
+	value: int;
+}
+
 Node_Function_Decl :: struct {
 	#as using node: Node;
 	type = Node_Function_Decl;
@@ -180,6 +212,7 @@ is_type_qualifier :: (token: Token) -> bool {
 }
 
 parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
+	
 	is_storage_specifier :: (token: Token) -> bool {
 		if token.view == {
 		case "static";   #through;
@@ -191,6 +224,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			return false;
 		}
 	}
+
 	is_type_specifier :: (token: Token) -> bool {
 		if token.view == { 
 		case "void";     #through;
@@ -208,6 +242,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			return false;
 		}
 	}
+
 	is_function_specifier :: (token: Token) -> bool {
 		return token.view == "inline";
 	}
@@ -226,16 +261,56 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	}
 }
 
+precedence_of :: (token: Token) -> int {
+	if token.view == {
+	case "+"; return 1;
+	case "-"; return 1;
+	case "/"; return 2;
+	case "*"; return 2;
+	case;     return 0;
+	}
+}
+
+left_associative :: (token: Token) -> bool {
+	return true;
+}
+
+parse_expr :: (p: *Parser, min_prec: int) -> *Node_Expr {
+	lhs := parse_primary_expr(p).(*Node_Expr);
+
+	while true {
+		token := current(p);
+		prec := precedence_of(token);
+		if prec < min_prec break;
+
+		op := current(p);
+		skip(p);
+
+		next_min := prec + left_associative(token).(int);
+
+		rhs := parse_expr(p, next_min);
+
+		binary := New(Node_Binary);
+		lhs = binary;
+		binary.left = lhs;
+		binary.right = rhs;
+	}
+
+	return lhs;
+}
+
 // Temporarily return integer
-parse_assignment_expr :: (p: *Parser) -> int {
+parse_primary_expr :: (p: *Parser) -> *Node_Number {
 	// This needs to be done properly, currently it only does a single number...
-	result: int;
+	result := New(Node_Number);
+	value: int;
 	if current(p).type == .Number {
 		for current(p).view {
-			result = result * 10 + it - #char "0";
+			value = value * 10 + it - #char "0";
 		}
 		skip(p);
 	}
+	result.value = value;
 	return result;
 }
 
@@ -282,7 +357,8 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			}
 			if current(p).type == .Asterisk then skip(p);
 			
-			array.count = parse_assignment_expr(p);
+			num := parse_primary_expr(p);
+			array.count = num.value;
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);
