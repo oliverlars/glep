@@ -17,6 +17,9 @@ Token_Type :: enum {
 	RightBracket;
 	Ellipses;
 	Period;
+	Plus;
+	Minus;
+	ForwardSlash;
 }
 
 Token :: struct {
@@ -84,7 +87,7 @@ Node_Decl :: struct {
 }
 
 Node_Expr :: struct {
-	#as using node: Node;
+	#as using _: Node;
 	type = Node_Expr;
 	expr_type: Type;
 }
@@ -147,6 +150,9 @@ tokenise :: (t: *Tokeniser) {
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
 			case "*"; t.at += 1; token.type = .Asterisk;
+			case "+"; t.at += 1; token.type = .Plus;
+			case "-"; t.at += 1; token.type = .Minus;
+			case "/"; t.at += 1; token.type = .ForwardSlash;
 			case ".";
 				t.at += 1;
 				token.type = .Period;
@@ -275,8 +281,9 @@ left_associative :: (token: Token) -> bool {
 	return true;
 }
 
-parse_expr :: (p: *Parser, min_prec: int) -> *Node_Expr {
+parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 	lhs := parse_primary_expr(p).(*Node_Expr);
+	if !lhs return null;
 
 	while true {
 		token := current(p);
@@ -284,6 +291,7 @@ parse_expr :: (p: *Parser, min_prec: int) -> *Node_Expr {
 		if prec < min_prec break;
 
 		op := current(p);
+		if op.type != .Asterisk && op.type != .Plus && op.type != .Minus && op.type != .ForwardSlash break;
 		skip(p);
 
 		next_min := prec + left_associative(token).(int);
@@ -291,9 +299,9 @@ parse_expr :: (p: *Parser, min_prec: int) -> *Node_Expr {
 		rhs := parse_expr(p, next_min);
 
 		binary := New(Node_Binary);
-		lhs = binary;
 		binary.left = lhs;
 		binary.right = rhs;
+		lhs = binary;
 	}
 
 	return lhs;
@@ -302,16 +310,36 @@ parse_expr :: (p: *Parser, min_prec: int) -> *Node_Expr {
 // Temporarily return integer
 parse_primary_expr :: (p: *Parser) -> *Node_Number {
 	// This needs to be done properly, currently it only does a single number...
-	result := New(Node_Number);
-	value: int;
+	result: *Node_Number;
 	if current(p).type == .Number {
+		result = New(Node_Number);
+		value: int;
 		for current(p).view {
 			value = value * 10 + it - #char "0";
 		}
 		skip(p);
+		result.value = value;
 	}
-	result.value = value;
 	return result;
+}
+
+eval_expr :: (node: *Node_Expr) -> int {
+	if !node return 0;
+	if node.expr_type == {
+	case Node_Binary;
+		left := eval_expr(node.(*Node_Binary).left);
+		right := eval_expr(node.(*Node_Binary).right);
+		if node.(*Node_Binary).op == {
+		case "+"; return left + right;
+		case "-"; return left - right;
+		case "*"; return left * right;
+		case "/"; return left / right;
+		}
+	case Node_Number;
+		return node.(*Node_Number).value;
+	case;
+		return 0;
+	}
 }
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
@@ -357,8 +385,8 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			}
 			if current(p).type == .Asterisk then skip(p);
 			
-			num := parse_primary_expr(p);
-			array.count = num.value;
+			expr := parse_expr(p, 0);
+			array.count = eval_expr(expr);
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);
@@ -487,7 +515,7 @@ main :: () {
 	double h(int, int);
 	static inline int max(int a, int b);
 	extern void log_message(const char *msg);
-	int (*ret_array(void))[10];
+	int (*ret_array(void))[1 + 2 + 3];
 	int qsort(void *a, void *b, int (*cmp)(void*, void*));
 
 	int fdef(int x);
