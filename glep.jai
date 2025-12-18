@@ -299,6 +299,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		rhs := parse_expr(p, next_min);
 
 		binary := New(Node_Binary);
+		binary.op = op.view;
 		binary.left = lhs;
 		binary.right = rhs;
 		lhs = binary;
@@ -308,9 +309,9 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 }
 
 // Temporarily return integer
-parse_primary_expr :: (p: *Parser) -> *Node_Number {
+parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	// This needs to be done properly, currently it only does a single number...
-	result: *Node_Number;
+	result: *Node_Expr;
 	if current(p).type == .Number {
 		result = New(Node_Number);
 		value: int;
@@ -318,7 +319,11 @@ parse_primary_expr :: (p: *Parser) -> *Node_Number {
 			value = value * 10 + it - #char "0";
 		}
 		skip(p);
-		result.value = value;
+		result.(*Node_Number).value = value;
+	} else if current(p).type == .LeftParenthesis {
+		expect(p, .LeftParenthesis);
+		result = parse_expr(p);
+		expect(p, .RightParenthesis);
 	}
 	return result;
 }
@@ -334,6 +339,7 @@ eval_expr :: (node: *Node_Expr) -> int {
 		case "-"; return left - right;
 		case "*"; return left * right;
 		case "/"; return left / right;
+		case; assert(false);
 		}
 	case Node_Number;
 		return node.(*Node_Number).value;
@@ -515,7 +521,7 @@ main :: () {
 	double h(int, int);
 	static inline int max(int a, int b);
 	extern void log_message(const char *msg);
-	int (*ret_array(void))[1 + 2 + 3];
+	int (*ret_array(void))[1 + (2 + 3)];
 	int qsort(void *a, void *b, int (*cmp)(void*, void*));
 
 	int fdef(int x);
@@ -565,11 +571,13 @@ main :: () {
 	int (*f2)(int);
 	int (*f3[5])(double);
 
+	int test[(1 + 2) * 3];
+
 	int *a1[5];
 	int (*a2)[5];
 	int (*(*a3)[5])(void);
 
-	int (*const (*volatile (*f[3])(double))[5])(char);
+	int (*const (*volatile (*f[5])(double))[5])(char);
 	
 	STRING
 
