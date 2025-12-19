@@ -20,6 +20,11 @@ Token_Type :: enum {
 	Plus;
 	Minus;
 	ForwardSlash;
+	Shebang;
+	PlusPlus;
+	MinusMinus;
+	Tilde;
+	Ampersand;
 }
 
 Token :: struct {
@@ -102,6 +107,7 @@ Node_Binary :: struct {
 
 Node_Unary :: struct {
 	#as using node: Node_Expr;
+	op: string;
 	right: *Node_Expr;
 	expr_type = Node_Unary;
 }
@@ -150,8 +156,21 @@ tokenise :: (t: *Tokeniser) {
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
 			case "*"; t.at += 1; token.type = .Asterisk;
-			case "+"; t.at += 1; token.type = .Plus;
-			case "-"; t.at += 1; token.type = .Minus;
+			case "&"; t.at += 1; token.type = .Ampersand;
+			case "~"; t.at += 1; token.type = .Tilde;
+			case "!"; t.at += 1; token.type = .Shebang;
+			case "+";
+				t.at += 1; token.type = .Plus;
+				if t.source[t.at] == "+" {
+					token.type = .PlusPlus;
+					t.at += 1;
+				}
+			case "-"; 
+				t.at += 1; token.type = .Minus;
+				if t.source[t.at] == "-" {
+					token.type = .MinusMinus;
+					t.at += 1;
+				}
 			case "/"; t.at += 1; token.type = .ForwardSlash;
 			case ".";
 				t.at += 1;
@@ -268,12 +287,12 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 }
 
 precedence_of :: (token: Token) -> int {
-	if token.view == {
-	case "+"; return 1;
-	case "-"; return 1;
-	case "/"; return 2;
-	case "*"; return 2;
-	case;     return 0;
+	if token.type == {
+	case .Plus;         return 1;
+	case .Minus;        return 1;
+	case .ForwardSlash; return 2;
+	case .Asterisk;     return 2;
+	case;               return 0;
 	}
 }
 
@@ -281,8 +300,41 @@ left_associative :: (token: Token) -> bool {
 	return true;
 }
 
+is_prefix_op :: (token: Token) -> bool {
+	if token.type == {
+	case .Plus; #through;
+	case .Minus; #through;
+	case .Asterisk; #through;
+	case .Shebang; #through;
+	case .PlusPlus; #through;
+	case .MinusMinus; #through;
+	case .Tilde; #through;
+	case .Ampersand;
+	return true;
+	}
+
+	if token.view == "sizeof" {
+		return true;
+	} else if token.type == .LeftParenthesis {
+		// Type cast
+	}
+	
+	return false;
+}
+
 parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
-	lhs := parse_primary_expr(p).(*Node_Expr);
+	lhs: *Node_Expr;
+	if is_prefix_op(current(p)) {
+		op := current(p);
+		skip(p);
+		
+		lhs = New(Node_Unary);
+		lhs.(*Node_Unary).op = op.view;
+		lhs.(*Node_Unary).right = parse_expr(p);
+	} else {
+		lhs = parse_primary_expr(p).(*Node_Expr);
+	}
+
 	if !lhs return null;
 
 	while true {
@@ -341,11 +393,18 @@ eval_expr :: (node: *Node_Expr) -> int {
 		case "/"; return left / right;
 		case; assert(false);
 		}
+	case Node_Unary;
+		right := eval_expr(node.(*Node_Unary).right);
+		if node.(*Node_Unary).op == {
+		case "+"; return +right;
+		case "-"; return -right;
+		}
 	case Node_Number;
 		return node.(*Node_Number).value;
 	case;
 		return 0;
 	}
+	return 0;
 }
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
@@ -571,7 +630,7 @@ main :: () {
 	int (*f2)(int);
 	int (*f3[5])(double);
 
-	int test[(1 + 2) * 3];
+	int test[(1 + 2) * 3 - -1];
 
 	int *a1[5];
 	int (*a2)[5];
