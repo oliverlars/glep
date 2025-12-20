@@ -15,16 +15,39 @@ Token_Type :: enum {
 	RightBrace;
 	LeftBracket;
 	RightBracket;
-	Ellipses;
+	Ellipsis;
 	Period;
 	Plus;
 	Minus;
 	ForwardSlash;
-	Shebang;
+	Bang;
 	PlusPlus;
 	MinusMinus;
 	Tilde;
+	Caret;
+	Percent;
+	Less;
+	LessEqual;
+	Greater;
+	GreaterEqual;
+	EqualEqual;
+	BangEqual;
+	AmpersandAmpersand;
+	PipePipe;
 	Ampersand;
+	Pipe;
+	LessLess;
+	GreaterGreater;
+	PlusEqual;
+	MinusEqual;
+	AsteriskEqual;
+	ForwardSlashEqual;
+	PercentEqual;
+	AmpersandEqual;
+	PipeEqual;
+	CaretEqual;
+	LessLessEqual;
+	GreaterGreaterEqual;
 }
 
 Token :: struct {
@@ -146,7 +169,12 @@ tokenise :: (t: *Tokeniser) {
 			continue;
 		} else {
 			if t.source[t.at] == {
-			case "="; t.at += 1; token.type = .Equals;
+			case "=";
+				t.at += 1; token.type = .Equals;
+				if t.source[t.at] == #char "=" {
+					t.at += 1;
+					token.type = .EqualEqual;
+				}
 			case ";"; t.at += 1; token.type = .Semicolon;
 			case ","; t.at += 1; token.type = .Comma;
 			case "("; t.at += 1; token.type = .LeftParenthesis;
@@ -155,14 +183,44 @@ tokenise :: (t: *Tokeniser) {
 			case "}"; t.at += 1; token.type = .RightBrace;
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
-			case "*"; t.at += 1; token.type = .Asterisk;
-			case "&"; t.at += 1; token.type = .Ampersand;
+			case "*";
+				t.at += 1; token.type = .Asterisk;
+				if t.source[t.at] == "=" {
+					token.type = .AsteriskEqual;
+					t.at += 1;
+				}
+			case "&";
+			t.at += 1; token.type = .Ampersand;
+			if t.source[t.at] == #char "&" {
+				t.at += 1;
+				token.type = .AmpersandAmpersand;
+			}
 			case "~"; t.at += 1; token.type = .Tilde;
-			case "!"; t.at += 1; token.type = .Shebang;
+			case "^";
+				t.at += 1; token.type = .Caret;
+				if t.source[t.at] == #char "=" {
+					t.at += 1;
+					token.type = .CaretEqual;
+				}
+			case "%";
+				t.at += 1; token.type = .Percent;
+				if t.source[t.at] == #char "=" {
+					t.at += 1;
+					token.type = .PercentEqual;
+				}
+			case "!";
+				t.at += 1; token.type = .Bang;
+				if t.source[t.at] == #char "=" {
+					t.at += 1;
+					token.type = .BangEqual;
+				}
 			case "+";
 				t.at += 1; token.type = .Plus;
 				if t.source[t.at] == "+" {
 					token.type = .PlusPlus;
+					t.at += 1;
+				} else if t.source[t.at] == "=" {
+					token.type = .PlusEqual;
 					t.at += 1;
 				}
 			case "-"; 
@@ -170,16 +228,59 @@ tokenise :: (t: *Tokeniser) {
 				if t.source[t.at] == "-" {
 					token.type = .MinusMinus;
 					t.at += 1;
+				} else if t.source[t.at] == "=" {
+					token.type = .MinusEqual;
+					t.at += 1;
 				}
-			case "/"; t.at += 1; token.type = .ForwardSlash;
+			case "/";
+				t.at += 1; token.type = .ForwardSlash;
+				if t.source[t.at] == "=" {
+					token.type = .ForwardSlashEqual;
+					t.at += 1;
+				}
 			case ".";
 				t.at += 1;
 				token.type = .Period;
 				if t.at + 2 < t.source.count {
 					if t.source.data[t.at] == #char "." &&
 						t.source.data[t.at + 1] == #char "." {
-						token.type = .Ellipses;
+						token.type = .Ellipsis;
 						t.at += 2;
+					}
+				}
+			case "|";
+				t.at += 1; token.type = .Pipe;
+				if t.source.data[t.at] == #char "|" {
+					token.type = .PipePipe;
+					t.at += 1;
+				} else if t.source.data[t.at] == #char "=" {
+					token.type = .PipeEqual;
+					t.at += 1;
+				}
+			case "<";
+				t.at += 1; token.type = .Less;
+				if t.source.data[t.at] == #char "=" {
+					token.type = .LessEqual;
+					t.at += 1;
+				} else if t.source[t.at] == #char "<" {
+					t.at += 1;
+					token.type = .LessLess;
+					if t.source[t.at] == #char "=" {
+						t.at += 1;
+						token.type = .LessLessEqual;
+					}
+				}
+			case ">";
+				t.at += 1; token.type = .Greater;
+				if t.source.data[t.at] == #char "=" {
+					token.type = .GreaterEqual;
+					t.at += 1;
+				} else if t.source[t.at] == #char ">" {
+					t.at += 1;
+					token.type = .GreaterGreater;
+					if t.source[t.at] == #char "=" {
+						t.at += 1;
+						token.type = .GreaterGreaterEqual;
 					}
 				}
 			case;
@@ -305,10 +406,12 @@ is_prefix_op :: (token: Token) -> bool {
 	case .Plus; #through;
 	case .Minus; #through;
 	case .Asterisk; #through;
-	case .Shebang; #through;
+	case .Bang; #through;
 	case .PlusPlus; #through;
 	case .MinusMinus; #through;
 	case .Tilde; #through;
+	case .Caret;   #through;
+	case .Percent; #through;
 	case .Ampersand;
 	return true;
 	}
@@ -431,7 +534,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			expect(p, .LeftParenthesis);
 			func := New(Node_Function_Declarator);
 			while current(p).type != .RightParenthesis {
-				if current(p).type == .Ellipses {
+				if current(p).type == .Ellipsis {
 					skip(p);
 				} else {
 					array_add(*func.(*Node_Function_Declarator).params, parse_param_decl(p));
