@@ -425,13 +425,15 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	}
 }
 
+MAX_PRECEDENCE :: 100;
+
 precedence_of :: (token: Token) -> int {
 	if token.type == {
 	case .ForwardSlash; return 15;
 	case .Asterisk;     return 15;
 	case .Percent;      return 15;
-	case .Plus;         return 1;
-	case .Minus;        return 1;
+	case .Plus;         return 10;
+	case .Minus;        return 10;
 	
 	case;               return 0;
 	}
@@ -507,12 +509,6 @@ is_binary_op :: (token: Token) -> bool {
 		case .LessLess; #through;
 		case .GreaterGreater;
 			return true;
-	}
-
-	if token.view == "sizeof" {
-		return true;
-	} else if token.type == .LeftParenthesis {
-		// Type cast
 	}
 	
 	return false;
@@ -650,16 +646,30 @@ eval_expr :: (node: *Node_Expr) -> int {
 	return 0;
 }
 
-print_expr :: (node: *Node_Expr) {
+print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 	if !node return;
 	if node.expr_type == {
 	case Node_Binary;
-		left := print_expr(node.(*Node_Binary).left);
+		precedence := precedence_of(node.(*Node_Binary).op);
+		if precedence <= parent_precedence {
+			print("(");
+		}
+		left := print_expr(node.(*Node_Binary).left, precedence);
 		print(" % ", node.(*Node_Binary).op.view);
-		right := print_expr(node.(*Node_Binary).right);
+		right := print_expr(node.(*Node_Binary).right, precedence);
+		if precedence <= parent_precedence {
+			print(")");
+		}
 	case Node_Unary;
 		print("%", node.(*Node_Unary).op.view);
+		precedence := precedence_of(node.(*Node_Unary).op);
+		if precedence <= parent_precedence {
+			print("(");
+		}
 		right := print_expr(node.(*Node_Unary).right);
+		if precedence <= parent_precedence {
+			print(")");
+		}
 	case Node_Number;
 		print("%", node.(*Node_Number).value);
 	case Node_Identifier;
@@ -912,8 +922,11 @@ main :: () {
 	int (*(*a3)[5])(void);
 
 	int (*const (*volatile (*f[5])(double))[5])(char);
+	int a = 10 + 1 + -x.y + *(a + b) + a->b;
 
-	int a = 10 + 1 + -x.y + a->b;
+	int b = 1 - (2 - 3);
+	
+	int c = 1 + 2 + 3;
 	
 	STRING
 
