@@ -48,6 +48,7 @@ Token_Type :: enum {
 	CaretEqual;
 	LessLessEqual;
 	GreaterGreaterEqual;
+	Arrow;
 }
 
 Token :: struct {
@@ -80,7 +81,7 @@ Node_Declarator :: struct {
 	#as using node: Node;
 	qualifiers: [..]string;
 	declarator_type: Type;
-	init: *Node;
+	init: *Node_Expr;
 	inner: *Node_Declarator;
 }
 
@@ -122,7 +123,7 @@ Node_Expr :: struct {
 
 Node_Binary :: struct {
 	#as using node: Node_Expr;
-	op: string;
+	op: Token;
 	left: *Node_Expr;
 	right: *Node_Expr;
 	expr_type = Node_Binary;
@@ -130,15 +131,30 @@ Node_Binary :: struct {
 
 Node_Unary :: struct {
 	#as using node: Node_Expr;
-	op: string;
+	op: Token;
 	right: *Node_Expr;
 	expr_type = Node_Unary;
 }
 
-Node_Id :: struct {
+Node_Call :: struct {
 	#as using node: Node_Expr;
-	id: string;
-	expr_type = Node_Id;
+	expr_type = Node_Call;
+	id: *Node_Expr;
+	params: [..]*Node_Expr;
+}
+
+Node_Access :: struct {
+	#as using node: Node_Expr;
+	op: Token;
+	left: *Node_Expr;
+	right: Token;
+	expr_type = Node_Access;
+}
+
+Node_Identifier :: struct {
+	#as using node: Node_Expr;
+	id: Token;
+	expr_type = Node_Identifier;
 }
 
 Node_Number :: struct {
@@ -173,6 +189,7 @@ tokenise :: (t: *Tokeniser) {
 				t.at += 1; token.type = .Equals;
 				if t.source[t.at] == #char "=" {
 					t.at += 1;
+					token.view.count += 1;
 					token.type = .EqualEqual;
 				}
 			case ";"; t.at += 1; token.type = .Semicolon;
@@ -188,11 +205,13 @@ tokenise :: (t: *Tokeniser) {
 				if t.source[t.at] == "=" {
 					token.type = .AsteriskEqual;
 					t.at += 1;
+					token.view.count += 1;
 				}
 			case "&";
 			t.at += 1; token.type = .Ampersand;
 			if t.source[t.at] == #char "&" {
 				t.at += 1;
+				token.view.count += 1;
 				token.type = .AmpersandAmpersand;
 			}
 			case "~"; t.at += 1; token.type = .Tilde;
@@ -200,18 +219,21 @@ tokenise :: (t: *Tokeniser) {
 				t.at += 1; token.type = .Caret;
 				if t.source[t.at] == #char "=" {
 					t.at += 1;
+					token.view.count += 1;
 					token.type = .CaretEqual;
 				}
 			case "%";
 				t.at += 1; token.type = .Percent;
 				if t.source[t.at] == #char "=" {
 					t.at += 1;
+					token.view.count += 1;
 					token.type = .PercentEqual;
 				}
 			case "!";
 				t.at += 1; token.type = .Bang;
 				if t.source[t.at] == #char "=" {
 					t.at += 1;
+					token.view.count += 1;
 					token.type = .BangEqual;
 				}
 			case "+";
@@ -219,24 +241,33 @@ tokenise :: (t: *Tokeniser) {
 				if t.source[t.at] == "+" {
 					token.type = .PlusPlus;
 					t.at += 1;
+					token.view.count += 1;
 				} else if t.source[t.at] == "=" {
 					token.type = .PlusEqual;
 					t.at += 1;
+					token.view.count += 1;
 				}
 			case "-"; 
 				t.at += 1; token.type = .Minus;
 				if t.source[t.at] == "-" {
 					token.type = .MinusMinus;
 					t.at += 1;
+					token.view.count += 1;
 				} else if t.source[t.at] == "=" {
 					token.type = .MinusEqual;
 					t.at += 1;
+					token.view.count += 1;
+				} else if t.source[t.at] == ">" {
+					token.type = .Arrow;
+					t.at += 1;
+					token.view.count += 1;
 				}
 			case "/";
 				t.at += 1; token.type = .ForwardSlash;
 				if t.source[t.at] == "=" {
 					token.type = .ForwardSlashEqual;
 					t.at += 1;
+					token.view.count += 1;
 				}
 			case ".";
 				t.at += 1;
@@ -246,6 +277,7 @@ tokenise :: (t: *Tokeniser) {
 						t.source.data[t.at + 1] == #char "." {
 						token.type = .Ellipsis;
 						t.at += 2;
+						token.view.count += 2;
 					}
 				}
 			case "|";
@@ -253,20 +285,24 @@ tokenise :: (t: *Tokeniser) {
 				if t.source.data[t.at] == #char "|" {
 					token.type = .PipePipe;
 					t.at += 1;
+					token.view.count += 1;
 				} else if t.source.data[t.at] == #char "=" {
 					token.type = .PipeEqual;
 					t.at += 1;
+					token.view.count += 1;
 				}
 			case "<";
 				t.at += 1; token.type = .Less;
 				if t.source.data[t.at] == #char "=" {
 					token.type = .LessEqual;
 					t.at += 1;
+					token.view.count += 1;
 				} else if t.source[t.at] == #char "<" {
 					t.at += 1;
 					token.type = .LessLess;
 					if t.source[t.at] == #char "=" {
 						t.at += 1;
+						token.view.count += 1;
 						token.type = .LessLessEqual;
 					}
 				}
@@ -275,11 +311,13 @@ tokenise :: (t: *Tokeniser) {
 				if t.source.data[t.at] == #char "=" {
 					token.type = .GreaterEqual;
 					t.at += 1;
+					token.view.count += 1;
 				} else if t.source[t.at] == #char ">" {
 					t.at += 1;
 					token.type = .GreaterGreater;
 					if t.source[t.at] == #char "=" {
 						t.at += 1;
+						token.view.count += 1;
 						token.type = .GreaterGreaterEqual;
 					}
 				}
@@ -312,7 +350,7 @@ skip :: (p: *Parser, amount := 1) {
 expect :: (p: *Parser, type: Token_Type) {
 	if p.tokens[p.at].type != type {
 		print("Expected: %\n", type);
-		exit(1);
+		assert(false);
 	} else {
 		p.at += 1;
 	}
@@ -389,31 +427,52 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 
 precedence_of :: (token: Token) -> int {
 	if token.type == {
+	case .ForwardSlash; return 15;
+	case .Asterisk;     return 15;
+	case .Percent;      return 15;
 	case .Plus;         return 1;
 	case .Minus;        return 1;
-	case .ForwardSlash; return 2;
-	case .Asterisk;     return 2;
+	
 	case;               return 0;
 	}
 }
 
-left_associative :: (token: Token) -> bool {
-	return true;
+is_left_associative :: (token: Token) -> bool {
+	if token.type == {
+		case .Asterisk; #through;
+		case .ForwardSlash; #through;
+		case .Percent; #through;
+		case .Plus; #through;
+		case .Minus; #through;
+		case .LessLess; #through;
+		case .GreaterGreater; #through;
+		case .Less; #through;
+		case .Greater; #through;
+		case .LessEqual; #through;
+		case .GreaterEqual; #through;
+		case .Ampersand; #through;
+		case .Caret; #through;
+		case .Pipe; #through;
+		case .AmpersandAmpersand; #through;
+		case .PipePipe;
+			return true;
+	}
+	return false;
 }
 
 is_prefix_op :: (token: Token) -> bool {
 	if token.type == {
-	case .Plus; #through;
-	case .Minus; #through;
-	case .Asterisk; #through;
-	case .Bang; #through;
-	case .PlusPlus; #through;
-	case .MinusMinus; #through;
-	case .Tilde; #through;
-	case .Caret;   #through;
-	case .Percent; #through;
-	case .Ampersand;
-	return true;
+		case .Plus; #through;
+		case .Minus; #through;
+		case .Asterisk; #through;
+		case .Bang; #through;
+		case .PlusPlus; #through;
+		case .MinusMinus; #through;
+		case .Tilde; #through;
+		case .Caret;   #through;
+		case .Percent; #through;
+		case .Ampersand;
+			return true;
 	}
 
 	if token.view == "sizeof" {
@@ -427,23 +486,27 @@ is_prefix_op :: (token: Token) -> bool {
 
 is_binary_op :: (token: Token) -> bool {
 	if token.type == {
-	case .Plus; #through;
-	case .Minus; #through;
-	case .Asterisk; #through;
-	case .Bang; #through;
-	case .PlusPlus; #through;
-	case .MinusMinus; #through;
-	case .Tilde; #through;
-	case .Caret;   #through;
-	case .Percent; #through;
-	case .Ampersand; #through;
-	case .Less; #through;
-	case .LessEqual; #through;
-	case .Greater; #through;
-	case .GreaterEqual; #through;
-	case .Pipe; #through;
-	case .PipePipe;
-	return true;
+		case .Plus; #through;
+		case .Minus; #through;
+		case .Asterisk; #through;
+		case .Bang; #through;
+		case .PlusPlus; #through;
+		case .MinusMinus; #through;
+		case .Tilde; #through;
+		case .Caret;   #through;
+		case .Percent; #through;
+		case .Ampersand; #through;
+		case .Less; #through;
+		case .LessEqual; #through;
+		case .Greater; #through;
+		case .GreaterEqual; #through;
+		case .Pipe; #through;
+		case .PipePipe; #through;
+		case .AmpersandAmpersand; #through;
+		case .BangEqual; #through;
+		case .LessLess; #through;
+		case .GreaterGreater;
+			return true;
 	}
 
 	if token.view == "sizeof" {
@@ -460,12 +523,18 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 	if is_prefix_op(current(p)) {
 		op := current(p);
 		skip(p);
+
+		rhs := parse_primary_expr(p);
+		rhs = parse_postfix_expr(p, rhs);
 		
-		lhs = New(Node_Unary);
-		lhs.(*Node_Unary).op = op.view;
-		lhs.(*Node_Unary).right = parse_expr(p);
+		unary := New(Node_Unary);
+		unary.op = op;
+		unary.right = rhs;
+
+		lhs = unary;
 	} else {
-		lhs = parse_primary_expr(p).(*Node_Expr);
+		lhs = parse_primary_expr(p);
+		lhs = parse_postfix_expr(p, lhs);
 	}
 
 	if !lhs return null;
@@ -479,18 +548,55 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		if !is_binary_op(op) then break;
 		skip(p);
 
-		next_min := prec + left_associative(token).(int);
+		next_min := prec + is_left_associative(token).(int);
 
 		rhs := parse_expr(p, next_min);
 
 		binary := New(Node_Binary);
-		binary.op = op.view;
+		binary.op = op;
 		binary.left = lhs;
 		binary.right = rhs;
 		lhs = binary;
 	}
 
 	return lhs;
+}
+
+parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
+	result := lhs;
+	while current(p).type == .Period || current(p).type == .LeftParenthesis ||
+	      current(p).type == .LeftBracket || current(p).type == .Arrow {
+		if current(p).type == .Period {
+			access := New(Node_Access);
+			access.op = current(p);
+			skip(p);
+			access.left = result;
+			access.right = current(p);
+			result = access;
+			expect(p, .Identifier);
+		} else if current(p).type == .LeftBracket {
+
+		} else if current(p).type == .LeftParenthesis {
+			skip(p);
+			call := New(Node_Call);
+			call.id = result;
+			while current(p).type != .RightParenthesis {
+				array_add(*call.params, parse_expr(p));
+				expect(p, .Comma);
+			}
+		} else if current(p).type == .Arrow {
+			access := New(Node_Access);
+			access.left = result;
+			access.op = current(p);
+			skip(p);
+			access.right = current(p);
+			skip(p);
+			result = access;
+		} else if current(p).type == .Period {
+
+		}
+	}
+	return result;
 }
 
 // Temporarily return integer
@@ -509,6 +615,10 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		expect(p, .LeftParenthesis);
 		result = parse_expr(p);
 		expect(p, .RightParenthesis);
+	} else if current(p).type == .Identifier {
+		result = New(Node_Identifier);
+		result.(*Node_Identifier).id = current(p);
+		skip(p);
 	}
 	return result;
 }
@@ -519,18 +629,18 @@ eval_expr :: (node: *Node_Expr) -> int {
 	case Node_Binary;
 		left := eval_expr(node.(*Node_Binary).left);
 		right := eval_expr(node.(*Node_Binary).right);
-		if node.(*Node_Binary).op == {
-		case "+"; return left + right;
-		case "-"; return left - right;
-		case "*"; return left * right;
-		case "/"; return left / right;
+		if node.(*Node_Binary).op.type == {
+		case .Plus; return left + right;
+		case .Minus; return left - right;
+		case .Asterisk; return left * right;
+		case .ForwardSlash; return left / right;
 		case; assert(false);
 		}
 	case Node_Unary;
 		right := eval_expr(node.(*Node_Unary).right);
-		if node.(*Node_Unary).op == {
-		case "+"; return +right;
-		case "-"; return -right;
+		if node.(*Node_Unary).op .type== {
+		case .Plus; return +right;
+		case .Minus; return -right;
 		}
 	case Node_Number;
 		return node.(*Node_Number).value;
@@ -538,6 +648,29 @@ eval_expr :: (node: *Node_Expr) -> int {
 		return 0;
 	}
 	return 0;
+}
+
+print_expr :: (node: *Node_Expr) {
+	if !node return;
+	if node.expr_type == {
+	case Node_Binary;
+		left := print_expr(node.(*Node_Binary).left);
+		print(" % ", node.(*Node_Binary).op.view);
+		right := print_expr(node.(*Node_Binary).right);
+	case Node_Unary;
+		print("%", node.(*Node_Unary).op.view);
+		right := print_expr(node.(*Node_Unary).right);
+	case Node_Number;
+		print("%", node.(*Node_Number).value);
+	case Node_Identifier;
+		print("%", node.(*Node_Identifier).id.view);
+	case Node_Call;
+		print_expr(node.(*Node_Access).left);
+	case Node_Access;
+		print_expr(node.(*Node_Access).left);
+		print("%", node.(*Node_Access).op.view);
+		print("%", node.(*Node_Access).right.view);
+	}
 }
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
@@ -627,7 +760,12 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
 	decl.base_info = type;
 	while current(p).type != .Semicolon {
-		array_add(*decl.declarators, parse_declarator(p));
+		declarator := parse_declarator(p);
+		array_add(*decl.declarators, declarator);
+		if current(p).type == .Equals {
+			skip(p);
+			declarator.init = parse_expr(p);
+		}
 		if current(p).type != .Semicolon {
 			expect(p, .Comma);
 		}
@@ -678,6 +816,10 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		case Node_Array_Declarator;
 			print_declarator(declarator.inner, true);
 			print("[%]", declarator.(*Node_Array_Declarator).count);
+		}
+		if declarator.init {
+			print(" = ");
+			print_expr(declarator.init);
 		}
 	}
 
@@ -770,6 +912,8 @@ main :: () {
 	int (*(*a3)[5])(void);
 
 	int (*const (*volatile (*f[5])(double))[5])(char);
+
+	int a = 10 + 1 + -x.y + a->b;
 	
 	STRING
 
