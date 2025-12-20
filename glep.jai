@@ -578,8 +578,12 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			call.id = result;
 			while current(p).type != .RightParenthesis {
 				array_add(*call.params, parse_expr(p));
-				expect(p, .Comma);
+				if current(p).type != .RightParenthesis {
+					expect(p, .Comma);
+				}
 			}
+			expect(p, .RightParenthesis);
+			result = call;
 		} else if current(p).type == .Arrow {
 			access := New(Node_Access);
 			access.left = result;
@@ -675,7 +679,13 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 	case Node_Identifier;
 		print("%", node.(*Node_Identifier).id.view);
 	case Node_Call;
-		print_expr(node.(*Node_Access).left);
+		print_expr(node.(*Node_Call).id);
+		print("(");
+		for node.(*Node_Call).params {
+			print_expr(it);
+			if it_index < node.(*Node_Call).params.count - 1 then print(", ");
+		}
+		print(")");
 	case Node_Access;
 		print_expr(node.(*Node_Access).left);
 		print("%", node.(*Node_Access).op.view);
@@ -922,7 +932,7 @@ main :: () {
 	int (*(*a3)[5])(void);
 
 	int (*const (*volatile (*f[5])(double))[5])(char);
-	int a = 10 + 1 + -x.y + *(a + b) + a->b;
+	int a = 10 + 1 + -x.y + *(a + b) + a->b + c(1, 2, 3);
 
 	int b = 1 - (2 - 3);
 	
