@@ -425,6 +425,36 @@ is_prefix_op :: (token: Token) -> bool {
 	return false;
 }
 
+is_binary_op :: (token: Token) -> bool {
+	if token.type == {
+	case .Plus; #through;
+	case .Minus; #through;
+	case .Asterisk; #through;
+	case .Bang; #through;
+	case .PlusPlus; #through;
+	case .MinusMinus; #through;
+	case .Tilde; #through;
+	case .Caret;   #through;
+	case .Percent; #through;
+	case .Ampersand; #through;
+	case .Less; #through;
+	case .LessEqual; #through;
+	case .Greater; #through;
+	case .GreaterEqual; #through;
+	case .Pipe; #through;
+	case .PipePipe;
+	return true;
+	}
+
+	if token.view == "sizeof" {
+		return true;
+	} else if token.type == .LeftParenthesis {
+		// Type cast
+	}
+	
+	return false;
+}
+
 parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 	lhs: *Node_Expr;
 	if is_prefix_op(current(p)) {
@@ -446,7 +476,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		if prec < min_prec break;
 
 		op := current(p);
-		if op.type != .Asterisk && op.type != .Plus && op.type != .Minus && op.type != .ForwardSlash break;
+		if !is_binary_op(op) then break;
 		skip(p);
 
 		next_min := prec + left_associative(token).(int);
