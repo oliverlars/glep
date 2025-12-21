@@ -143,12 +143,19 @@ Node_Call :: struct {
 	params: [..]*Node_Expr;
 }
 
-Node_Access :: struct {
+Node_Member_Access :: struct {
 	#as using node: Node_Expr;
 	op: Token;
 	left: *Node_Expr;
 	right: Token;
-	expr_type = Node_Access;
+	expr_type = Node_Member_Access;
+}
+
+Node_Array_Access :: struct {
+	#as using node: Node_Expr;
+	left: *Node_Expr;
+	offset: *Node_Expr;
+	expr_type = Node_Array_Access;
 }
 
 Node_Identifier :: struct {
@@ -563,7 +570,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 	while current(p).type == .Period || current(p).type == .LeftParenthesis ||
 	      current(p).type == .LeftBracket || current(p).type == .Arrow {
 		if current(p).type == .Period {
-			access := New(Node_Access);
+			access := New(Node_Member_Access);
 			access.op = current(p);
 			skip(p);
 			access.left = result;
@@ -571,7 +578,12 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			result = access;
 			expect(p, .Identifier);
 		} else if current(p).type == .LeftBracket {
-
+			skip(p);
+			access := New(Node_Array_Access);
+			access.offset = parse_expr(p);
+			access.left = result;
+			result = access;
+			expect(p, .RightBracket);
 		} else if current(p).type == .LeftParenthesis {
 			skip(p);
 			call := New(Node_Call);
@@ -585,15 +597,13 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			expect(p, .RightParenthesis);
 			result = call;
 		} else if current(p).type == .Arrow {
-			access := New(Node_Access);
+			access := New(Node_Member_Access);
 			access.left = result;
 			access.op = current(p);
 			skip(p);
 			access.right = current(p);
 			skip(p);
 			result = access;
-		} else if current(p).type == .Period {
-
 		}
 	}
 	return result;
@@ -686,10 +696,15 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 			if it_index < node.(*Node_Call).params.count - 1 then print(", ");
 		}
 		print(")");
-	case Node_Access;
-		print_expr(node.(*Node_Access).left);
-		print("%", node.(*Node_Access).op.view);
-		print("%", node.(*Node_Access).right.view);
+	case Node_Array_Access;
+		print_expr(node.(*Node_Array_Access).left);
+		print("[");
+		print_expr(node.(*Node_Array_Access).offset);
+		print("]");
+	case Node_Member_Access;
+		print_expr(node.(*Node_Member_Access).left);
+		print("%", node.(*Node_Member_Access).op.view);
+		print("%", node.(*Node_Member_Access).right.view);
 	}
 }
 
@@ -936,7 +951,7 @@ main :: () {
 
 	int b = 1 - (2 - 3);
 	
-	int c = 1 + 2 + 3;
+	int c = 1 + 2 + 3 + b[10];
 	
 	STRING
 
