@@ -81,30 +81,30 @@ Node_Declarator :: struct {
 	#as using node: Node;
 	qualifiers: [..]string;
 	declarator_type: Type;
-	init: *Node_Expr;
+	init: *Node_Initializer;
 	inner: *Node_Declarator;
 }
 
 Node_Function_Declarator :: struct {
 	#as using declarator: Node_Declarator;
-	declarator_type = Node_Function_Declarator;
+	declarator_type = #this;
 	params: [..]*Node_Decl;
 }
 
 Node_Array_Declarator :: struct {
 	#as using declarator: Node_Declarator;
-	declarator_type = Node_Array_Declarator;
+	declarator_type = #this;
 	count: int;
 }
 
 Node_Pointer_Declarator :: struct {
 	#as using declarator: Node_Declarator;
-	declarator_type = Node_Pointer_Declarator;
+	declarator_type = #this;
 }
 
 Node_Identifier_Declarator :: struct {
 	#as using declarator: Node_Declarator;
-	declarator_type = Node_Identifier_Declarator;
+	declarator_type = #this;
 	name: string;
 }
 
@@ -117,7 +117,7 @@ Node_Decl :: struct {
 
 Node_Expr :: struct {
 	#as using _: Node;
-	type = Node_Expr;
+	type = #this;
 	expr_type: Type;
 }
 
@@ -126,19 +126,19 @@ Node_Binary :: struct {
 	op: Token;
 	left: *Node_Expr;
 	right: *Node_Expr;
-	expr_type = Node_Binary;
+	expr_type = #this;
 }
 
 Node_Unary :: struct {
 	#as using node: Node_Expr;
 	op: Token;
 	right: *Node_Expr;
-	expr_type = Node_Unary;
+	expr_type = #this;
 }
 
 Node_Call :: struct {
 	#as using node: Node_Expr;
-	expr_type = Node_Call;
+	expr_type = #this;
 	id: *Node_Expr;
 	params: [..]*Node_Expr;
 }
@@ -148,34 +148,77 @@ Node_Member_Access :: struct {
 	op: Token;
 	left: *Node_Expr;
 	right: Token;
-	expr_type = Node_Member_Access;
+	expr_type = #this;
 }
 
 Node_Array_Access :: struct {
 	#as using node: Node_Expr;
 	left: *Node_Expr;
 	offset: *Node_Expr;
-	expr_type = Node_Array_Access;
+	expr_type = #this;
 }
 
 Node_Identifier :: struct {
 	#as using node: Node_Expr;
 	id: Token;
-	expr_type = Node_Identifier;
+	expr_type = #this;
 }
 
 Node_Number :: struct {
 	#as using node: Node_Expr;
-	expr_type = Node_Number;
+	expr_type = #this;
 	value: int;
 }
 
 Node_Function_Decl :: struct {
 	#as using node: Node;
-	type = Node_Function_Decl;
+	type = #this;
 	name: string;
 	params: [..]*Node_Decl;
 	ret_type: Node_Type_Info;
+}
+
+Node_Initializer :: struct {
+	#as using node: Node;
+	type = #this;
+	initializer_type: Type;
+}
+
+Node_Scalar_Initializer :: struct {
+	#as using _: Node_Initializer;
+	initializer_type = #this;
+	expr: *Node_Expr;
+}
+
+Node_Designated_Initializer :: struct {
+	#as using _: Node_Initializer;
+	initializer_type = #this;
+	designations: [..]*Node_Designation;
+}
+
+Node_Designation :: struct {
+	#as using node: Node;
+	type = #this;
+	designators: [..]*Node_Designator;
+	expr: *Node_Initializer;
+}
+
+Node_Designator :: struct {
+	#as using node: Node;
+	type = #this;
+	designator_type: Type;
+}
+
+Node_Field_Designator :: struct {
+	#as using _: Node_Designator;
+	designator_type = #this;
+	name: Token;
+}
+
+Node_Index_Designator :: struct {
+	#as using _: Node_Designator;
+	designator_type = #this;
+	offset: *Node_Expr;
 }
 
 tokenise :: (t: *Tokeniser) {
@@ -660,6 +703,42 @@ eval_expr :: (node: *Node_Expr) -> int {
 	return 0;
 }
 
+print_designation :: (node: *Node_Designation) {
+	if !node return;
+	for node.designators {
+		if it.designator_type == {
+			case Node_Field_Designator;
+				print(".");
+				print(it.(*Node_Field_Designator).name.view);
+			case Node_Index_Designator;
+				print("[");
+				print_expr(it.(*Node_Index_Designator).offset);
+				print("]");
+		}
+	}
+
+	if node.designators.count > 0 {
+		print(" = ");
+	}
+	print_init(node.expr);
+}
+
+print_init :: (node: *Node_Initializer) {
+	if !node return;
+	if node.initializer_type == {
+		case Node_Designated_Initializer;
+			print("{");
+			for node.(*Node_Designated_Initializer).designations {
+				print_designation(it);
+
+				if it_index < node.(*Node_Designated_Initializer).designations.count - 1 then print(", ");
+			}
+			print("}");
+		case Node_Scalar_Initializer;
+			print_expr(node.(*Node_Scalar_Initializer).expr);
+	}
+}
+
 print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 	if !node return;
 	if node.expr_type == {
@@ -788,6 +867,51 @@ parse_declarator :: (p: *Parser) -> *Node_Declarator {
 	return base;
 }
 
+parse_initializer :: (p: *Parser) -> *Node_Initializer {
+	initializer: *Node_Initializer;
+	if current(p).type == .LeftBrace {
+		skip(p);
+		designated := New(Node_Designated_Initializer);
+		while current(p).type != .RightBrace {
+			designation := New(Node_Designation);
+			equals := false;
+			while current(p).type == .LeftBracket ||
+				  current(p).type == .Period {
+				if current(p).type == .LeftBracket {
+					expect(p, .LeftBracket);
+					index := New(Node_Index_Designator);
+					index.offset = parse_expr(p);
+					expect(p, .RightBracket);
+					array_add(*designation.designators, index);
+				} else if current(p).type == .Period {
+					expect(p, .Period);
+					field := New(Node_Field_Designator);
+					field.name = current(p);
+					expect(p, .Identifier);
+					array_add(*designation.designators, field);
+				}
+				equals = true;
+			}
+			if equals {
+				expect(p, .Equals);
+			}
+
+			designation.expr = parse_initializer(p);
+			if current(p).type == .Comma {
+				skip(p);
+			}
+			array_add(*designated.designations, designation);		}
+		initializer = designated;
+		expect(p, .RightBrace);
+	} else {
+		scalar := New(Node_Scalar_Initializer);
+		scalar.expr = parse_expr(p);
+		initializer = scalar;
+	}
+	assert(initializer != null);
+	return initializer;
+}
+
 parse_decl :: (p: *Parser) -> *Node_Decl {
 	type: Node_Type_Info;
 	parse_declaration_specifiers(p, *type);
@@ -799,7 +923,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		array_add(*decl.declarators, declarator);
 		if current(p).type == .Equals {
 			skip(p);
-			declarator.init = parse_expr(p);
+			declarator.init = parse_initializer(p);
 		}
 		if current(p).type != .Semicolon {
 			expect(p, .Comma);
@@ -854,7 +978,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		}
 		if declarator.init {
 			print(" = ");
-			print_expr(declarator.init);
+			print_init(declarator.init);
 		}
 	}
 
@@ -951,7 +1075,9 @@ main :: () {
 
 	int b = 1 - (2 - 3);
 	
-	int c = 1 + 2 + 3 + b[10];
+	int c = 1 + 2 + 3 + b[ 1 + 2 + 10][20](1, 2, 3);
+
+	int a = { 1, 2, 3, .c[1].a[5] = 1234 };
 	
 	STRING
 
