@@ -491,14 +491,40 @@ MAX_PRECEDENCE :: 100;
 
 precedence_of :: (token: Token) -> int {
 	if token.type == {
-		case .ForwardSlash; return 15;
-		case .Asterisk;     return 15;
-		case .Percent;      return 15;
-		case .Plus;         return 10;
-		case .Minus;        return 10;
-		case .Question;     return 5;
-		
-		case;               return 0;
+		case .Percent; return 12;
+		case .ForwardSlash; return 12;
+		case .Asterisk; return 12;
+		case .Minus; return 11;
+		case .Plus; return 11;
+		case .GreaterGreater; return 11;
+		case .LessLess; return 11;
+		case .GreaterEqual; return 10;
+		case .Greater; return 10;
+		case .LessEqual; return 10;
+		case .Less; return 10;
+		case .BangEqual; return 9;
+		case .EqualEqual; return 9;
+		case .Ampersand; return 8;
+		case .Caret; return 7;
+		case .Pipe; return 6;
+		case .AmpersandAmpersand; return 5;
+
+		case .PipePipe;            return 4;
+
+		case .Question; return 3;
+		case .PipeEqual; return 2;
+		case .CaretEqual; return 2;
+		case .AmpersandEqual; return 2;
+		case .GreaterGreaterEqual; return 2;
+		case .LessLessEqual; return 2;
+		case .PercentEqual; return 2;
+		case .ForwardSlashEqual; return 2;
+		case .AsteriskEqual; return 2;
+		case .MinusEqual; return 2;
+		case .PlusEqual; return 2;
+		case .Equals; return 2;
+		case .Comma; return 1;
+		case; return 0;
 	}
 }
 
