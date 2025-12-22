@@ -239,6 +239,11 @@ Node_Decl_Statement :: struct {
 	decl: *Node_Decl;
 }
 
+Node_Translation_Unit :: struct {
+	#as using node: Node;
+	declarations: [..]*Node_Decl;
+}
+
 tokenise :: (t: *Tokeniser) {
 	is_ws    :: (c: int) -> bool { return c == #char " " || c == #char "\n" || c == #char "\r" || c == #char "\t"; }
 	is_ident :: (c: int) -> bool { return ((c >= #char "a") && (c <= #char "z")) || ((c >= #char "A") && (c <= #char "Z")); }
@@ -1060,9 +1065,21 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		expect(p, .RightBrace);
 		statement = block;
 	} else {
-
+		
 	}
 	return statement;
+}
+
+parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
+	result := New(Node_Translation_Unit);
+	while p.at < p.tokens.count {
+		decl := parse_decl(p);
+		if !decl.body {
+			expect(p, .Semicolon);
+		}
+		array_add(*result.declarations, decl);
+	}
+	return result;
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
@@ -1071,83 +1088,23 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 
 	decl := New(Node_Decl);
 	decl.base_info = type;
-	while current(p).type != .Semicolon {
+	while current(p).type != .Semicolon &&
+		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
 		array_add(*decl.declarators, declarator);
 		if current(p).type == .Equals {
 			skip(p);
 			declarator.init = parse_initializer(p);
 		}
-		if current(p).type != .Semicolon {
+		if current(p).type != .Semicolon &&
+		   current(p).type != .LeftBrace {
 			expect(p, .Comma);
 		}
 	}
 
-	if current(p).type == .Semicolon {
-		skip(p);
-	} else if current(p).type == .LeftBrace {
+	if current(p).type == .LeftBrace {
 		decl.body = parse_statement(p);
 	}
-
-	print_type :: (info: Node_Type_Info) {
-		
-		print("% ", info.storage_class);
-		
-		for info.qualifiers {
-			print("% ", it);
-		}
-		for info.specifiers {
-			print("% ", it);
-		}
-	}
-
-	print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
-		if !declarator then return;
-		if declarator.declarator_type == {
-		case Node_Pointer_Declarator;
-			if parent_was_function_or_array {
-				print("(");
-			}
-			print("*");
-			for declarator.qualifiers {
-				print("% ", it);
-			}
-			print_declarator(declarator.inner, false);
-			if parent_was_function_or_array {
-				print(")");
-			}
-		case Node_Function_Declarator;
-			print_declarator(declarator.inner, true);
-			func := declarator.(*Node_Function_Declarator);
-			print("(");
-			for func.params {
-				if !it break;
-				print_type(it.base_info);
-				print_declarator(it.declarators[0], false);
-				if it_index < func.params.count - 1 then print(", ");
-			}
-			print(")");
-		case Node_Identifier_Declarator;
-			print_declarator(declarator.inner, false);
-			print("%", declarator.(*Node_Identifier_Declarator).name);
-		case Node_Array_Declarator;
-			print_declarator(declarator.inner, true);
-			print("[%]", declarator.(*Node_Array_Declarator).count);
-		}
-		if declarator.init {
-			print(" = ");
-			print_init(declarator.init);
-		}
-	}
-
-	print_type(decl.base_info);
-	for decl.declarators {
-		print_declarator(it);
-		if it_index < decl.declarators.count - 1 then print(", ");
-	}
-	print(";");
-	
-	print("\n");
 	
 	return decl;
 }
@@ -1240,6 +1197,8 @@ main :: () {
 	int a = { 1, 2, 3}, b = {1, 2, 3};
 
 	int a = 1 ? 2 : 3;
+
+	int main(int argc, char **args) { }
 	
 	STRING
 
@@ -1251,7 +1210,75 @@ main :: () {
 	parser.tokens = tokeniser.tokens;
 	
 
-	while parser.at < parser.tokens.count {
-		parse_decl(*parser);
+	print_decl :: (decl: *Node_Decl) {
+		print_type :: (info: Node_Type_Info) {	
+			print("% ", info.storage_class);
+			
+			for info.qualifiers {
+				print("% ", it);
+			}
+			for info.specifiers {
+				print("% ", it);
+			}
+		}
+
+		print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
+			if !declarator then return;
+			if declarator.declarator_type == {
+			case Node_Pointer_Declarator;
+				if parent_was_function_or_array {
+					print("(");
+				}
+				print("*");
+				for declarator.qualifiers {
+					print("% ", it);
+				}
+				print_declarator(declarator.inner, false);
+				if parent_was_function_or_array {
+					print(")");
+				}
+			case Node_Function_Declarator;
+				print_declarator(declarator.inner, true);
+				func := declarator.(*Node_Function_Declarator);
+				print("(");
+				for func.params {
+					if !it break;
+					print_type(it.base_info);
+					print_declarator(it.declarators[0], false);
+					if it_index < func.params.count - 1 then print(", ");
+				}
+				print(")");
+			case Node_Identifier_Declarator;
+				print_declarator(declarator.inner, false);
+				print("%", declarator.(*Node_Identifier_Declarator).name);
+			case Node_Array_Declarator;
+				print_declarator(declarator.inner, true);
+				print("[%]", declarator.(*Node_Array_Declarator).count);
+			}
+			if declarator.init {
+				print(" = ");
+				print_init(declarator.init);
+			}
+		}
+
+		print_type(decl.base_info);
+		for decl.declarators {
+			print_declarator(it);
+			if it_index < decl.declarators.count - 1 then print(", ");
+		}
+
+		if decl.body {
+			print(" {\n");
+			print("}\n");
+		}
+	}
+
+	tu := parse_translation_unit(*parser);
+	for tu.declarations {
+		print_decl(it);
+		if !it.body {
+			print(";");
+		}
+		print("\n");
 	}
 }
