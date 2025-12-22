@@ -6,6 +6,7 @@ Token_Type :: enum {
 	Asterisk;
 	Comma;
 	Semicolon;
+	Colon;
 	Number;
 	Identifier;
 	Equals;
@@ -49,6 +50,7 @@ Token_Type :: enum {
 	LessLessEqual;
 	GreaterGreaterEqual;
 	Arrow;
+	Question;
 }
 
 Token :: struct {
@@ -133,6 +135,14 @@ Node_Unary :: struct {
 	#as using node: Node_Expr;
 	op: Token;
 	right: *Node_Expr;
+	expr_type = #this;
+}
+
+Node_Ternary :: struct {
+	#as using node: Node_Expr;
+	cond: *Node_Expr;
+	on_true: *Node_Expr;
+	on_false: *Node_Expr;
 	expr_type = #this;
 }
 
@@ -243,6 +253,7 @@ tokenise :: (t: *Tokeniser) {
 					token.type = .EqualEqual;
 				}
 			case ";"; t.at += 1; token.type = .Semicolon;
+			case ":"; t.at += 1; token.type = .Colon;
 			case ","; t.at += 1; token.type = .Comma;
 			case "("; t.at += 1; token.type = .LeftParenthesis;
 			case ")"; t.at += 1; token.type = .RightParenthesis;
@@ -250,6 +261,7 @@ tokenise :: (t: *Tokeniser) {
 			case "}"; t.at += 1; token.type = .RightBrace;
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
+			case "?"; t.at += 1; token.type = .Question;
 			case "*";
 				t.at += 1; token.type = .Asterisk;
 				if t.source[t.at] == "=" {
@@ -479,13 +491,27 @@ MAX_PRECEDENCE :: 100;
 
 precedence_of :: (token: Token) -> int {
 	if token.type == {
-	case .ForwardSlash; return 15;
-	case .Asterisk;     return 15;
-	case .Percent;      return 15;
-	case .Plus;         return 10;
-	case .Minus;        return 10;
-	
-	case;               return 0;
+		case .ForwardSlash; return 15;
+		case .Asterisk;     return 15;
+		case .Percent;      return 15;
+		case .Plus;         return 10;
+		case .Minus;        return 10;
+		case .Question;     return 5;
+		
+		case;               return 0;
+	}
+}
+
+precedence_of :: (type: Token_Type) -> int {
+	if type == {
+		case .ForwardSlash; return 15;
+		case .Asterisk;     return 15;
+		case .Percent;      return 15;
+		case .Plus;         return 10;
+		case .Minus;        return 10;
+		case .Question;     return 5;
+		
+		case;               return 0;
 	}
 }
 
@@ -557,7 +583,8 @@ is_binary_op :: (token: Token) -> bool {
 		case .AmpersandAmpersand; #through;
 		case .BangEqual; #through;
 		case .LessLess; #through;
-		case .GreaterGreater;
+		case .GreaterGreater; #through;
+		case .Question;
 			return true;
 	}
 	
@@ -586,23 +613,33 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 	if !lhs return null;
 
 	while true {
-		token := current(p);
-		prec := precedence_of(token);
+		op := current(p);
+		prec := precedence_of(op);
 		if prec < min_prec break;
 
-		op := current(p);
 		if !is_binary_op(op) then break;
-		skip(p);
+		next_min := prec + is_left_associative(op).(int);
+		if op.type == .Question {
+			skip(p);
+			ternary := New(Node_Ternary);
+			ternary.cond = lhs;
+			ternary.on_true = parse_expr(p);
 
-		next_min := prec + is_left_associative(token).(int);
+			expect(p, .Colon);
 
-		rhs := parse_expr(p, next_min);
+			ternary.on_false = parse_expr(p, next_min);
+			lhs = ternary;
+		} else {
+			skip(p);
+			rhs := parse_expr(p, next_min);
 
-		binary := New(Node_Binary);
-		binary.op = op;
-		binary.left = lhs;
-		binary.right = rhs;
-		lhs = binary;
+			
+			binary := New(Node_Binary);
+			binary.op = op;
+			binary.left = lhs;
+			binary.right = rhs;
+			lhs = binary;
+		}
 	}
 
 	return lhs;
@@ -763,6 +800,12 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 		if precedence <= parent_precedence {
 			print(")");
 		}
+	case Node_Ternary;
+		print_expr(node.(*Node_Ternary).cond, precedence_of(.Question));
+		print(" ? ");
+		print_expr(node.(*Node_Ternary).on_true);
+		print(" : ");
+		print_expr(node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
 		print("%", node.(*Node_Number).value);
 	case Node_Identifier;
@@ -1078,6 +1121,10 @@ main :: () {
 	int c = 1 + 2 + 3 + b[ 1 + 2 + 10][20](1, 2, 3);
 
 	int a = { 1, 2, 3, .c[1].a[5] = 1234 };
+
+	int a = { 1, 2, 3}, b = {1, 2, 3};
+
+	int a = 1 ? 2 : 3;
 	
 	STRING
 
