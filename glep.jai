@@ -115,6 +115,7 @@ Node_Decl :: struct {
 	type = Node_Decl;
 	declarators: [..]*Node_Declarator;
 	base_info: Node_Type_Info;
+	body: *Node_Statement;
 }
 
 Node_Expr :: struct {
@@ -180,14 +181,6 @@ Node_Number :: struct {
 	value: int;
 }
 
-Node_Function_Decl :: struct {
-	#as using node: Node;
-	type = #this;
-	name: string;
-	params: [..]*Node_Decl;
-	ret_type: Node_Type_Info;
-}
-
 Node_Initializer :: struct {
 	#as using node: Node;
 	type = #this;
@@ -229,6 +222,21 @@ Node_Index_Designator :: struct {
 	#as using _: Node_Designator;
 	designator_type = #this;
 	offset: *Node_Expr;
+}
+
+Node_Statement :: struct {
+	#as using _: Node;
+	type = #this;
+}
+
+Node_Block :: struct {
+	#as using node: Node_Statement;
+	statements: [..]*Node_Statement;
+}
+
+Node_Decl_Statement :: struct {
+	#as using node: Node_Statement;
+	decl: *Node_Decl;
 }
 
 tokenise :: (t: *Tokeniser) {
@@ -437,42 +445,42 @@ is_type_qualifier :: (token: Token) -> bool {
 	}
 }
 
+is_storage_specifier :: (token: Token) -> bool {
+	if token.view == {
+	case "static";   #through;
+	case "auto";     #through;
+	case "extern";   #through;
+	case "register";
+		return true;
+	case;
+		return false;
+	}
+}
+
+is_type_specifier :: (token: Token) -> bool {
+	if token.view == { 
+	case "void";     #through;
+	case "char";     #through;
+	case "short";    #through;
+	case "int";      #through;
+	case "long";     #through;
+	case "float";    #through;
+	case "double";   #through;
+	case "signed";   #through;
+	case "unsigned"; #through;
+	case "bool";
+		return true;
+	case;
+		return false;
+	}
+}
+
+is_function_specifier :: (token: Token) -> bool {
+	return token.view == "inline";
+}
+
+
 parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
-	
-	is_storage_specifier :: (token: Token) -> bool {
-		if token.view == {
-		case "static";   #through;
-		case "auto";     #through;
-		case "extern";   #through;
-		case "register";
-			return true;
-		case;
-			return false;
-		}
-	}
-
-	is_type_specifier :: (token: Token) -> bool {
-		if token.view == { 
-		case "void";     #through;
-		case "char";     #through;
-		case "short";    #through;
-		case "int";      #through;
-		case "long";     #through;
-		case "float";    #through;
-		case "double";   #through;
-		case "signed";   #through;
-		case "unsigned"; #through;
-		case "bool";
-			return true;
-		case;
-			return false;
-		}
-	}
-
-	is_function_specifier :: (token: Token) -> bool {
-		return token.view == "inline";
-	}
-
 	while  is_storage_specifier(current(p)) ||
 		   is_type_qualifier(current(p)) ||
 		   is_type_specifier(current(p)) ||
@@ -487,57 +495,111 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 	}
 }
 
-MAX_PRECEDENCE :: 100;
+is_declaration_start :: (p: *Parser) -> bool {
+	// Also needs to check against the symbol table
+	// when we have one of those
+	return is_storage_specifier(current(p)) ||
+		   is_type_qualifier(current(p)) ||
+		   is_type_specifier(current(p)) ||
+		   is_function_specifier(current(p)) ||
+		   current(p).view == "typedef";
+}
 
 precedence_of :: (token: Token) -> int {
 	if token.type == {
-		case .Percent; return 12;
+		case .Percent;      return 12;
 		case .ForwardSlash; return 12;
-		case .Asterisk; return 12;
-		case .Minus; return 11;
-		case .Plus; return 11;
+		case .Asterisk;     return 12;
+		
+		case .Minus;          return 11;
+		case .Plus;           return 11;
 		case .GreaterGreater; return 11;
-		case .LessLess; return 11;
+		case .LessLess;       return 11;
+
 		case .GreaterEqual; return 10;
-		case .Greater; return 10;
-		case .LessEqual; return 10;
-		case .Less; return 10;
-		case .BangEqual; return 9;
+		case .Greater;      return 10;
+		case .LessEqual;    return 10;
+		case .Less;         return 10;
+
+		case .BangEqual;  return 9;
 		case .EqualEqual; return 9;
+
 		case .Ampersand; return 8;
+
 		case .Caret; return 7;
+
 		case .Pipe; return 6;
+
 		case .AmpersandAmpersand; return 5;
 
-		case .PipePipe;            return 4;
+		case .PipePipe; return 4;
 
 		case .Question; return 3;
-		case .PipeEqual; return 2;
-		case .CaretEqual; return 2;
-		case .AmpersandEqual; return 2;
+
+		case .PipeEqual;           return 2;
+		case .CaretEqual;          return 2;
+		case .AmpersandEqual;      return 2;
 		case .GreaterGreaterEqual; return 2;
-		case .LessLessEqual; return 2;
-		case .PercentEqual; return 2;
-		case .ForwardSlashEqual; return 2;
-		case .AsteriskEqual; return 2;
-		case .MinusEqual; return 2;
-		case .PlusEqual; return 2;
-		case .Equals; return 2;
+		case .LessLessEqual;       return 2;
+		case .PercentEqual;        return 2;
+		case .ForwardSlashEqual;   return 2;
+		case .AsteriskEqual;       return 2;
+		case .MinusEqual;          return 2;
+		case .PlusEqual;           return 2;
+		case .Equals;              return 2;
+
 		case .Comma; return 1;
+
 		case; return 0;
 	}
 }
 
 precedence_of :: (type: Token_Type) -> int {
 	if type == {
-		case .ForwardSlash; return 15;
-		case .Asterisk;     return 15;
-		case .Percent;      return 15;
-		case .Plus;         return 10;
-		case .Minus;        return 10;
-		case .Question;     return 5;
+		case .Percent;      return 12;
+		case .ForwardSlash; return 12;
+		case .Asterisk;     return 12;
 		
-		case;               return 0;
+		case .Minus;          return 11;
+		case .Plus;           return 11;
+		case .GreaterGreater; return 11;
+		case .LessLess;       return 11;
+
+		case .GreaterEqual; return 10;
+		case .Greater;      return 10;
+		case .LessEqual;    return 10;
+		case .Less;         return 10;
+
+		case .BangEqual;  return 9;
+		case .EqualEqual; return 9;
+
+		case .Ampersand; return 8;
+
+		case .Caret; return 7;
+
+		case .Pipe; return 6;
+
+		case .AmpersandAmpersand; return 5;
+
+		case .PipePipe; return 4;
+
+		case .Question; return 3;
+
+		case .PipeEqual;           return 2;
+		case .CaretEqual;          return 2;
+		case .AmpersandEqual;      return 2;
+		case .GreaterGreaterEqual; return 2;
+		case .LessLessEqual;       return 2;
+		case .PercentEqual;        return 2;
+		case .ForwardSlashEqual;   return 2;
+		case .AsteriskEqual;       return 2;
+		case .MinusEqual;          return 2;
+		case .PlusEqual;           return 2;
+		case .Equals;              return 2;
+
+		case .Comma; return 1;
+		
+		case; return 0;
 	}
 }
 
@@ -981,6 +1043,28 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 	return initializer;
 }
 
+parse_statement :: (p: *Parser) -> *Node_Statement {
+	statement: *Node_Statement;
+	if current(p).type == .LeftBrace {
+		expect(p, .LeftBrace);
+		block := New(Node_Block);
+		while current(p).type != .RightBrace {
+			if is_declaration_start(p) {
+				decl_stmt := New(Node_Decl_Statement);
+				decl_stmt.decl = parse_decl(p);
+				array_add(*block.statements, decl_stmt);
+			} else {
+				array_add(*block.statements, parse_statement(p));
+			}
+		}
+		expect(p, .RightBrace);
+		statement = block;
+	} else {
+
+	}
+	return statement;
+}
+
 parse_decl :: (p: *Parser) -> *Node_Decl {
 	type: Node_Type_Info;
 	parse_declaration_specifiers(p, *type);
@@ -998,7 +1082,12 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			expect(p, .Comma);
 		}
 	}
-	expect(p, .Semicolon);
+
+	if current(p).type == .Semicolon {
+		skip(p);
+	} else if current(p).type == .LeftBrace {
+		decl.body = parse_statement(p);
+	}
 
 	print_type :: (info: Node_Type_Info) {
 		
