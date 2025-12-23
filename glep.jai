@@ -139,6 +139,14 @@ Node_Unary :: struct {
 	expr_type = #this;
 }
 
+Node_Cast :: struct {
+	#as using node: Node_Expr;
+	declarator: *Node_Declarator;
+	base_info: Node_Type_Info;
+	expr: *Node_Expr;
+	expr_type = #this;
+}
+
 Node_Ternary :: struct {
 	#as using node: Node_Expr;
 	cond: *Node_Expr;
@@ -542,6 +550,11 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   current(p).view == "typedef";
 }
 
+is_type_name :: (token: Token) -> bool {
+	return is_type_qualifier(token) ||
+		   is_type_specifier(token);
+}
+
 is_assign_op :: (token: Token) -> bool {
 	if token.type == {
 		case .PipeEqual; #through;
@@ -746,24 +759,35 @@ is_binary_op :: (token: Token) -> bool {
 	return false;
 }
 
-parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
-	lhs: *Node_Expr;
+
+parse_unary :: (p: *Parser) -> *Node_Expr {
 	if is_prefix_op(current(p)) {
 		op := current(p);
 		skip(p);
-
-		rhs := parse_primary_expr(p);
-		rhs = parse_postfix_expr(p, rhs);
-		
+		rhs := parse_unary(p);
 		unary := New(Node_Unary);
 		unary.op = op;
 		unary.right = rhs;
-
-		lhs = unary;
-	} else {
-		lhs = parse_primary_expr(p);
-		lhs = parse_postfix_expr(p, lhs);
+		return unary;
 	}
+
+	if current(p).type == .LeftParenthesis && is_type_name(next(p)) {
+		expect(p, .LeftParenthesis);
+		_cast := New(Node_Cast);
+		parse_declaration_specifiers(p, *_cast.base_info);
+		_cast.declarator = parse_declarator(p);
+		expect(p, .RightParenthesis);
+		_cast.expr = parse_unary(p);
+		return _cast;
+	} 
+
+	lhs := parse_primary_expr(p);
+	return parse_postfix_expr(p, lhs);
+}
+
+parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
+	
+	lhs := parse_unary(p);
 
 	if !lhs return null;
 
@@ -953,6 +977,12 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 		if precedence <= parent_precedence {
 			print(")");
 		}
+	case Node_Cast;
+		print("(");
+		print_type(node.(*Node_Cast).base_info);
+		print_declarator(node.(*Node_Cast).declarator);
+		print(")");
+		print_expr(node.(*Node_Cast).expr);
 	case Node_Binary;
 		precedence := precedence_of(node.(*Node_Binary).op);
 		if precedence <= parent_precedence {
@@ -1225,60 +1255,62 @@ indent :: (depth: int) {
 	for 0..depth*4 print(" ");
 }
 
-print_decl :: (decl: *Node_Decl) {
-	print_type :: (info: Node_Type_Info) {	
-		print("%", info.storage_class);
-		if info.storage_class {
-			print(" ");
-		}
-		
-		for info.qualifiers {
-			print("% ", it);
-		}
-		for info.specifiers {
-			print("% ", it);
-		}
-	}
 
-	print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
-		if !declarator then return;
-		if declarator.declarator_type == {
-		case Node_Pointer_Declarator;
-			if parent_was_function_or_array {
-				print("(");
-			}
-			print("*");
-			for declarator.qualifiers {
-				print("% ", it);
-			}
-			print_declarator(declarator.inner, false);
-			if parent_was_function_or_array {
-				print(")");
-			}
-		case Node_Function_Declarator;
-			print_declarator(declarator.inner, true);
-			func := declarator.(*Node_Function_Declarator);
+print_type :: (info: Node_Type_Info) {	
+	print("%", info.storage_class);
+	if info.storage_class {
+		print(" ");
+	}
+	
+	for info.qualifiers {
+		print("% ", it);
+	}
+	for info.specifiers {
+		print("% ", it);
+	}
+}
+
+print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
+	if !declarator then return;
+	if declarator.declarator_type == {
+	case Node_Pointer_Declarator;
+		if parent_was_function_or_array {
 			print("(");
-			for func.params {
-				if !it break;
-				print_type(it.base_info);
-				print_declarator(it.declarators[0], false);
-				if it_index < func.params.count - 1 then print(", ");
-			}
+		}
+		print("*");
+		for declarator.qualifiers {
+			print("% ", it);
+		}
+		print_declarator(declarator.inner, false);
+		if parent_was_function_or_array {
 			print(")");
-		case Node_Identifier_Declarator;
-			print_declarator(declarator.inner, false);
-			print("%", declarator.(*Node_Identifier_Declarator).name);
-		case Node_Array_Declarator;
-			print_declarator(declarator.inner, true);
-			print("[%]", declarator.(*Node_Array_Declarator).count);
 		}
-		if declarator.init {
-			print(" = ");
-			print_init(declarator.init);
+	case Node_Function_Declarator;
+		print_declarator(declarator.inner, true);
+		func := declarator.(*Node_Function_Declarator);
+		print("(");
+		for func.params {
+			if !it break;
+			print_type(it.base_info);
+			print_declarator(it.declarators[0], false);
+			if it_index < func.params.count - 1 then print(", ");
 		}
+		print(")");
+	case Node_Identifier_Declarator;
+		print_declarator(declarator.inner, false);
+		print("%", declarator.(*Node_Identifier_Declarator).name);
+	case Node_Array_Declarator;
+		print_declarator(declarator.inner, true);
+		print("[%]", declarator.(*Node_Array_Declarator).count);
 	}
+	if declarator.init {
+		print(" = ");
+		print_init(declarator.init);
+	}
+}
 
+
+print_decl :: (decl: *Node_Decl) {
 	print_type(decl.base_info);
 	for decl.declarators {
 		print_declarator(it);
@@ -1420,7 +1452,7 @@ main :: () {
 		} else if (123) {
 			*a[10].abc |= 10;
 		} else { 
-			int a = 5; print(abc); print(a[5], 2 + 1);
+			int a = (float)(int)5 + 1; print(abc); print(a[5], 2 + 1);
 		}
 		return 1 + 2 + 3;
 	}
