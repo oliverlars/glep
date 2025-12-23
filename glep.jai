@@ -266,6 +266,15 @@ Node_If :: struct {
 	statement_type = #this;
 }
 
+Node_For :: struct {
+	#as using node: Node_Statement;
+	init : *Node_Decl;
+	cond: *Node_Expr;
+	expr: *Node_Expr;
+	body: *Node_Statement;
+	statement_type = #this;
+}
+
 Node_Decl_Statement :: struct {
 	#as using node: Node_Statement;
 	decl: *Node_Decl;
@@ -712,8 +721,6 @@ is_prefix_op :: (token: Token) -> bool {
 
 	if token.view == "sizeof" {
 		return true;
-	} else if token.type == .LeftParenthesis {
-		// Type cast
 	}
 	
 	return false;
@@ -1185,6 +1192,18 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				ret.expr = parse_expr(p);
 				statement = ret;
 				expect(p, .Semicolon);
+			}else if current(p).view == "for" {
+				skip(p);
+				_for := New(Node_For);
+				expect(p, .LeftParenthesis);
+				_for.init = parse_decl(p);
+				expect(p, .Semicolon);
+				_for.cond = parse_expr(p);
+				expect(p, .Semicolon);
+				_for.expr = parse_expr(p);
+				expect(p, .RightParenthesis);
+				_for.body = parse_statement(p);
+				statement = _for;
 			} else if current(p).view == "if" {
 				skip(p);
 				_if := New(Node_If);
@@ -1203,6 +1222,8 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = expr_stmt;
 				expect(p, .Semicolon);
 			}
+		} else if current(p).type == .Semicolon {
+			expect(p, .Semicolon);
 		} else {
 			expr_stmt := New(Node_Expr_Statement);
 			expr_stmt.expr = parse_expr(p);
@@ -1349,6 +1370,17 @@ print_statement :: (stmt: *Node_Statement, depth := 0) {
 				print_statement(stmt.(*Node_If).on_false, depth);
 			}
 			print("\n");
+		case Node_For;
+			print("for ");
+			print("(");
+			print_decl(stmt.(*Node_For).init);
+			print("; ");
+			print_expr(stmt.(*Node_For).cond);
+			print("; ");
+			print_expr(stmt.(*Node_For).expr);
+			print(") ");
+			print_statement(stmt.(*Node_For).body, depth);
+			print("\n");
 		case Node_Decl_Statement;
 			print_decl(stmt.(*Node_Decl_Statement).decl);
 			print(";\n");
@@ -1457,6 +1489,7 @@ main :: () {
 		}
 		int a, b, c;
 		int a = 1, 2, 3;
+		for(int a = 10; a < 100; a++) { }
 		return 1 + 2 + 3;
 	}
 	
