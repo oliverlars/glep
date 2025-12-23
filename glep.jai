@@ -752,7 +752,8 @@ is_binary_op :: (token: Token) -> bool {
 		case .AsteriskEqual; #through;
 		case .MinusEqual; #through;
 		case .PlusEqual; #through;
-		case .Equals;
+		case .Equals; #through;
+		case .Comma;
 			return true;
 	}
 	
@@ -761,6 +762,7 @@ is_binary_op :: (token: Token) -> bool {
 
 
 parse_unary :: (p: *Parser) -> *Node_Expr {
+	result: *Node_Expr;
 	if is_prefix_op(current(p)) {
 		op := current(p);
 		skip(p);
@@ -768,21 +770,20 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		unary := New(Node_Unary);
 		unary.op = op;
 		unary.right = rhs;
-		return unary;
-	}
-
-	if current(p).type == .LeftParenthesis && is_type_name(next(p)) {
+		result = unary;
+	} else if current(p).type == .LeftParenthesis && is_type_name(next(p)) {
 		expect(p, .LeftParenthesis);
 		_cast := New(Node_Cast);
 		parse_declaration_specifiers(p, *_cast.base_info);
 		_cast.declarator = parse_declarator(p);
 		expect(p, .RightParenthesis);
 		_cast.expr = parse_unary(p);
-		return _cast;
-	} 
-
-	lhs := parse_primary_expr(p);
-	return parse_postfix_expr(p, lhs);
+		result = _cast;
+	} else {
+		lhs := parse_primary_expr(p);
+		result = parse_postfix_expr(p, lhs);
+	}
+	return result;
 }
 
 parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
@@ -1452,8 +1453,10 @@ main :: () {
 		} else if (123) {
 			*a[10].abc |= 10;
 		} else { 
-			int a = (float)(int)5 + 1; print(abc); print(a[5], 2 + 1);
+			int a = -(float)(int)a++ + 1; print(abc); print(a[5], 2 + 1);
 		}
+		int a, b, c;
+		int a = 1, 2, 3;
 		return 1 + 2 + 3;
 	}
 	
