@@ -227,21 +227,31 @@ Node_Index_Designator :: struct {
 Node_Statement :: struct {
 	#as using _: Node;
 	type = #this;
+	statement_type: Type;
 }
 
 Node_Block :: struct {
 	#as using node: Node_Statement;
 	statements: [..]*Node_Statement;
+	statement_type = #this;
+}
+
+Node_Return :: struct {
+	#as using node: Node_Statement;
+	expr: *Node_Expr;
+	statement_type = #this;
 }
 
 Node_Decl_Statement :: struct {
 	#as using node: Node_Statement;
 	decl: *Node_Decl;
+	statement_type = #this;
 }
 
 Node_Translation_Unit :: struct {
 	#as using node: Node;
 	declarations: [..]*Node_Decl;
+	type = #this;
 }
 
 tokenise :: (t: *Tokeniser) {
@@ -1065,7 +1075,15 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		expect(p, .RightBrace);
 		statement = block;
 	} else {
-		
+		if current(p).type == .Identifier {
+			if current(p).view == "return" {
+				skip(p);
+				ret := New(Node_Return);
+				ret.expr = parse_expr(p);
+				statement = ret;
+			}
+		}
+		expect(p, .Semicolon);
 	}
 	return statement;
 }
@@ -1198,7 +1216,9 @@ main :: () {
 
 	int a = 1 ? 2 : 3;
 
-	int main(int argc, char **args) { }
+	int main(int argc, char **args) {
+		return 1 + 2 + 3;
+	}
 	
 	STRING
 
@@ -1268,8 +1288,27 @@ main :: () {
 		}
 
 		if decl.body {
-			print(" {\n");
-			print("}\n");
+			print_statement(decl.body);
+		}
+	}
+
+	indent :: (depth: int) {
+		for 0..depth*4 print(" ");
+	}
+
+	print_statement :: (stmt: *Node_Statement, depth := 0) {
+		indent(depth);
+		if stmt.statement_type == {
+			case Node_Return;
+				print("return ");
+				print_expr(stmt.(*Node_Return).expr);
+				print(";\n");
+			case Node_Block;
+				print("{\n");
+				for stmt.(*Node_Block).statements {
+					print_statement(it, depth + 1);
+				}
+				print("}");
 		}
 	}
 
