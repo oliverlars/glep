@@ -256,6 +256,12 @@ Node_Decl_Statement :: struct {
 	statement_type = #this;
 }
 
+Node_Expr_Statement :: struct {
+	#as using node: Node_Statement;
+	expr: *Node_Expr;
+	statement_type = #this;
+}
+
 Node_Translation_Unit :: struct {
 	#as using node: Node;
 	declarations: [..]*Node_Decl;
@@ -1103,7 +1109,17 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					_if.on_false = parse_statement(p);
 				}
 				statement = _if;
+			} else {
+				expr_stmt := New(Node_Expr_Statement);
+				expr_stmt.expr = parse_expr(p);
+				statement = expr_stmt;
+				expect(p, .Semicolon);
 			}
+		} else {
+			expr_stmt := New(Node_Expr_Statement);
+			expr_stmt.expr = parse_expr(p);
+			statement = expr_stmt;
+			expect(p, .Semicolon);
 		}
 	}
 	return statement;
@@ -1246,6 +1262,9 @@ print_statement :: (stmt: *Node_Statement, depth := 0) {
 		case Node_Decl_Statement;
 			print_decl(stmt.(*Node_Decl_Statement).decl);
 			print(";\n");
+		case Node_Expr_Statement;
+			print_expr(stmt.(*Node_Expr_Statement).expr);
+			print(";\n");
 	}
 }
 
@@ -1339,7 +1358,7 @@ main :: () {
 	int a = 1 ? 2 : 3;
 
 	int main(int argc, char **args) {
-		if (1 + 2) { } else if (abc) { } else if (123) {} else { int a = 5; }
+		if (1 + 2) { } else if (abc) { } else if (123) {} else { int a = 5; print(abc); print(a[5], 2 + 1); }
 		return 1 + 2 + 3;
 	}
 	
