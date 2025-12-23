@@ -242,6 +242,14 @@ Node_Return :: struct {
 	statement_type = #this;
 }
 
+Node_If :: struct {
+	#as using node: Node_Statement;
+	cond: *Node_Expr;
+	on_true: *Node_Statement;
+	on_false: *Node_Statement;
+	statement_type = #this;
+}
+
 Node_Decl_Statement :: struct {
 	#as using node: Node_Statement;
 	decl: *Node_Decl;
@@ -1081,9 +1089,21 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				ret := New(Node_Return);
 				ret.expr = parse_expr(p);
 				statement = ret;
+				expect(p, .Semicolon);
+			} else if current(p).view == "if" {
+				skip(p);
+				_if := New(Node_If);
+				expect(p, .LeftParenthesis);
+				_if.cond = parse_expr(p);
+				expect(p, .RightParenthesis);
+				_if.on_true = parse_statement(p);
+				if current(p).view == "else" {
+					skip(p);
+					_if.on_false = parse_statement(p);
+				}
+				statement = _if;
 			}
 		}
-		expect(p, .Semicolon);
 	}
 	return statement;
 }
@@ -1217,6 +1237,7 @@ main :: () {
 	int a = 1 ? 2 : 3;
 
 	int main(int argc, char **args) {
+		if (1 + 2) { } else if (abc) { } else if (123) {} else {}
 		return 1 + 2 + 3;
 	}
 	
@@ -1232,7 +1253,10 @@ main :: () {
 
 	print_decl :: (decl: *Node_Decl) {
 		print_type :: (info: Node_Type_Info) {	
-			print("% ", info.storage_class);
+			print("%", info.storage_class);
+			if info.storage_class {
+				print(" ");
+			}
 			
 			for info.qualifiers {
 				print("% ", it);
@@ -1297,7 +1321,7 @@ main :: () {
 	}
 
 	print_statement :: (stmt: *Node_Statement, depth := 0) {
-		indent(depth);
+
 		if stmt.statement_type == {
 			case Node_Return;
 				print("return ");
@@ -1306,9 +1330,22 @@ main :: () {
 			case Node_Block;
 				print("{\n");
 				for stmt.(*Node_Block).statements {
+					indent(depth + 1);
 					print_statement(it, depth + 1);
 				}
+				indent(depth);
 				print("}");
+			case Node_If;
+				print("if ");
+				print("(");
+				print_expr(stmt.(*Node_If).cond);
+				print(") ");
+				print_statement(stmt.(*Node_If).on_true, depth);
+				if stmt.(*Node_If).on_false {
+					print(" else ");
+					print_statement(stmt.(*Node_If).on_false, depth);
+				}
+				print("\n");
 		}
 	}
 
