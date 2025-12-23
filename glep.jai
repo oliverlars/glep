@@ -8,6 +8,7 @@ Token_Type :: enum {
 	Semicolon;
 	Colon;
 	Number;
+	String;
 	Identifier;
 	Equals;
 	LeftParenthesis;
@@ -195,6 +196,12 @@ Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	value: int;
+}
+
+Node_String :: struct {
+	#as using node: Node_Expr;
+	expr_type = #this;
+	token: Token;
 }
 
 Node_Initializer :: struct {
@@ -458,7 +465,28 @@ tokenise :: (t: *Tokeniser) {
 					while is_num(t.source[t.at]) {
 						t.at += 1;
 					}
+					if t.source[t.at] == "." {
+						t.at += 1;
+						while is_num(t.source[t.at]) {
+							t.at += 1;
+						}
+					}
+					if t.source[t.at] == "e" || t.source[t.at] == "E" {
+						t.at += 1;
+						while is_num(t.source[t.at]) {
+							t.at += 1;
+						}
+					}
 					token.view.count = t.source.data + t.at - token.view.data;
+				} else if t.source[t.at] == "\"" {
+					token.type = .String;
+					t.at += 1;
+					while t.source[t.at] != "\"" {
+						t.at += 1;
+					}
+					t.at += 1;
+					token.view.count = t.source.data + t.at - token.view.data - 2;
+					token.view.data += 1;
 				}
 			}
 		}
@@ -896,6 +924,10 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		}
 		skip(p);
 		result.(*Node_Number).value = value;
+	} else if current(p).type == .String {
+		result = New(Node_String);
+		result.(*Node_String).token = current(p);
+		skip(p);
 	} else if current(p).type == .LeftParenthesis {
 		expect(p, .LeftParenthesis);
 		result = parse_expr(p);
@@ -1020,6 +1052,8 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 		print_expr(node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
 		print("%", node.(*Node_Number).value);
+	case Node_String;
+		print("\"%\"", node.(*Node_String).token.view);
 	case Node_Identifier;
 		print("%", node.(*Node_Identifier).id.view);
 	case Node_Call;
@@ -1490,7 +1524,7 @@ main :: () {
 		int a, b, c;
 		int a = 1, 2, 3;
 		for(int a = 10; a < 100; a++) { }
-		return 1 + 2 + 3;
+		return 1 + 2 + 3 + "abc";
 	}
 	
 	STRING
