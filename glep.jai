@@ -136,7 +136,8 @@ Node_Binary :: struct {
 Node_Unary :: struct {
 	#as using node: Node_Expr;
 	op: Token;
-	right: *Node_Expr;
+	postfix: bool;
+	expr: *Node_Expr;
 	expr_type = #this;
 }
 
@@ -145,6 +146,14 @@ Node_Cast :: struct {
 	declarator: *Node_Declarator;
 	base_info: Node_Type_Info;
 	expr: *Node_Expr;
+	expr_type = #this;
+}
+
+Node_Compound :: struct {
+	#as using node: Node_Expr;
+	declarator: *Node_Declarator;
+	base_info: Node_Type_Info;
+	init: *Node_Initializer;
 	expr_type = #this;
 }
 
@@ -605,7 +614,6 @@ is_assign_op :: (token: Token) -> bool {
 		case .MinusEqual; #through;
 		case .PlusEqual; #through;
 		case .Equals;
-		case;
 			return true;
 	}
 	return false;
@@ -804,16 +812,27 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		rhs := parse_unary(p);
 		unary := New(Node_Unary);
 		unary.op = op;
-		unary.right = rhs;
+		unary.expr = rhs;
 		result = unary;
 	} else if current(p).type == .LeftParenthesis && is_type_name(next(p)) {
 		expect(p, .LeftParenthesis);
-		_cast := New(Node_Cast);
-		parse_declaration_specifiers(p, *_cast.base_info);
-		_cast.declarator = parse_declarator(p);
+		base_info: Node_Type_Info;
+		parse_declaration_specifiers(p, *base_info);
+		declarator := parse_declarator(p);
 		expect(p, .RightParenthesis);
-		_cast.expr = parse_unary(p);
-		result = _cast;
+		if current(p).type == .LeftBrace {
+			compound := New(Node_Compound);
+			compound.base_info = base_info;
+			compound.declarator = declarator;
+			compound.init = parse_initializer(p);
+			result = compound;
+		} else {
+			_cast := New(Node_Cast);
+			_cast.base_info = base_info;
+			_cast.declarator = declarator;
+			_cast.expr = parse_unary(p);
+			result = _cast;
+		}
 	} else {
 		lhs := parse_primary_expr(p);
 		result = parse_postfix_expr(p, lhs);
@@ -868,11 +887,23 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 	return lhs;
 }
 
+is_postfix_op :: (token: Token) -> bool {
+
+}
+
 parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 	result := lhs;
 	while current(p).type == .Period || current(p).type == .LeftParenthesis ||
-	      current(p).type == .LeftBracket || current(p).type == .Arrow {
-		if current(p).type == .Period {
+	      current(p).type == .LeftBracket || current(p).type == .Arrow ||
+		  current(p).type == .PlusPlus || current(p).type == .MinusMinus {
+		if current(p).type == .PlusPlus || current(p).type == .MinusMinus {
+			unary := New(Node_Unary);
+			unary.op = current(p);
+			skip(p);
+			unary.expr = lhs;
+			unary.postfix = true;
+			result = unary;
+		} else if current(p).type == .Period {
 			access := New(Node_Member_Access);
 			access.op = current(p);
 			skip(p);
@@ -954,7 +985,7 @@ eval_expr :: (node: *Node_Expr) -> int {
 		case; assert(false);
 		}
 	case Node_Unary;
-		right := eval_expr(node.(*Node_Unary).right);
+		right := eval_expr(node.(*Node_Unary).expr);
 		if node.(*Node_Unary).op .type== {
 		case .Plus; return +right;
 		case .Minus; return -right;
@@ -1023,6 +1054,12 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 		print_declarator(node.(*Node_Cast).declarator);
 		print(")");
 		print_expr(node.(*Node_Cast).expr);
+	case Node_Compound;
+		print("(");
+		print_type(node.(*Node_Compound).base_info);
+		print_declarator(node.(*Node_Compound).declarator);
+		print(")");
+		print_init(node.(*Node_Compound).init);
 	case Node_Binary;
 		precedence := precedence_of(node.(*Node_Binary).op);
 		if precedence <= parent_precedence {
@@ -1035,12 +1072,17 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 			print(")");
 		}
 	case Node_Unary;
-		print("%", node.(*Node_Unary).op.view);
+		if !node.(*Node_Unary).postfix {
+			print("%", node.(*Node_Unary).op.view);
+		}
 		precedence := precedence_of(node.(*Node_Unary).op);
 		if precedence <= parent_precedence {
 			print("(");
 		}
-		right := print_expr(node.(*Node_Unary).right);
+		print_expr(node.(*Node_Unary).expr);
+		if node.(*Node_Unary).postfix {
+			print("%", node.(*Node_Unary).op.view);
+		}
 		if precedence <= parent_precedence {
 			print(")");
 		}
@@ -1189,12 +1231,13 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 			if current(p).type == .Comma {
 				skip(p);
 			}
-			array_add(*designated.designations, designation);		}
+			array_add(*designated.designations, designation);
+		}
 		initializer = designated;
 		expect(p, .RightBrace);
 	} else {
 		scalar := New(Node_Scalar_Initializer);
-		scalar.expr = parse_expr(p);
+		scalar.expr = parse_expr(p, precedence_of(.Comma) + 1);
 		initializer = scalar;
 	}
 	assert(initializer != null);
@@ -1519,18 +1562,22 @@ main :: () {
 		} else if (123) {
 			*a[10].abc |= 10;
 		} else { 
-			int a = -(float)(int)a++ + 1; print(abc); print(a[5], 2 + 1);
 		}
+		int a = -(float)(int)a++ + 1;
+		print(abc);
+		print(a[5], 2 + 1);
 		int a, b, c;
 		int a = 1, 2, 3;
 		for(int a = 10; a < 100; a++) { }
-		return 1 + 2 + 3 + "abc";
+		return 1 + 2 + 3 + "abc" + (int){ a, b, c};
 	}
 	
 	STRING
 
+	test := "int a = -(float)(int)a++ + 1;";
+
 	tokeniser: Tokeniser;
-	tokeniser.source = input;
+	tokeniser.source = test;
 	tokenise(*tokeniser);
 
 	parser: Parser;
