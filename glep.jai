@@ -78,6 +78,24 @@ Node_Type_Info :: struct {
 	qualifiers: [..]string;
 	specifiers: [..]string;
 	storage_class: string;
+	_struct: *Node_Struct;
+	_enum: *Node_Enum;
+}
+
+Node_Struct :: struct {
+	name: Token;
+	is_union: bool;
+	members: [..]*Node_Decl;
+}
+
+Node_Enum_Member :: struct {
+	name: Token;
+	expr: *Node_Expr;
+}
+
+Node_Enum :: struct {
+	name: Token;
+	members: [..]*Node_Enum_Member;
 }
 
 Node_Declarator :: struct {
@@ -576,13 +594,78 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		   is_type_qualifier(current(p)) ||
 		   is_type_specifier(current(p)) ||
 		   is_function_specifier(current(p)) ||
-		   current(p).view == "typedef" {
+		   current(p).view == "typedef" || 
+		   current(p).view == "struct" ||
+		   current(p).view == "enum" ||
+		   current(p).view == "union" {
 		if is_storage_specifier(current(p)) {
 			info.storage_class = current(p).view;
+			skip(p);
+		} else if current(p).view == "struct" {
+			skip(p);
+			_struct := New(Node_Struct);
+			if current(p).type == .Identifier {
+				_struct.name = current(p);
+				skip(p);
+			}
+			if current(p).type == .LeftBrace {
+				skip(p);
+				while current(p).type != .RightBrace {
+					decl := parse_decl(p);
+					expect(p, .Semicolon);
+					array_add(*_struct.members, decl);
+				}
+				expect(p, .RightBrace);
+			}
+			info._struct = _struct;
+		} else if current(p).view == "union" {
+			skip(p);
+			_union := New(Node_Struct);
+			_union.is_union = true;
+			if current(p).type == .Identifier {
+				_union.name = current(p);
+				skip(p);
+			}
+			if current(p).type == .LeftBrace {
+				skip(p);
+				while current(p).type != .RightBrace {
+					decl := parse_decl(p);
+					expect(p, .Semicolon);
+					array_add(*_union.members, decl);
+				}
+				expect(p, .RightBrace);
+			}
+			info._struct = _union;
+		} else if current(p).view == "enum" {
+			skip(p);
+			_enum := New(Node_Enum);
+			if current(p).type == .Identifier {
+				_enum.name = current(p);
+				skip(p);
+			}
+			if current(p).type == .LeftBrace {
+				skip(p);
+				while current(p).type != .RightBrace {
+					
+					member := New(Node_Enum_Member);
+					member.name = current(p);
+					expect(p, .Identifier);
+					if current(p).type == .Equals {
+						skip(p);
+						member.expr = parse_expr(p, precedence_of(.Comma) + 1);
+					}
+					array_add(*_enum.members, member);
+					if current(p).type != .RightBrace {
+						expect(p, .Comma);
+					}
+				}
+				expect(p, .RightBrace);
+			}
+			info._enum = _enum;
 		} else {
 			array_add(*info.qualifiers, current(p).view);
+			skip(p);
 		}
-		skip(p);
 	}
 }
 
@@ -1361,6 +1444,40 @@ print_type :: (info: Node_Type_Info) {
 		print(" ");
 	}
 	
+	if info._struct {
+		if info._struct.is_union {
+			print("enum ");
+		}else {
+			print("struct ");
+		}
+		print(info._struct.name.view);
+		print(" {\n");
+		for info._struct.members {
+			print("    ");
+			print_decl(it);
+			print(";\n");
+		}
+		print("} ");
+	}
+
+	if info._enum {
+		print("enum ");
+		print(info._enum.name.view);
+		print(" {\n");
+		for info._enum.members {
+			print("    ");
+			print(it.name.view);
+			print(" ");
+			if it.expr {
+				print("= ");
+				print_expr(it.expr);
+			}
+
+			print(",\n");
+		}
+		print("} ");
+	}
+
 	for info.qualifiers {
 		print("% ", it);
 	}
@@ -1574,7 +1691,8 @@ main :: () {
 	
 	STRING
 
-	test := "int a = -(float)(int)a++ + 1;";
+	test := "struct Thing { int a; int b; } abc = {1, 2};";
+	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 	tokeniser: Tokeniser;
 	tokeniser.source = test;
