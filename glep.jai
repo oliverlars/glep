@@ -1075,6 +1075,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 			if is_declaration_start(p) {
 				decl_stmt := New(Node_Decl_Statement);
 				decl_stmt.decl = parse_decl(p);
+				expect(p, .Semicolon);
 				array_add(*block.statements, decl_stmt);
 			} else {
 				array_add(*block.statements, parse_statement(p));
@@ -1145,6 +1146,107 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	}
 	
 	return decl;
+}
+
+indent :: (depth: int) {
+	for 0..depth*4 print(" ");
+}
+
+print_decl :: (decl: *Node_Decl) {
+	print_type :: (info: Node_Type_Info) {	
+		print("%", info.storage_class);
+		if info.storage_class {
+			print(" ");
+		}
+		
+		for info.qualifiers {
+			print("% ", it);
+		}
+		for info.specifiers {
+			print("% ", it);
+		}
+	}
+
+	print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
+		if !declarator then return;
+		if declarator.declarator_type == {
+		case Node_Pointer_Declarator;
+			if parent_was_function_or_array {
+				print("(");
+			}
+			print("*");
+			for declarator.qualifiers {
+				print("% ", it);
+			}
+			print_declarator(declarator.inner, false);
+			if parent_was_function_or_array {
+				print(")");
+			}
+		case Node_Function_Declarator;
+			print_declarator(declarator.inner, true);
+			func := declarator.(*Node_Function_Declarator);
+			print("(");
+			for func.params {
+				if !it break;
+				print_type(it.base_info);
+				print_declarator(it.declarators[0], false);
+				if it_index < func.params.count - 1 then print(", ");
+			}
+			print(")");
+		case Node_Identifier_Declarator;
+			print_declarator(declarator.inner, false);
+			print("%", declarator.(*Node_Identifier_Declarator).name);
+		case Node_Array_Declarator;
+			print_declarator(declarator.inner, true);
+			print("[%]", declarator.(*Node_Array_Declarator).count);
+		}
+		if declarator.init {
+			print(" = ");
+			print_init(declarator.init);
+		}
+	}
+
+	print_type(decl.base_info);
+	for decl.declarators {
+		print_declarator(it);
+		if it_index < decl.declarators.count - 1 then print(", ");
+	}
+
+	if decl.body {
+		print_statement(decl.body);
+	}
+}
+
+print_statement :: (stmt: *Node_Statement, depth := 0) {
+
+	if stmt.statement_type == {
+		case Node_Return;
+			print("return ");
+			print_expr(stmt.(*Node_Return).expr);
+			print(";\n");
+		case Node_Block;
+			print("{\n");
+			for stmt.(*Node_Block).statements {
+				indent(depth + 1);
+				print_statement(it, depth + 1);
+			}
+			indent(depth);
+			print("}");
+		case Node_If;
+			print("if ");
+			print("(");
+			print_expr(stmt.(*Node_If).cond);
+			print(") ");
+			print_statement(stmt.(*Node_If).on_true, depth);
+			if stmt.(*Node_If).on_false {
+				print(" else ");
+				print_statement(stmt.(*Node_If).on_false, depth);
+			}
+			print("\n");
+		case Node_Decl_Statement;
+			print_decl(stmt.(*Node_Decl_Statement).decl);
+			print(";\n");
+	}
 }
 
 main :: () {
@@ -1237,7 +1339,7 @@ main :: () {
 	int a = 1 ? 2 : 3;
 
 	int main(int argc, char **args) {
-		if (1 + 2) { } else if (abc) { } else if (123) {} else {}
+		if (1 + 2) { } else if (abc) { } else if (123) {} else { int a = 5; }
 		return 1 + 2 + 3;
 	}
 	
@@ -1249,105 +1351,6 @@ main :: () {
 
 	parser: Parser;
 	parser.tokens = tokeniser.tokens;
-	
-
-	print_decl :: (decl: *Node_Decl) {
-		print_type :: (info: Node_Type_Info) {	
-			print("%", info.storage_class);
-			if info.storage_class {
-				print(" ");
-			}
-			
-			for info.qualifiers {
-				print("% ", it);
-			}
-			for info.specifiers {
-				print("% ", it);
-			}
-		}
-
-		print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
-			if !declarator then return;
-			if declarator.declarator_type == {
-			case Node_Pointer_Declarator;
-				if parent_was_function_or_array {
-					print("(");
-				}
-				print("*");
-				for declarator.qualifiers {
-					print("% ", it);
-				}
-				print_declarator(declarator.inner, false);
-				if parent_was_function_or_array {
-					print(")");
-				}
-			case Node_Function_Declarator;
-				print_declarator(declarator.inner, true);
-				func := declarator.(*Node_Function_Declarator);
-				print("(");
-				for func.params {
-					if !it break;
-					print_type(it.base_info);
-					print_declarator(it.declarators[0], false);
-					if it_index < func.params.count - 1 then print(", ");
-				}
-				print(")");
-			case Node_Identifier_Declarator;
-				print_declarator(declarator.inner, false);
-				print("%", declarator.(*Node_Identifier_Declarator).name);
-			case Node_Array_Declarator;
-				print_declarator(declarator.inner, true);
-				print("[%]", declarator.(*Node_Array_Declarator).count);
-			}
-			if declarator.init {
-				print(" = ");
-				print_init(declarator.init);
-			}
-		}
-
-		print_type(decl.base_info);
-		for decl.declarators {
-			print_declarator(it);
-			if it_index < decl.declarators.count - 1 then print(", ");
-		}
-
-		if decl.body {
-			print_statement(decl.body);
-		}
-	}
-
-	indent :: (depth: int) {
-		for 0..depth*4 print(" ");
-	}
-
-	print_statement :: (stmt: *Node_Statement, depth := 0) {
-
-		if stmt.statement_type == {
-			case Node_Return;
-				print("return ");
-				print_expr(stmt.(*Node_Return).expr);
-				print(";\n");
-			case Node_Block;
-				print("{\n");
-				for stmt.(*Node_Block).statements {
-					indent(depth + 1);
-					print_statement(it, depth + 1);
-				}
-				indent(depth);
-				print("}");
-			case Node_If;
-				print("if ");
-				print("(");
-				print_expr(stmt.(*Node_If).cond);
-				print(") ");
-				print_statement(stmt.(*Node_If).on_true, depth);
-				if stmt.(*Node_If).on_false {
-					print(" else ");
-					print_statement(stmt.(*Node_If).on_false, depth);
-				}
-				print("\n");
-		}
-	}
 
 	tu := parse_translation_unit(*parser);
 	for tu.declarations {
