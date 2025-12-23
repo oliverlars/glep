@@ -154,6 +154,14 @@ Node_Call :: struct {
 	params: [..]*Node_Expr;
 }
 
+Node_Assign :: struct {
+	#as using node: Node_Expr;
+	expr_type = #this;
+	left: *Node_Expr;
+	op: Token;
+	right: *Node_Expr;
+}
+
 Node_Member_Access :: struct {
 	#as using node: Node_Expr;
 	op: Token;
@@ -534,6 +542,25 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   current(p).view == "typedef";
 }
 
+is_assign_op :: (token: Token) -> bool {
+	if token.type == {
+		case .PipeEqual; #through;
+		case .CaretEqual; #through;
+		case .AmpersandEqual; #through;
+		case .GreaterGreaterEqual; #through;
+		case .LessLessEqual; #through;
+		case .PercentEqual; #through;
+		case .ForwardSlashEqual; #through;
+		case .AsteriskEqual; #through;
+		case .MinusEqual; #through;
+		case .PlusEqual; #through;
+		case .Equals;
+		case;
+			return true;
+	}
+	return false;
+}
+
 precedence_of :: (token: Token) -> int {
 	if token.type == {
 		case .Percent;      return 12;
@@ -701,7 +728,18 @@ is_binary_op :: (token: Token) -> bool {
 		case .BangEqual; #through;
 		case .LessLess; #through;
 		case .GreaterGreater; #through;
-		case .Question;
+		case .Question; #through;
+		case .PipeEqual; #through;
+		case .CaretEqual; #through;
+		case .AmpersandEqual; #through;
+		case .GreaterGreaterEqual; #through;
+		case .LessLessEqual; #through;
+		case .PercentEqual; #through;
+		case .ForwardSlashEqual; #through;
+		case .AsteriskEqual; #through;
+		case .MinusEqual; #through;
+		case .PlusEqual; #through;
+		case .Equals;
 			return true;
 	}
 	
@@ -746,6 +784,14 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 
 			ternary.on_false = parse_expr(p, next_min);
 			lhs = ternary;
+		} else if is_assign_op(op) {
+			skip(p);
+			rhs := parse_expr(p, next_min);
+			assign := New(Node_Assign);
+			assign.op = op;
+			assign.left = lhs;
+			assign.right = rhs;
+			lhs = assign;
 		} else {
 			skip(p);
 			rhs := parse_expr(p, next_min);
@@ -896,6 +942,17 @@ print_init :: (node: *Node_Initializer) {
 print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 	if !node return;
 	if node.expr_type == {
+	case Node_Assign;
+		precedence := precedence_of(node.(*Node_Assign).op);
+		if precedence <= parent_precedence {
+			print("(");
+		}
+		left := print_expr(node.(*Node_Assign).left, precedence);
+		print(" % ", node.(*Node_Assign).op.view);
+		right := print_expr(node.(*Node_Assign).right, precedence);
+		if precedence <= parent_precedence {
+			print(")");
+		}
 	case Node_Binary;
 		precedence := precedence_of(node.(*Node_Binary).op);
 		if precedence <= parent_precedence {
@@ -1358,7 +1415,13 @@ main :: () {
 	int a = 1 ? 2 : 3;
 
 	int main(int argc, char **args) {
-		if (1 + 2) { } else if (abc) { } else if (123) {} else { int a = 5; print(abc); print(a[5], 2 + 1); }
+		if (1 + 2) { 
+		} else if (abc) {
+		} else if (123) {
+			*a[10].abc |= 10;
+		} else { 
+			int a = 5; print(abc); print(a[5], 2 + 1);
+		}
 		return 1 + 2 + 3;
 	}
 	
