@@ -292,6 +292,14 @@ Node_Block :: struct {
 	statement_type = #this;
 }
 
+Node_Label :: struct {
+	#as using node: Node_Statement;
+	statement: *Node_Statement;
+	is_case: bool;
+	token: Token;
+	statement_type = #this;
+}
+
 Node_Return :: struct {
 	#as using node: Node_Statement;
 	expr: *Node_Expr;
@@ -325,6 +333,13 @@ Node_While :: struct {
 Node_Do :: struct {
 	#as using node: Node_Statement;
 	cond: *Node_Expr;
+	body: *Node_Statement;
+	statement_type = #this;
+}
+
+Node_Switch :: struct {
+	#as using node: Node_Statement;
+	expr: *Node_Expr;
 	body: *Node_Statement;
 	statement_type = #this;
 }
@@ -1035,7 +1050,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			call := New(Node_Call);
 			call.id = result;
 			while current(p).type != .RightParenthesis {
-				array_add(*call.params, parse_expr(p));
+				array_add(*call.params, parse_expr(p, precedence_of(.Comma) + 1));
 				if current(p).type != .RightParenthesis {
 					expect(p, .Comma);
 				}
@@ -1375,7 +1390,18 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		statement = block;
 	} else {
 		if current(p).type == .Identifier {
-			if current(p).view == "return" {
+			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
+				label := New(Node_Label);
+				if current(p).view == "case" {
+					skip(p);
+					label.is_case = true;
+				}
+				label.token = current(p);
+				skip(p);
+				expect(p, .Colon);
+				label.statement = parse_statement(p);
+				statement = label;
+			} else if current(p).view == "return" {
 				skip(p);
 				ret := New(Node_Return);
 				ret.expr = parse_expr(p);
@@ -1409,6 +1435,14 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				_do.cond = parse_expr(p);
 				expect(p, .RightParenthesis);
 				statement = _do;
+			} else if current(p).view == "switch" {
+				skip(p);
+				_switch := New(Node_Switch);
+				expect(p, .LeftParenthesis);
+				_switch.expr = parse_expr(p);
+				expect(p, .RightParenthesis);
+				_switch.body = parse_statement(p);
+				statement = _switch;
 			} else if current(p).view == "if" {
 				skip(p);
 				_if := New(Node_If);
@@ -1609,6 +1643,34 @@ print_statement :: (stmt: *Node_Statement, depth := 0) {
 				print_statement(stmt.(*Node_If).on_false, depth);
 			}
 			print("\n");
+		case Node_While;
+			print("while ");
+			print("(");
+			print_expr(stmt.(*Node_While).cond);
+			print(")");
+			print_statement(stmt.(*Node_While).body, depth);
+			print("\n");
+		case Node_Do;
+			print("do ");
+			print_statement(stmt.(*Node_Do).body, depth);
+			print("(");
+			print_expr(stmt.(*Node_Do).cond);
+			print(")");
+		case Node_Switch;
+			print("switch ");
+			print("(");
+			print_expr(stmt.(*Node_Switch).expr);
+			print(")");
+			print_statement(stmt.(*Node_Do).body, depth);
+			print("\n");
+		case Node_Label;
+			if stmt.(*Node_Label).is_case {
+				print("case ");
+			}
+			print(stmt.(*Node_Label).token.view);
+			print(": ");
+			print_statement(stmt.(*Node_Label).statement, depth);
+			print("\n");
 		case Node_For;
 			print("for ");
 			print("(");
@@ -1784,6 +1846,10 @@ main :: () {
 			double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : vdot(tdir, n));
 			double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
 			
+			switch(abc) {
+				case 1: thing(1, 2, 3);
+			}
+
 			Ray refrRay = {x, tdir};
 			return vadd(obj->e, vmult(f, depth > 2 ? (erand48(Xi) < P ?
 				vmul(radiance(&reflRay, depth, Xi), RP) : vmul(radiance(&refrRay, depth, Xi), TP)) :
