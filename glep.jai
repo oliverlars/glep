@@ -315,6 +315,13 @@ Node_For :: struct {
 	statement_type = #this;
 }
 
+Node_While :: struct {
+	#as using node: Node_Statement;
+	cond: *Node_Expr;
+	body: *Node_Statement;
+	statement_type = #this;
+}
+
 Node_Decl_Statement :: struct {
 	#as using node: Node_Statement;
 	decl: *Node_Decl;
@@ -686,8 +693,6 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 }
 
 is_declaration_start :: (p: *Parser) -> bool {
-	// Also needs to check against the symbol table
-	// when we have one of those
 	return is_storage_specifier(current(p)) ||
 		   is_type_qualifier(current(p)) ||
 		   is_type_specifier(current(p)) ||
@@ -1369,7 +1374,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				ret.expr = parse_expr(p);
 				statement = ret;
 				expect(p, .Semicolon);
-			}else if current(p).view == "for" {
+			} else if current(p).view == "for" {
 				skip(p);
 				_for := New(Node_For);
 				expect(p, .LeftParenthesis);
@@ -1381,6 +1386,14 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				expect(p, .RightParenthesis);
 				_for.body = parse_statement(p);
 				statement = _for;
+			} else if current(p).view == "while" {
+				skip(p);
+				_while := New(Node_While);
+				expect(p, .LeftParenthesis);
+				_while.cond = parse_expr(p);
+				expect(p, .RightParenthesis);
+				_while.body = parse_statement(p);
+				statement = _while;
 			} else if current(p).view == "if" {
 				skip(p);
 				_if := New(Node_If);
