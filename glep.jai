@@ -1684,7 +1684,7 @@ main :: () {
 		print(abc);
 		print(a[5], 2 + 1);
 		int a, b, c;
-		int a = 1, 2, 3;
+		int a = (1, 2, 3);
 		for(int a = 10; a < 100; a++) { }
 		return 1 + 2 + 3 + "abc" + (int){ a, b, c};
 	}
