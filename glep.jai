@@ -736,6 +736,9 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   is_type_specifier(current(p)) ||
 		   is_type_name(p, current(p)) ||
 		   is_function_specifier(current(p)) ||
+		   current(p).view == "struct" ||
+		   current(p).view == "enum" ||
+		   current(p).view == "enum" ||
 		   current(p).view == "typedef";
 }
 
@@ -1837,6 +1840,7 @@ main :: () {
 		struct Sphere {};
 		struct Vec {};
 		struct Ray {};
+		struct Thing {};
 		Vec radiance(const Ray *r, int depth, unsigned short *Xi) {
 			double t;
 			int id = 0;
@@ -1877,7 +1881,8 @@ main :: () {
 			Vec tdir = vnorm(vsub(vmul(r->d, nnt), vmul(n, (into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))));
 			double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : vdot(tdir, n));
 			double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
-			
+
+			struct Thing;
 			switch(abc) {
 				case 1: thing(1, 2, 3);
 				default: thing(abc);
@@ -1889,8 +1894,6 @@ main :: () {
 				vadd(vmul(radiance(&reflRay, depth, Xi), Re), vmul(radiance(&refrRay, depth, Xi), Tr))));
 		}
 	STRING
-
-	//test = "struct Vec {}; struct Sphere {}; const Sphere *obj = &spheres[id];";
 
 	tokeniser: Tokeniser;
 	tokeniser.source = test;
