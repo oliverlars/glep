@@ -438,6 +438,13 @@ tokenise :: (t: *Tokeniser) {
 						token.view.count += 2;
 					}
 				}
+				if is_num(t.source.data[t.at]) {
+					token.type = .Number;
+					while is_num(t.source[t.at]) {
+						t.at += 1;
+					}
+					token.view.count = t.source.data + t.at - token.view.data;
+				}
 			case "|";
 				t.at += 1; token.type = .Pipe;
 				if t.source.data[t.at] == #char "|" {
@@ -850,6 +857,7 @@ is_binary_op :: (token: Token) -> bool {
 		case .Plus; #through;
 		case .Minus; #through;
 		case .Asterisk; #through;
+		case .ForwardSlash; #through;
 		case .Bang; #through;
 		case .PlusPlus; #through;
 		case .MinusMinus; #through;
@@ -878,6 +886,7 @@ is_binary_op :: (token: Token) -> bool {
 		case .AsteriskEqual; #through;
 		case .MinusEqual; #through;
 		case .PlusEqual; #through;
+		case .EqualEqual; #through;
 		case .Equals; #through;
 		case .Comma;
 			return true;
@@ -1693,6 +1702,58 @@ main :: () {
 
 	test := "struct Thing { int a; int b; } abc = {1, 2};";
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
+
+	test = #string STRING
+		int radiance(const int *r, int depth, unsigned short *Xi) {
+		double t;
+		int id = 0;
+		if (!intersect_scene(r, &t, &id)) return vec(0, 0, 0);
+		
+		const int *obj = &spheres[id];
+		int x = vadd(r->o, vmul(r->d, t));
+		int n = vnorm(vsub(x, obj->p));
+		int nl = vdot(n, r->d) < 0 ? n : vmul(n, -1);
+		int f = obj->c;
+		double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
+		
+		if (++depth > 5) {
+			if (erand48(Xi) < p) {
+				f = vmul(f, 1.0 / p);
+			}
+			else return obj->e;
+		}
+		
+		if (obj->refl == DIFF) {
+			double r1 = 2 * M_PI * erand48(Xi), r2 = erand48(Xi), r2s = sqrt(r2);
+			int w = nl;
+			int u = vnorm(vcross((fabs(w.x) > 0.1 ? vec(0, 1, 0) : vec(1, 0, 0)), w));
+			int v = vcross(w, u);
+			int d = vnorm(vadd(vadd(vmul(u, cos(r1) * r2s), vmul(v, sin(r1) * r2s)), vmul(w, sqrt(1 - r2))));
+			int rr = {x, d};
+			return vadd(obj->e, vmult(f, radiance(&rr, depth, Xi)));
+		} else if (obj->refl == SPEC) {
+			int rr = {x, vsub(r->d, vmul(n, 2 * vdot(n, r->d)))};
+			return vadd(obj->e, vmult(f, radiance(&rr, depth, Xi)));
+		}
+		
+		int reflRay = {x, vsub(r->d, vmul(n, 2 * vdot(n, r->d)))};
+		int into = vdot(n, nl) > 0;
+		double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = vdot(r->d, nl), cos2t;
+		
+		if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) {
+			return vadd(obj->e, vmult(f, radiance(&reflRay, depth, Xi)));
+		}
+		
+		int tdir = vnorm(vsub(vmul(r->d, nnt), vmul(n, (into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))));
+		double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : vdot(tdir, n));
+		double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+		
+		int refrRay = {x, tdir};
+		return vadd(obj->e, vmult(f, depth > 2 ? (erand48(Xi) < P ?
+			vmul(radiance(&reflRay, depth, Xi), RP) : vmul(radiance(&refrRay, depth, Xi), TP)) :
+			vadd(vmul(radiance(&reflRay, depth, Xi), Re), vmul(radiance(&refrRay, depth, Xi), Tr))));
+	}
+	STRING
 
 	tokeniser: Tokeniser;
 	tokeniser.source = test;
