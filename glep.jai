@@ -322,6 +322,13 @@ Node_While :: struct {
 	statement_type = #this;
 }
 
+Node_Do :: struct {
+	#as using node: Node_Statement;
+	cond: *Node_Expr;
+	body: *Node_Statement;
+	statement_type = #this;
+}
+
 Node_Decl_Statement :: struct {
 	#as using node: Node_Statement;
 	decl: *Node_Decl;
@@ -1394,6 +1401,14 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				expect(p, .RightParenthesis);
 				_while.body = parse_statement(p);
 				statement = _while;
+			} else if current(p).view == "do" {
+				skip(p);
+				_do := New(Node_Do);
+				_do.body = parse_statement(p);
+				expect(p, .LeftParenthesis);
+				_do.cond = parse_expr(p);
+				expect(p, .RightParenthesis);
+				statement = _do;
 			} else if current(p).view == "if" {
 				skip(p);
 				_if := New(Node_If);
