@@ -286,6 +286,22 @@ Node_Statement :: struct {
 	statement_type: Type;
 }
 
+Node_Goto :: struct {
+	#as using node: Node_Statement;
+	to: Token;
+	statement_type = #this;
+}
+
+Node_Continue :: struct {
+	#as using node: Node_Statement;
+	statement_type = #this;
+}
+
+Node_Break :: struct {
+	#as using node: Node_Statement;
+	statement_type = #this;
+}
+
 Node_Block :: struct {
 	#as using node: Node_Statement;
 	statements: [..]*Node_Statement;
@@ -1401,6 +1417,15 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				expect(p, .Colon);
 				label.statement = parse_statement(p);
 				statement = label;
+			} else if current(p).view == "continue" {
+				statement = New(Node_Continue);
+			} else if current(p).view == "break" {
+				statement = New(Node_Break);
+			}  else if current(p).view == "goto" {
+				goto := New(Node_Goto);
+				skip(p);
+				goto.to = current(p);
+				expect(p, .Identifier);
 			} else if current(p).view == "return" {
 				skip(p);
 				ret := New(Node_Return);
@@ -1620,6 +1645,13 @@ print_decl :: (decl: *Node_Decl) {
 print_statement :: (stmt: *Node_Statement, depth := 0) {
 
 	if stmt.statement_type == {
+		case Node_Break;
+			print("break");
+		case Node_Continue;
+			print("continue");
+		case Node_Goto;
+			print("goto ");
+			print(stmt.(*Node_Goto).to.view);
 		case Node_Return;
 			print("return ");
 			print_expr(stmt.(*Node_Return).expr);
@@ -1848,6 +1880,7 @@ main :: () {
 			
 			switch(abc) {
 				case 1: thing(1, 2, 3);
+				default: thing(abc);
 			}
 
 			Ray refrRay = {x, tdir};
