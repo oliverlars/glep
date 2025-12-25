@@ -616,15 +616,15 @@ preprocess :: (t: *Tokeniser) {
 	}
 	Preprocessor :: struct {
 		at: int;
-		tokens: [..]Token;
+		t: *Tokeniser;
 		objects: Table(string, Object);
 	}
 	cpp: Preprocessor;
-	cpp.tokens = t.tokens;
-	current :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at]; }
-	next :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at + 1]; }
+	cpp.t = t;
+	current :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at]; }
+	next :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at + 1]; }
 	skip :: (cpp: *Preprocessor) -> Token { 
-		result := cpp.tokens[cpp.at];
+		result := cpp.t.tokens[cpp.at];
 		cpp.at += 1;
 		return result;
 	}
@@ -637,32 +637,44 @@ preprocess :: (t: *Tokeniser) {
 
 		return skip(cpp);
 	}
-	replace :: (cpp: *Preprocessor, token: Token) {
-		cpp.tokens[cpp.at] = token;
+
+	delete :: (cpp: *Preprocessor) -> Token {
+		result := current(cpp);
+		array_ordered_remove_by_index(*cpp.t.tokens, cpp.at);
+		return result;
 	}
-	while cpp.at < cpp.tokens.count {
+
+	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
-				skip(*cpp);
-				token := expect(*cpp, .Identifier);
-				if token.view == {
+				delete(*cpp);
+				directive := delete(*cpp);
+				if directive.view == {
 					case "define";
-						skip(*cpp);
-						name := expect(*cpp, .Identifier);
+						name := delete(*cpp);
 						object: Object;
-						while token.type != .Newline {
-							array_add(*object.tokens, skip(*cpp));
+						while current(*cpp).type != .Newline {
+							token := delete(*cpp);
+							array_add(*object.tokens, token);
 						}
 						table_add(*cpp.objects, name.view, object);
 					case "pragma";
 					case "include";
 				}
 			case .Identifier;
-				name := expect(*cpp, .Identifier);
-				if table_contains(*cpp.objects, name.view) {
-					
+				name := current(*cpp);
+				object := table_find_pointer(*cpp.objects, name.view);
+				if object && !object.visited {
+					object.visited = true;
+					start := cpp.at; 
+					array_ordered_remove_by_index(*t.tokens, cpp.at);
+					for object.tokens {
+						array_insert_at(*t.tokens, it, cpp.at);
+						skip(*cpp);
+					}
+				} else {
+					skip(*cpp);
 				}
-				skip(*cpp);
 			case;
 				skip(*cpp);
 		}
@@ -2130,7 +2142,11 @@ int toInt(double x) {
     return (int)(pow(clamp(x), 1.0 / 2.2) * 255 + 0.5);
 }
 
+#define A B
+#define B A
+
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
+	B;
     double t;
     int id = 0;
     Sphere obj;
