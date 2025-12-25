@@ -644,6 +644,25 @@ preprocess :: (t: *Tokeniser) {
 		return result;
 	}
 
+	expand_macro :: (cpp: *Preprocessor, name: Token) {
+		if name.type == .Identifier {
+			object := table_find_pointer(*cpp.objects, name.view);
+			if object && !object.visited {
+				object.visited = true;
+				for object.tokens {
+					expand_macro(cpp, it);
+				}
+				object.visited = false;
+			} else {
+				array_insert_at(*cpp.t.tokens, name, cpp.at);
+				skip(cpp);
+			}
+		} else {
+			array_insert_at(*cpp.t.tokens, name, cpp.at);
+			skip(cpp);
+		}
+	}
+
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
@@ -662,19 +681,8 @@ preprocess :: (t: *Tokeniser) {
 					case "include";
 				}
 			case .Identifier;
-				name := current(*cpp);
-				object := table_find_pointer(*cpp.objects, name.view);
-				if object && !object.visited {
-					object.visited = true;
-					start := cpp.at; 
-					array_ordered_remove_by_index(*t.tokens, cpp.at);
-					for object.tokens {
-						array_insert_at(*t.tokens, it, cpp.at);
-						skip(*cpp);
-					}
-				} else {
-					skip(*cpp);
-				}
+				name := delete(*cpp);
+				expand_macro(*cpp, name);
 			case;
 				skip(*cpp);
 		}
@@ -694,6 +702,9 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
+		for p.at-20..p.at+19 {
+			print("% ", p.tokens[it].view);
+		}
 		assert(false);
 	} else {
 		skip(p);
@@ -2146,8 +2157,7 @@ int toInt(double x) {
 #define B A
 
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
-	B;
-    double t;
+	int B;
     int id = 0;
     Sphere obj;
     Vec x, n, nl, f;
