@@ -73,7 +73,9 @@ Parser :: struct {
 	at: int;
 
 	variables: Table(string, *Node);
-	tags: Table(string, *Node_Struct);
+	structs: Table(string, *Node_Struct);
+	enums: Table(string, *Node_Enum);
+	typedefs: Table(string, *Node_Type_Info);
 }
 
 Node :: struct {
@@ -87,6 +89,8 @@ Node_Type_Info :: struct {
 	_struct: *Node_Struct;
 	_enum: *Node_Enum;
 }
+
+
 
 Node_Struct :: struct {
 	name: Token;
@@ -547,19 +551,27 @@ tokenise :: (t: *Tokeniser) {
 					token.view.count = t.source.data + t.at - token.view.data;
 				} else if is_num(t.source[t.at]) {
 					token.type = .Number;
-					while is_num(t.source[t.at]) {
-						t.at += 1;
-					}
-					if t.source[t.at] == "." {
-						t.at += 1;
+					// Do this better...
+					if t.source[t.at] == "0" && t.source[t.at + 1] == "x" {
+						t.at += 2;
+						while is_num(t.source[t.at]) || is_ident(t.source[t.at]) {
+							t.at += 1;
+						}
+					} else {
 						while is_num(t.source[t.at]) {
 							t.at += 1;
 						}
-					}
-					if t.source[t.at] == "e" || t.source[t.at] == "E" {
-						t.at += 1;
-						while is_num(t.source[t.at]) {
+						if t.source[t.at] == "." {
 							t.at += 1;
+							while is_num(t.source[t.at]) {
+								t.at += 1;
+							}
+						}
+						if t.source[t.at] == "e" || t.source[t.at] == "E" {
+							t.at += 1;
+							while is_num(t.source[t.at]) {
+								t.at += 1;
+							}
 						}
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
@@ -648,15 +660,7 @@ is_function_specifier :: (token: Token) -> bool {
 
 
 parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
-	while  is_storage_specifier(current(p)) ||
-		   is_type_qualifier(current(p)) ||
-		   is_type_specifier(current(p)) ||
-		   is_type_name(p, current(p)) ||
-		   is_function_specifier(current(p)) ||
-		   current(p).view == "typedef" || 
-		   current(p).view == "struct" ||
-		   current(p).view == "enum" ||
-		   current(p).view == "union" {
+	while is_declaration_start(p) {
 		if is_storage_specifier(current(p)) {
 			info.storage_class = current(p).view;
 			skip(p);
@@ -665,8 +669,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			_struct := New(Node_Struct);
 			if current(p).type == .Identifier {
 				_struct.name = current(p);
-				print("Adding: %\n", _struct.name.view);
-				table_add(*p.tags, _struct.name.view, _struct);
+				table_add(*p.structs, _struct.name.view, _struct);
 				skip(p);
 			}
 			if current(p).type == .LeftBrace {
@@ -685,6 +688,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			_union.is_union = true;
 			if current(p).type == .Identifier {
 				_union.name = current(p);
+				table_add(*p.structs, _union.name.view, _union);
 				skip(p);
 			}
 			if current(p).type == .LeftBrace {
@@ -702,6 +706,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			_enum := New(Node_Enum);
 			if current(p).type == .Identifier {
 				_enum.name = current(p);
+				table_add(*p.enums, _enum.name.view, _enum);
 				skip(p);
 			}
 			if current(p).type == .LeftBrace {
@@ -743,7 +748,8 @@ is_declaration_start :: (p: *Parser) -> bool {
 }
 
 is_type_name :: (parser: *Parser, token: Token) -> bool {
-	is_in_tags := table_contains(*parser.tags, token.view);
+	is_in_tags := table_contains(*parser.enums, token.view);
+	is_in_tags |= table_contains(*parser.structs, token.view);
 	if is_in_tags print("Found: %\n", token.view);
 	return is_type_qualifier(token) ||
 		   is_type_specifier(token) || is_in_tags;
@@ -1837,62 +1843,331 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 	test = #string STRING
-		struct Sphere {};
-		struct Vec {};
-		struct Ray {};
-		struct Thing {};
-		Vec radiance(const Ray *r, int depth, unsigned short *Xi) {
-			double t;
-			int id = 0;
-			if (!intersect_scene(r, &t, &id)) { return vec(0, 0, 0); }
-			
-			const Sphere *obj = &spheres[id];
-			Vec x = vadd(r->o, vmul(r->d, t));
-			Vec n = vnorm(vsub(x, obj->p));
-			Vec nl = vdot(n, r->d) < 0 ? n : vmul(n, -1);
-			Vec f = obj->c;
-			double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
-			
-			if (++depth > 5) {
-				if (erand48(Xi) < p) { f = vmul(f, 1.0 / p); } else { return obj->e; }
-			}
-			
-			if (obj->refl == DIFF) {
-				double r1 = 2 * M_PI * erand48(Xi), r2 = erand48(Xi), r2s = sqrt(r2);
-				Vec w = nl;
-				Vec u = vnorm(vcross((fabs(w.x) > .1 ? vec(0, 1, 0) : vec(1, 0, 0)), w));
-				Vec v = vcross(w, u);
-				Vec d = vnorm(vadd(vadd(vmul(u, cos(r1) * r2s), vmul(v, sin(r1) * r2s)), vmul(w, sqrt(1 - r2))));
-				Ray rr = {x, d};
-				return vadd(obj->e, vmult(f, radiance(&rr, depth, Xi)));
-			} else if (obj->refl == SPEC) {
-				Ray rr = {x, vsub(r->d, vmul(n, 2 * vdot(n, r->d)))};
-				return vadd(obj->e, vmult(f, radiance(&rr, depth, Xi)));
-			}
-			
-			Ray reflRay = {x, vsub(r->d, vmul(n, 2 * vdot(n, r->d)))};
-			int into = vdot(n, nl) > 0;
-			double nc = 1, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = vdot(r->d, nl), cos2t;
-			
-			if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) {
-				return vadd(obj->e, vmult(f, radiance(&reflRay, depth, Xi)));
-			}
-			
-			Vec tdir = vnorm(vsub(vmul(r->d, nnt), vmul(n, (into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))));
-			double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : vdot(tdir, n));
-			double Re = R0 + (1 - R0) * c * c * c * c * c, Tr = 1 - Re, P = .25 + .5 * Re, RP = Re / P, TP = Tr / (1 - P);
+		struct uint64;
 
-			struct Thing;
-			switch(abc) {
-				case 1: thing(1, 2, 3);
-				default: thing(abc);
-			}
+double sqrt(double x);
+double pow(double x, double y);
+double cos(double x);
+double sin(double x);
+double fabs(double x);
+int atoi(const char *s);
+void *malloc(unsigned long size);
+void free(void *ptr);
+int open(const char *path, int flags, int mode);
+long write(int fd, const void *buf, unsigned long count);
+int close(int fd);
 
-			Ray refrRay = {x, tdir};
-			return vadd(obj->e, vmult(f, depth > 2 ? (erand48(Xi) < P ?
-				vmul(radiance(&reflRay, depth, Xi), RP) : vmul(radiance(&refrRay, depth, Xi), TP)) :
-				vadd(vmul(radiance(&reflRay, depth, Xi), Re), vmul(radiance(&refrRay, depth, Xi), Tr))));
-		}
+struct Vec {
+    double x;
+    double y;
+    double z;
+};
+
+Vec vec(double x, double y, double z) {
+    Vec v;
+    v.x = x;
+    v.y = y;
+    v.z = z;
+    return v;
+}
+
+Vec vec_add(Vec a, Vec b) {
+    return vec(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+Vec vec_sub(Vec a, Vec b) {
+    return vec(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+Vec vec_mul(Vec a, double t) {
+    return vec(a.x * t, a.y * t, a.z * t);
+}
+
+Vec vec_mult(Vec a, Vec b) {
+    return vec(a.x * b.x, a.y * b.y, a.z * b.z);
+}
+
+Vec vec_norm(Vec v) {
+    double len = 1.0 / sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return vec(v.x * len, v.y * len, v.z * len);
+}
+
+double vec_dot(Vec a, Vec b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+Vec vec_cross(Vec a, Vec b) {
+    return vec(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+}
+
+struct Ray {
+    Vec o;
+    Vec d;
+};
+
+Ray ray(Vec o, Vec d) {
+    Ray r;
+    r.o = o;
+    r.d = d;
+    return r;
+}
+
+enum Refl { DIFF, SPEC, REFR };
+
+struct Sphere {
+    double rad;
+    Vec p;
+    Vec e;
+    Vec c;
+    Refl refl;
+};
+
+Sphere sphere(double rad, Vec p, Vec e, Vec c, enum Refl refl) {
+    Sphere s;
+    s.rad = rad;
+    s.p = p;
+    s.e = e;
+    s.c = c;
+    s.refl = refl;
+    return s;
+}
+
+double sphere_intersect(Sphere s, Ray r) {
+    Vec op = vec_sub(s.p, r.o);
+    double eps = 1e-4;
+    double b = vec_dot(op, r.d);
+    double det = b * b - vec_dot(op, op) + s.rad * s.rad;
+    double t;
+    if (det < 0) {
+        return 0;
+    }
+    det = sqrt(det);
+    t = b - det;
+    if (t > eps) {
+        return t;
+    }
+    t = b + det;
+    if (t > eps) {
+        return t;
+    }
+    return 0;
+}
+
+Sphere spheres[9];
+int num_spheres = 9;
+
+void init_scene(void) {
+    spheres[0] = sphere(1e5,  vec(1e5 + 1, 40.8, 81.6),   vec(0, 0, 0),       vec(0.75, 0.25, 0.25), DIFF);
+    spheres[1] = sphere(1e5,  vec(-1e5 + 99, 40.8, 81.6), vec(0, 0, 0),       vec(0.25, 0.25, 0.75), DIFF);
+    spheres[2] = sphere(1e5,  vec(50, 40.8, 1e5),         vec(0, 0, 0),       vec(0.75, 0.75, 0.75), DIFF);
+    spheres[3] = sphere(1e5,  vec(50, 40.8, -1e5 + 170),  vec(0, 0, 0),       vec(0, 0, 0),          DIFF);
+    spheres[4] = sphere(1e5,  vec(50, 1e5, 81.6),         vec(0, 0, 0),       vec(0.75, 0.75, 0.75), DIFF);
+    spheres[5] = sphere(1e5,  vec(50, -1e5 + 81.6, 81.6), vec(0, 0, 0),       vec(0.75, 0.75, 0.75), DIFF);
+    spheres[6] = sphere(16.5, vec(27, 16.5, 47),          vec(0, 0, 0),       vec(0.999, 0.999, 0.999), SPEC);
+    spheres[7] = sphere(16.5, vec(73, 16.5, 78),          vec(0, 0, 0),       vec(0.999, 0.999, 0.999), REFR);
+    spheres[8] = sphere(600,  vec(50, 681.6 - 0.27, 81.6), vec(12, 12, 12),  vec(0, 0, 0),          DIFF);
+}
+
+int intersect(Ray r, double *t, int *id) {
+    double inf = 1e20;
+    double d;
+    int i;
+    *t = inf;
+    for (i = 0; i < num_spheres; i++) {
+        d = sphere_intersect(spheres[i], r);
+        if (d != 0 && d < *t) {
+            *t = d;
+            *id = i;
+        }
+    }
+    return *t < inf;
+}
+
+double erand48_impl(unsigned short xsubi[3]) {
+    uint64 x = (uint64)xsubi[0] | ((uint64)xsubi[1] << 16) | ((uint64)xsubi[2] << 32);
+    x = x * 0x5DEECE66DULL + 0xB;
+    xsubi[0] = (unsigned short)(x & 0xFFFF);
+    xsubi[1] = (unsigned short)((x >> 16) & 0xFFFF);
+    xsubi[2] = (unsigned short)((x >> 32) & 0xFFFF);
+    return (double)(x & 0xFFFFFFFFFFFFULL) / (double)0x1000000000000ULL;
+}
+
+double clamp(double x) {
+    if (x < 0) return 0;
+    if (x > 1) return 1;
+    return x;
+}
+
+int toInt(double x) {
+    return (int)(pow(clamp(x), 1.0 / 2.2) * 255 + 0.5);
+}
+
+Vec radiance(Ray r, int depth, unsigned short *Xi) {
+    double t;
+    int id = 0;
+    Sphere obj;
+    Vec x, n, nl, f;
+    double p;
+    Vec d, u, v, w;
+    double r1, r2, r2s;
+    Ray reflRay;
+    int into;
+    double nc, nt, nnt, ddn, cos2t;
+    Vec tdir;
+    double a, b, c2, R0, Re, Tr, P2, RP, TP;
+    Vec result;
+    
+    if (!intersect(r, &t, &id)) {
+        return vec(0, 0, 0);
+    }
+    
+    obj = spheres[id];
+    x = vec_add(r.o, vec_mul(r.d, t));
+    n = vec_norm(vec_sub(x, obj.p));
+    nl = vec_dot(n, r.d) < 0 ? n : vec_mul(n, -1);
+    f = obj.c;
+    
+    p = f.x > f.y && f.x > f.z ? f.x : (f.y > f.z ? f.y : f.z);
+    
+    depth++;
+    if (depth > 5) {
+        if (erand48_impl(Xi) < p) {
+            f = vec_mul(f, 1.0 / p);
+        } else {
+            return obj.e;
+        }
+    }
+    
+    if (obj.refl == DIFF) {
+        r1 = 2 * 3.14159265358979323846 * erand48_impl(Xi);
+        r2 = erand48_impl(Xi);
+        r2s = sqrt(r2);
+        w = nl;
+        u = vec_norm(vec_cross(fabs(w.x) > 0.1 ? vec(0, 1, 0) : vec(1, 0, 0), w));
+        v = vec_cross(w, u);
+        d = vec_norm(vec_add(vec_add(vec_mul(u, cos(r1) * r2s), vec_mul(v, sin(r1) * r2s)), vec_mul(w, sqrt(1 - r2))));
+        result = radiance(ray(x, d), depth, Xi);
+        return vec_add(obj.e, vec_mult(f, result));
+    } else if (obj.refl == SPEC) {
+        reflRay = ray(x, vec_sub(r.d, vec_mul(n, 2 * vec_dot(n, r.d))));
+        result = radiance(reflRay, depth, Xi);
+        return vec_add(obj.e, vec_mult(f, result));
+    }
+    
+    reflRay = ray(x, vec_sub(r.d, vec_mul(n, 2 * vec_dot(n, r.d))));
+    into = vec_dot(n, nl) > 0;
+    nc = 1;
+    nt = 1.5;
+    nnt = into ? nc / nt : nt / nc;
+    ddn = vec_dot(r.d, nl);
+    cos2t = 1 - nnt * nnt * (1 - ddn * ddn);
+    
+    if (cos2t < 0) {
+        result = radiance(reflRay, depth, Xi);
+        return vec_add(obj.e, vec_mult(f, result));
+    }
+    
+    tdir = vec_norm(vec_sub(vec_mul(r.d, nnt), vec_mul(n, ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t))))));
+    a = nt - nc;
+    b = nt + nc;
+    R0 = a * a / (b * b);
+    c2 = 1 - (into ? -ddn : vec_dot(tdir, n));
+    Re = R0 + (1 - R0) * c2 * c2 * c2 * c2 * c2;
+    Tr = 1 - Re;
+    P2 = 0.25 + 0.5 * Re;
+    RP = Re / P2;
+    TP = Tr / (1 - P2);
+    
+    if (depth > 2) {
+        if (erand48_impl(Xi) < P2) {
+            result = radiance(reflRay, depth, Xi);
+            return vec_add(obj.e, vec_mult(f, vec_mul(result, RP)));
+        } else {
+            result = radiance(ray(x, tdir), depth, Xi);
+            return vec_add(obj.e, vec_mult(f, vec_mul(result, TP)));
+        }
+    } else {
+        Vec refl_result = radiance(reflRay, depth, Xi);
+        Vec refr_result = radiance(ray(x, tdir), depth, Xi);
+        return vec_add(obj.e, vec_mult(f, vec_add(vec_mul(refl_result, Re), vec_mul(refr_result, Tr))));
+    }
+}
+
+int main(int argc, char *argv[]) {
+    int w = 1024;
+    int h = 768;
+    int samps = argc == 2 ? atoi(argv[1]) / 4 : 1;
+    Vec *c;
+    Ray cam;
+    Vec cx, cy;
+    int y, x, sy, sx, s, i;
+    unsigned short Xi[3];
+    double r1, r2, dx, dy;
+    Vec d, radiance_result, pixel;
+    int fd;
+    char header[64];
+    int header_len;
+    unsigned char color[3];
+    
+    init_scene();
+    
+    cam = ray(vec(50, 52, 295.6), vec_norm(vec(0, -0.042612, -1)));
+    cx = vec(w * 0.5135 / h, 0, 0);
+    cy = vec_mul(vec_norm(vec_cross(cx, cam.d)), 0.5135);
+    
+    c = (Vec *)malloc(w * h * sizeof(Vec));
+    for (i = 0; i < w * h; i++) {
+        c[i] = vec(0, 0, 0);
+    }
+    
+    for (y = 0; y < h; y++) {
+        Xi[0] = 0;
+        Xi[1] = 0;
+        Xi[2] = (unsigned short)(y * y * y);
+        
+        for (x = 0; x < w; x++) {
+            i = (h - y - 1) * w + x;
+            
+            for (sy = 0; sy < 2; sy++) {
+                for (sx = 0; sx < 2; sx++) {
+                    pixel = vec(0, 0, 0);
+                    
+                    for (s = 0; s < samps; s++) {
+                        r1 = 2 * erand48_impl(Xi);
+                        dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        r2 = 2 * erand48_impl(Xi);
+                        dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        
+                        d = vec_add(vec_add(vec_mul(cx, ((sx + 0.5 + dx) / 2 + x) / w - 0.5),
+                                            vec_mul(cy, ((sy + 0.5 + dy) / 2 + y) / h - 0.5)),
+                                    cam.d);
+                        
+                        radiance_result = radiance(ray(vec_add(cam.o, vec_mul(d, 140)), vec_norm(d)), 0, Xi);
+                        pixel = vec_add(pixel, vec_mul(radiance_result, 1.0 / samps));
+                    }
+                    
+                    c[i] = vec_add(c[i], vec_mul(vec(clamp(pixel.x), clamp(pixel.y), clamp(pixel.z)), 0.25));
+                }
+            }
+        }
+    }
+    
+    fd = open("image.ppm", 577, 420);
+
+    write(fd, header, header_len);
+    
+    for (i = 0; i < w * h; i++) {
+        color[0] = (unsigned char)toInt(c[i].x);
+        color[1] = (unsigned char)toInt(c[i].y);
+        color[2] = (unsigned char)toInt(c[i].z);
+        write(fd, color, 3);
+    }
+    
+    close(fd);
+    free(c);
+    
+    return 0;
+}
 	STRING
 
 	tokeniser: Tokeniser;
