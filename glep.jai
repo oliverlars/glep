@@ -6,6 +6,8 @@
 
 Token_Type :: enum {
 	Invalid;
+	Hash;
+	Newline;
 	Asterisk;
 	Comma;
 	Semicolon;
@@ -233,6 +235,7 @@ Node_Identifier :: struct {
 Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
+	token: Token;
 	value: int;
 }
 
@@ -384,7 +387,8 @@ Node_Translation_Unit :: struct {
 }
 
 tokenise :: (t: *Tokeniser) {
-	is_ws    :: (c: int) -> bool { return c == #char " " || c == #char "\n" || c == #char "\r" || c == #char "\t"; }
+	is_ws    :: (c: int) -> bool { return c == #char " " || c == #char "\t"; }
+	is_newline :: (c: int) -> bool { return c == #char "\n" || c == #char "\r"; }
 	is_ident :: (c: int) -> bool { return ((c >= #char "a") && (c <= #char "z")) || ((c >= #char "A") && (c <= #char "Z")); }
 	is_num   :: (c: int) -> bool { return c >= #char "0" && c <= #char "9"; }
 	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t.source[t.at]) { t.at += 1; } }
@@ -414,6 +418,9 @@ tokenise :: (t: *Tokeniser) {
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
 			case "?"; t.at += 1; token.type = .Question;
+			case "#"; t.at += 1; token.type = .Hash;
+			case "\n"; #through;
+			case "\r"; t.at += 1; token.type = .Newline;
 			case "*";
 				t.at += 1; token.type = .Asterisk;
 				if t.source[t.at] == "=" {
@@ -602,25 +609,92 @@ tokenise :: (t: *Tokeniser) {
 	}
 }
 
-skip :: (p: *Parser, amount := 1) {
-	p.at += amount;
+preprocess :: (t: *Tokeniser) {
+	Object :: struct {
+		visited: bool;
+		tokens: [..]Token;
+	}
+	Preprocessor :: struct {
+		at: int;
+		tokens: [..]Token;
+		objects: Table(string, Object);
+	}
+	cpp: Preprocessor;
+	cpp.tokens = t.tokens;
+	current :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at]; }
+	next :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at + 1]; }
+	skip :: (cpp: *Preprocessor) -> Token { result := current(cpp); cpp.at += 1; return result; }
+	expect :: (cpp: *Preprocessor, token_type: Token_Type) -> Token { 
+		if current(cpp).type != token_type { 
+			print("Expected token % but got %", current(cpp).type, token_type);
+			assert(false);
+		} else {
+			result := current(cpp);
+			skip(cpp);
+			return result;
+		}
+		return .{};
+	}
+	replace :: (cpp: *Preprocessor, token: Token) {
+		cpp.tokens[cpp.at] = token;
+	}
+	while cpp.at < cpp.tokens.count {
+		if current(*cpp).type == {
+			case .Hash;
+				skip(*cpp);
+				token := expect(*cpp, .Identifier);
+				if token.view == {
+					case "define";
+						skip(*cpp);
+						name := expect(*cpp, .Identifier);
+						object: Object;
+						while token.type != .Newline {
+							array_add(*object.tokens, skip(*cpp));
+						}
+						table_add(*cpp.objects, name.view, object);
+					case "pragma";
+					case "include";
+				}
+			case .Identifier;
+				name := expect(*cpp, .Identifier);
+				if table_contains(*cpp.objects, name.view) {
+					
+				}
+			case;
+				skip(*cpp);
+		}
+	}
 }
 
-expect :: (p: *Parser, type: Token_Type) {
-	if p.tokens[p.at].type != type {
-		print("Expected: %\n", type);
-		assert(false);
-	} else {
+skip :: (p: *Parser) {
+	while p.tokens[p.at].type == .Newline {
+		p.at += 1;
+	}
+	p.at += 1;
+	while p.at < p.tokens.count && p.tokens[p.at].type == .Newline {
 		p.at += 1;
 	}
 }
 
+expect :: (p: *Parser, type: Token_Type) {
+	if current(p).type != type {
+		print("Expected: %\n", type);
+		assert(false);
+	} else {
+		skip(p);
+	}
+}
+
 current :: (p: *Parser) -> Token {
-	return p.tokens[p.at];
+	at := p.at;
+	assert(p.tokens[at].type != .Newline);
+	return p.tokens[at];
 }
 
 next :: (p: *Parser) -> Token {
-	return p.tokens[p.at + 1];
+	at := p.at + 1;
+	assert(p.tokens[at].type != .Newline);
+	return p.tokens[at];
 }
 
 
@@ -1117,6 +1191,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	result: *Node_Expr;
 	if current(p).type == .Number {
 		result = New(Node_Number);
+		result.(*Node_Number).token = current(p);
 		value: int;
 		for current(p).view {
 			value = value * 10 + it - #char "0";
@@ -1125,6 +1200,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result.(*Node_Number).value = value;
 	} else if current(p).type == .Char {
 		result = New(Node_Number);
+		result.(*Node_Number).token = current(p);
 		value: int;
 		for current(p).view {
 			value = value * 10 + it;
@@ -1269,7 +1345,8 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 		print(" : ");
 		print_expr(node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
-		print("%", node.(*Node_Number).value);
+		//print("%", node.(*Node_Number).value);
+		print(node.(*Node_Number).token.view);
 	case Node_String;
 		print("\"%\"", node.(*Node_String).token.view);
 	case Node_Identifier;
