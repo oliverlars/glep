@@ -681,8 +681,14 @@ preprocess :: (t: *Tokeniser) {
 					case "include";
 				}
 			case .Identifier;
-				name := delete(*cpp);
-				expand_macro(*cpp, name);
+				name := current(*cpp);
+				object := table_find_pointer(*cpp.objects, name.view);
+				if object {
+					delete(*cpp);
+					expand_macro(*cpp, name);
+				} else {
+					skip(*cpp);
+				}
 			case;
 				skip(*cpp);
 		}
