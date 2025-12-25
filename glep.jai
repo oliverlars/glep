@@ -12,6 +12,7 @@ Token_Type :: enum {
 	Colon;
 	Number;
 	String;
+	Char;
 	Identifier;
 	Equals;
 	LeftParenthesis;
@@ -75,7 +76,7 @@ Parser :: struct {
 	variables: Table(string, *Node);
 	structs: Table(string, *Node_Struct);
 	enums: Table(string, *Node_Enum);
-	typedefs: Table(string, *Node_Type_Info);
+	typedefs: Table(string, *Node_Decl);
 }
 
 Node :: struct {
@@ -584,6 +585,15 @@ tokenise :: (t: *Tokeniser) {
 					t.at += 1;
 					token.view.count = t.source.data + t.at - token.view.data - 2;
 					token.view.data += 1;
+				} else if t.source[t.at] == "'" {
+					token.type = .Char;
+					t.at += 1;
+					while t.source[t.at] != "'" {
+						t.at += 1;
+					}
+					t.at += 1;
+					token.view.count = t.source.data + t.at - token.view.data - 2;
+					token.view.data += 1;
 				}
 			}
 		}
@@ -613,6 +623,11 @@ next :: (p: *Parser) -> Token {
 	return p.tokens[p.at + 1];
 }
 
+
+is_typedef :: (info: Node_Type_Info) -> bool {
+	return info.storage_class == "typedef";
+}
+
 is_type_qualifier :: (token: Token) -> bool {
 	if token.view == {
 	case "const";    #through;
@@ -629,7 +644,8 @@ is_storage_specifier :: (token: Token) -> bool {
 	case "static";   #through;
 	case "auto";     #through;
 	case "extern";   #through;
-	case "register";
+	case "register"; #through;
+	case "typedef";
 		return true;
 	case;
 		return false;
@@ -743,8 +759,7 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   is_function_specifier(current(p)) ||
 		   current(p).view == "struct" ||
 		   current(p).view == "enum" ||
-		   current(p).view == "enum" ||
-		   current(p).view == "typedef";
+		   current(p).view == "enum";
 }
 
 is_type_name :: (parser: *Parser, token: Token) -> bool {
@@ -752,7 +767,8 @@ is_type_name :: (parser: *Parser, token: Token) -> bool {
 	is_in_tags |= table_contains(*parser.structs, token.view);
 	if is_in_tags print("Found: %\n", token.view);
 	return is_type_qualifier(token) ||
-		   is_type_specifier(token) || is_in_tags;
+		   is_type_specifier(token) || is_in_tags ||
+		   table_contains(*parser.typedefs, token.view);
 }
 
 is_assign_op :: (token: Token) -> bool {
@@ -1107,6 +1123,14 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		}
 		skip(p);
 		result.(*Node_Number).value = value;
+	} else if current(p).type == .Char {
+		result = New(Node_Number);
+		value: int;
+		for current(p).view {
+			value = value * 10 + it - #char "0";
+		}
+		skip(p);
+		result.(*Node_Number).value = value;
 	} else if current(p).type == .String {
 		result = New(Node_String);
 		result.(*Node_String).token = current(p);
@@ -1350,6 +1374,19 @@ parse_declarator :: (p: *Parser) -> *Node_Declarator {
 	return base;
 }
 
+identifier_from_declarator :: (declarator: *Node_Declarator) -> string {
+	find_identifier :: (declarator: *Node_Declarator) -> string {
+		if declarator.declarator_type == Node_Identifier_Declarator {
+			return declarator.(*Node_Identifier_Declarator).name;
+		} else {
+			found := find_identifier(declarator.inner);
+			if found return found;
+		}
+		return "";
+	}
+	return find_identifier(declarator);
+}
+
 parse_initializer :: (p: *Parser) -> *Node_Initializer {
 	initializer: *Node_Initializer;
 	if current(p).type == .LeftBrace {
@@ -1536,6 +1573,17 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		if current(p).type != .Semicolon &&
 		   current(p).type != .LeftBrace {
 			expect(p, .Comma);
+		}
+	}
+
+	if is_typedef(decl.base_info) {
+		for decl.declarators {
+			// This should probably always be true?
+			id := identifier_from_declarator(it); 
+			if id != "" {
+				print("Adding typedef\n");
+				table_add(*p.typedefs, id, decl);
+			}
 		}
 	}
 
@@ -1843,7 +1891,7 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 	test = #string STRING
-		struct uint64;
+typedef unsigned long long uint64;
 
 double sqrt(double x);
 double pow(double x, double y);
@@ -1857,11 +1905,11 @@ int open(const char *path, int flags, int mode);
 long write(int fd, const void *buf, unsigned long count);
 int close(int fd);
 
-struct Vec {
+typedef struct Vec {
     double x;
     double y;
     double z;
-};
+} Vec;
 
 Vec vec(double x, double y, double z) {
     Vec v;
@@ -1900,10 +1948,10 @@ Vec vec_cross(Vec a, Vec b) {
     return vec(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
 }
 
-struct Ray {
+typedef struct Ray {
     Vec o;
     Vec d;
-};
+} Ray;
 
 Ray ray(Vec o, Vec d) {
     Ray r;
@@ -1914,13 +1962,13 @@ Ray ray(Vec o, Vec d) {
 
 enum Refl { DIFF, SPEC, REFR };
 
-struct Sphere {
+typedef struct Sphere {
     double rad;
     Vec p;
     Vec e;
     Vec c;
-    Refl refl;
-};
+    enum Refl refl;
+} Sphere;
 
 Sphere sphere(double rad, Vec p, Vec e, Vec c, enum Refl refl) {
     Sphere s;
@@ -2153,7 +2201,30 @@ int main(int argc, char *argv[]) {
     }
     
     fd = open("image.ppm", 577, 420);
-
+    header_len = 0;
+    header[header_len++] = 'P';
+    header[header_len++] = '6';
+    header[header_len++] = '\n';
+    
+    i = w;
+    if (i >= 1000) { header[header_len++] = '0' + (i / 1000); i = i % 1000; header[header_len++] = '0' + (i / 100); i = i % 100; }
+    else if (i >= 100) { header[header_len++] = '0' + (i / 100); i = i % 100; }
+    if (w >= 100 || w >= 10) { header[header_len++] = '0' + (i / 10); i = i % 10; }
+    header[header_len++] = '0' + i;
+    
+    header[header_len++] = ' ';
+    
+    i = h;
+    if (i >= 100) { header[header_len++] = '0' + (i / 100); i = i % 100; }
+    if (h >= 100 || h >= 10) { header[header_len++] = '0' + (i / 10); i = i % 10; }
+    header[header_len++] = '0' + i;
+    
+    header[header_len++] = '\n';
+    header[header_len++] = '2';
+    header[header_len++] = '5';
+    header[header_len++] = '5';
+    header[header_len++] = '\n';
+    
     write(fd, header, header_len);
     
     for (i = 0; i < w * h; i++) {
