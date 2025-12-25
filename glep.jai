@@ -623,17 +623,19 @@ preprocess :: (t: *Tokeniser) {
 	cpp.tokens = t.tokens;
 	current :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at]; }
 	next :: (cpp: *Preprocessor) -> Token { return cpp.tokens[cpp.at + 1]; }
-	skip :: (cpp: *Preprocessor) -> Token { result := current(cpp); cpp.at += 1; return result; }
+	skip :: (cpp: *Preprocessor) -> Token { 
+		result := cpp.tokens[cpp.at];
+		cpp.at += 1;
+		return result;
+	}
+
 	expect :: (cpp: *Preprocessor, token_type: Token_Type) -> Token { 
 		if current(cpp).type != token_type { 
 			print("Expected token % but got %", current(cpp).type, token_type);
 			assert(false);
-		} else {
-			result := current(cpp);
-			skip(cpp);
-			return result;
 		}
-		return .{};
+
+		return skip(cpp);
 	}
 	replace :: (cpp: *Preprocessor, token: Token) {
 		cpp.tokens[cpp.at] = token;
@@ -660,6 +662,7 @@ preprocess :: (t: *Tokeniser) {
 				if table_contains(*cpp.objects, name.view) {
 					
 				}
+				skip(*cpp);
 			case;
 				skip(*cpp);
 		}
@@ -2325,6 +2328,8 @@ int main(int argc, char *argv[]) {
 	tokeniser: Tokeniser;
 	tokeniser.source = test;
 	tokenise(*tokeniser);
+
+	preprocess(*tokeniser);
 
 	parser: Parser;
 	parser.tokens = tokeniser.tokens;
