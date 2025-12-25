@@ -1127,7 +1127,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result = New(Node_Number);
 		value: int;
 		for current(p).view {
-			value = value * 10 + it - #char "0";
+			value = value * 10 + it;
 		}
 		skip(p);
 		result.(*Node_Number).value = value;
@@ -2241,6 +2241,10 @@ int main(int argc, char *argv[]) {
 }
 	STRING
 
+	context.allocator = temp;
+
+	t0 := current_time_monotonic();
+
 	tokeniser: Tokeniser;
 	tokeniser.source = test;
 	tokenise(*tokeniser);
@@ -2249,6 +2253,12 @@ int main(int argc, char *argv[]) {
 	parser.tokens = tokeniser.tokens;
 
 	tu := parse_translation_unit(*parser);
+
+	t1 := current_time_monotonic();
+
+	dt := t1 - t0;
+	ms := 1000*to_float64_seconds(dt);
+
 	for tu.declarations {
 		print_decl(it);
 		if !it.body {
@@ -2256,4 +2266,6 @@ int main(int argc, char *argv[]) {
 		}
 		print("\n");
 	}
+
+	print("it took HOW long? %ms\n", ms);
 }
