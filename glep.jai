@@ -665,27 +665,53 @@ preprocess :: (t: *Tokeniser) {
 
 	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
 		lhs := 0;
-		if current(cpp).type == .Number { 
-			lhs = to_integer(delete(cpp).view);
+		unary_op := current(cpp);
+		if unary_op.type == {
+			case .Minus;
+				delete(cpp);
+				lhs = -to_integer(delete(cpp).view);
+			case .Plus;
+				delete(cpp);
+				lhs = +to_integer(delete(cpp).view);
+			case .Bang;
+				delete(cpp);
+				lhs = xx !to_integer(delete(cpp).view);
+			case .Tilde;
+				delete(cpp);
+				lhs = ~to_integer(delete(cpp).view);
+			case .Number;
+				lhs = to_integer(delete(cpp).view);
+			case; 
+				print("Unexpected unary operator");
+				assert(false);
 		}
 
 		while true {
-			op := delete(cpp);
+			op := current(cpp);
 			prec := precedence_of(op);
 			if prec < min_prec break;
 
 			if !is_binary_op(op) break;
-			rhs := eval(cpp, prec + is_left_associative(op).(int));
-
+			delete(cpp);
+			next_min := prec + is_left_associative(op).(int);
 			if op.type == {
 				case .Asterisk;
-					lhs = lhs * rhs;
+					lhs = lhs * eval(cpp, next_min);
 				case .ForwardSlash;
-					lhs = lhs / rhs;
+					lhs = lhs / eval(cpp, next_min);
 				case .Plus;
-					lhs = lhs + rhs;
+					lhs = lhs + eval(cpp, next_min);
 				case .Minus;
-					lhs = lhs - rhs;
+					lhs = lhs - eval(cpp, next_min);
+				case .Question;
+					on_true := eval(cpp);
+					delete(cpp); // :
+					on_false := eval(cpp, next_min);
+					if lhs != 0 {
+						lhs = on_true;
+					} else {
+						lhs = on_false;
+					}
 			}
 		}
 
@@ -710,6 +736,8 @@ preprocess :: (t: *Tokeniser) {
 					case "include";
 					case "if";
 						expr := eval(*cpp);
+						print("EVAL: %", expr);
+						exit(0);
 				}
 			case .Identifier;
 				name := current(*cpp);
@@ -2192,7 +2220,7 @@ int toInt(double x) {
 
 #define A B
 #define B A
-#if 1 + 2
+#if 0 ? 123 : 456
 
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
 	int B;
