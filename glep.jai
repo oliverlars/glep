@@ -663,6 +663,35 @@ preprocess :: (t: *Tokeniser) {
 		}
 	}
 
+	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
+		lhs := 0;
+		if current(cpp).type == .Number { 
+			lhs = to_integer(delete(cpp).view);
+		}
+
+		while true {
+			op := delete(cpp);
+			prec := precedence_of(op);
+			if prec < min_prec break;
+
+			if !is_binary_op(op) break;
+			rhs := eval(cpp, prec + is_left_associative(op).(int));
+
+			if op.type == {
+				case .Asterisk;
+					lhs = lhs * rhs;
+				case .ForwardSlash;
+					lhs = lhs / rhs;
+				case .Plus;
+					lhs = lhs + rhs;
+				case .Minus;
+					lhs = lhs - rhs;
+			}
+		}
+
+		return lhs;
+	}
+
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
@@ -679,6 +708,8 @@ preprocess :: (t: *Tokeniser) {
 						table_add(*cpp.objects, name.view, object);
 					case "pragma";
 					case "include";
+					case "if";
+						expr := eval(*cpp);
 				}
 			case .Identifier;
 				name := current(*cpp);
@@ -2161,6 +2192,7 @@ int toInt(double x) {
 
 #define A B
 #define B A
+#if 1 + 2
 
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
 	int B;
