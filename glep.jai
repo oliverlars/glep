@@ -677,7 +677,7 @@ preprocess :: (t: *Tokeniser) {
 					} else {
 						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
 					}
-				}
+				} 
 			case .LeftParenthesis;
 				delete(cpp); // '('
 				lhs = eval(cpp);
@@ -718,6 +718,32 @@ preprocess :: (t: *Tokeniser) {
 					lhs = lhs + eval(cpp, next_min);
 				case .Minus;
 					lhs = lhs - eval(cpp, next_min);
+				case .LessLess;
+					lhs = lhs << eval(cpp, next_min);
+				case .GreaterGreater;
+					lhs = lhs >> eval(cpp, next_min);
+				case .Less;
+					lhs = xx (lhs < eval(cpp, next_min));
+				case .Greater;
+					lhs = xx (lhs > eval(cpp, next_min));
+				case .LessEqual;
+					lhs = xx (lhs <= eval(cpp, next_min));
+				case .GreaterEqual;
+					lhs = xx (lhs >= eval(cpp, next_min));
+				case .EqualEqual;
+					lhs = xx (lhs == eval(cpp, next_min));
+				case .BangEqual;
+					lhs = xx (lhs != eval(cpp, next_min));
+				case .Ampersand;
+					lhs = lhs & eval(cpp, next_min);
+				case .Pipe;
+					lhs = lhs | eval(cpp, next_min);
+				case .Caret;
+					lhs = lhs ^ eval(cpp, next_min);
+				case .AmpersandAmpersand;
+					lhs = xx (lhs.(bool) && eval(cpp, next_min).(bool));
+				case .PipePipe;
+					lhs = xx (lhs.(bool) || eval(cpp, next_min).(bool));
 				case .Question;
 					on_true := eval(cpp);
 					delete(cpp); // :
@@ -749,10 +775,12 @@ preprocess :: (t: *Tokeniser) {
 						table_add(*cpp.objects, name.view, object);
 					case "pragma";
 					case "include";
+					case "undef";
+						table_remove(*cpp.objects, delete(*cpp).view);
 					case "if";
 						expr := eval(*cpp);
-						print("EVAL: %", expr);
-						exit(0);
+						//print("EVAL: %", expr);
+						//exit(0);
 				}
 			case .Identifier;
 				name := current(*cpp);
