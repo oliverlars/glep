@@ -667,6 +667,21 @@ preprocess :: (t: *Tokeniser) {
 		lhs := 0;
 		unary_op := current(cpp);
 		if unary_op.type == {
+			case .Identifier;
+				if unary_op.view == "defined" {
+					delete(cpp);
+					if current(cpp).type == .LeftParenthesis {
+						delete(cpp);
+						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
+						delete(cpp);
+					} else {
+						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
+					}
+				}
+			case .LeftParenthesis;
+				delete(cpp); // '('
+				lhs = eval(cpp);
+				delete(cpp); // ')'
 			case .Minus;
 				delete(cpp);
 				lhs = -to_integer(delete(cpp).view);
@@ -2219,8 +2234,7 @@ int toInt(double x) {
 }
 
 #define A B
-#define B A
-#if 0 ? 123 : 456
+#if defined(B) ? 123 : 456
 
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
 	int B;
