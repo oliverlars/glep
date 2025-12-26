@@ -644,6 +644,23 @@ preprocess :: (t: *Tokeniser) {
 		return result;
 	}
 
+	add_builtin :: (cpp: *Preprocessor, builtin: string, token: Token) {
+		object: Object;
+		array_add(*object.tokens, token);
+		table_add(*cpp.objects, builtin, object);
+	}
+
+	add_builtin(*cpp, "__STDC__", .{"1", .Number});
+	add_builtin(*cpp, "__STDC_VERSION__", .{"201710L", .Number});
+	add_builtin(*cpp, "__APPLE__", .{"1", .Number});
+	add_builtin(*cpp, "__MACH__", .{"1", .Number});
+	add_builtin(*cpp, "__aarch64__", .{"1", .Number});
+	add_builtin(*cpp, "__arm64__", .{"1", .Number});
+	add_builtin(*cpp, "__LP64__", .{"1", .Number});
+	add_builtin(*cpp, "__SIZEOF_POINTER__", .{"8", .Number});
+	add_builtin(*cpp, "__SIZEOF_INT__", .{"4", .Number});
+	add_builtin(*cpp, "__SIZEOF_LONG__", .{"8", .Number});
+
 	expand_macro :: (cpp: *Preprocessor, name: Token) {
 		if name.type == .Identifier {
 			object := table_find_pointer(*cpp.objects, name.view);
