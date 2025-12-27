@@ -520,6 +520,7 @@ tokenise :: (t: *Tokeniser) {
 				if t.source[t.at] == "\n" {
 					t.at += 1;
 				}
+				continue;
 			case ".";
 				t.at += 1;
 				token.type = .Period;
@@ -605,7 +606,11 @@ tokenise :: (t: *Tokeniser) {
 								t.at += 1;
 							}
 						}
-						if t.source[t.at] == "e" || t.source[t.at] == "E" {
+						if t.source[t.at] == "e" || t.source[t.at] == "E" ||
+						   t.source[t.at] == "l" ||
+						   t.source[t.at] == "L" ||
+						   t.source[t.at] == "U" ||
+						   t.source[t.at] == "u" {
 							t.at += 1;
 							while is_num(t.source[t.at]) {
 								t.at += 1;
@@ -686,6 +691,16 @@ preprocess :: (t: *Tokeniser) {
 		table_add(*cpp.objects, builtin, object);
 	}
 
+	trim_suffix :: (number: string) -> string {
+		result := number;
+		for < number {
+			if it == "l" || it == "L" || it == "u" || it == "U" {
+				result.count -= 1;
+			}
+		}
+		return result;
+	}
+
 	add_builtin(*cpp, "__STDC__", .{"1", .Number});
 	add_builtin(*cpp, "__STDC_VERSION__", .{"201710L", .Number});
 	add_builtin(*cpp, "__APPLE__", .{"1", .Number});
@@ -741,18 +756,18 @@ preprocess :: (t: *Tokeniser) {
 				delete(cpp); // ')'
 			case .Minus;
 				delete(cpp);
-				lhs = -to_integer(delete(cpp).view);
+				lhs = -to_integer(trim_suffix(delete(cpp).view));
 			case .Plus;
 				delete(cpp);
-				lhs = +to_integer(delete(cpp).view);
+				lhs = +to_integer(trim_suffix(delete(cpp).view));
 			case .Bang;
 				delete(cpp);
-				lhs = xx !to_integer(delete(cpp).view);
+				lhs = xx !to_integer(trim_suffix(delete(cpp).view));
 			case .Tilde;
 				delete(cpp);
-				lhs = ~to_integer(delete(cpp).view);
+				lhs = ~to_integer(trim_suffix(delete(cpp).view));
 			case .Number;
-				lhs = to_integer(delete(cpp).view);
+				lhs = to_integer(trim_suffix(delete(cpp).view));
 			case; 
 				print("Unexpected unary operator");
 				assert(false);
@@ -875,9 +890,7 @@ preprocess :: (t: *Tokeniser) {
 						if !pasted && expr != 0 {
 							while !end(*cpp) {
 								if current(*cpp).type == .Hash {
-									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
-										break;
-									}
+									break;
 								} else {
 									skip(*cpp);
 								}
@@ -888,6 +901,8 @@ preprocess :: (t: *Tokeniser) {
 								if current(*cpp).type == .Hash {
 									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
 										break;
+									} else {
+										delete(*cpp);
 									}
 								} else {
 									delete(*cpp);
