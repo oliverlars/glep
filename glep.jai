@@ -776,6 +776,18 @@ preprocess :: (t: *Tokeniser) {
 		return lhs;
 	}
 
+	delete_line :: (cpp: *Preprocessor) {
+		while current(cpp).type != .Newline {
+			delete(cpp);
+		}
+	}
+
+	end :: (cpp: *Preprocessor) -> bool {
+		return cpp.at == cpp.t.tokens.count;
+	}
+
+	doing_if := false;
+	pasted := false;
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
@@ -794,10 +806,62 @@ preprocess :: (t: *Tokeniser) {
 					case "include";
 					case "undef";
 						table_remove(*cpp.objects, delete(*cpp).view);
-					case "if";
+					case "elif";
+						assert(doing_if);
 						expr := eval(*cpp);
-						//print("EVAL: %", expr);
-						//exit(0);
+						if !pasted && expr != 0 {
+							while !end(*cpp) {
+								if current(*cpp).type == .Hash {
+									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
+										break;
+									}
+								} else {
+									skip(*cpp);
+								}
+							}
+							pasted = true;
+						} else {
+							while !end(*cpp) {
+								if current(*cpp).type == .Hash {
+									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
+										break;
+									}
+								} else {
+									delete(*cpp);
+								}
+							}
+						}
+					case "endif";
+						assert(doing_if);
+						delete_line(*cpp);
+						doing_if = false;
+						pasted = false;
+					case "if";
+						doing_if = true;
+						expr := eval(*cpp);
+						delete_line(*cpp);
+						if expr != 0 {
+							while !end(*cpp) {
+								if current(*cpp).type == .Hash {
+									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
+										break;
+									}
+								} else {
+									skip(*cpp);
+								}
+							}
+							pasted = true;
+						} else {
+							while !end(*cpp) {
+								if current(*cpp).type == .Hash {
+									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
+										break;
+									}
+								} else {
+									delete(*cpp);
+								}
+							}
+						}
 				}
 			case .Identifier;
 				name := current(*cpp);
@@ -2279,7 +2343,11 @@ int toInt(double x) {
 }
 
 #define A B
-#if defined(B) ? 123 : 456
+#if defined(A)
+int a = 5;
+#elif defined(B)
+int b = 5;
+#endif
 
 Vec radiance(Ray r, int depth, unsigned short *Xi) {
 	int B;
