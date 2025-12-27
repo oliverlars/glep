@@ -644,10 +644,16 @@ preprocess :: (t: *Tokeniser) {
 		visited: bool;
 		tokens: [..]Token;
 	}
+	Function :: struct {
+		visited: bool;
+		params: [..]Token;
+		tokens: [..]Token;
+	}
 	Preprocessor :: struct {
 		at: int;
 		t: *Tokeniser;
 		objects: Table(string, Object);
+		functions: Table(string, Function);
 	}
 	cpp: Preprocessor;
 	cpp.t = t;
@@ -710,6 +716,10 @@ preprocess :: (t: *Tokeniser) {
 		}
 	}
 
+	expand_function :: (cpp: *Preprocessor, name: Token) {
+
+	}
+ 
 	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
 		lhs := 0;
 		unary_op := current(cpp);
@@ -724,7 +734,7 @@ preprocess :: (t: *Tokeniser) {
 					} else {
 						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
 					}
-				} 
+				}
 			case .LeftParenthesis;
 				delete(cpp); // '('
 				lhs = eval(cpp);
@@ -845,7 +855,8 @@ preprocess :: (t: *Tokeniser) {
 							full_path := tprint("%/%", includes, path);
 							file, success := read_entire_file(full_path);
 							assert(success);
-							include_tokens := tokenise(file);
+							include_tokeniser := tokenise(file);
+							preprocess(*include_tokeniser);
 						}
 					case "undef";
 						table_remove(*cpp.objects, delete(*cpp).view);
@@ -879,9 +890,18 @@ preprocess :: (t: *Tokeniser) {
 						delete_line(*cpp);
 						doing_if = false;
 						pasted = false;
+					case "ifdef"; #through;
+					case "ifndef"; #through;
 					case "if";
 						doing_if = true;
-						expr := eval(*cpp);
+						expr: int;
+						if directive.view == "ifdef" {
+							expr = table_contains(*cpp.objects, delete(*cpp).view).(int);
+						} else if directive.view == "ifndef" {
+							expr = (!table_contains(*cpp.objects, delete(*cpp).view)).(int);
+						} else {
+							expr = eval(*cpp);
+						}
 						delete_line(*cpp);
 						if expr != 0 {
 							while !end(*cpp) {
@@ -908,12 +928,19 @@ preprocess :: (t: *Tokeniser) {
 				}
 			case .Identifier;
 				name := current(*cpp);
-				object := table_find_pointer(*cpp.objects, name.view);
-				if object {
-					delete(*cpp);
-					expand_macro(*cpp, name);
+				if next(*cpp).type == .LeftParenthesis {
+					// They need to be next to eachother
+					if next(*cpp).view.data + next(*cpp).view.count == name.view.data {
+						assert(false);
+					}
 				} else {
-					skip(*cpp);
+					object := table_find_pointer(*cpp.objects, name.view);
+					if object {
+						delete(*cpp);
+						expand_macro(*cpp, name);
+					} else {
+						skip(*cpp);
+					}
 				}
 			case .Newline;
 				delete(*cpp);
