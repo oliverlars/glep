@@ -4,6 +4,8 @@
 #import "Hash_Table";
 #import "Hash";
 
+#import "String";
+
 Token_Type :: enum {
 	Invalid;
 	Hash;
@@ -386,10 +388,18 @@ Node_Translation_Unit :: struct {
 	type = #this;
 }
 
+
+tokenise :: (file: string) -> Tokeniser {
+	result: Tokeniser;
+	result.source = file;
+	tokenise(*result);
+	return result;
+}
+
 tokenise :: (t: *Tokeniser) {
 	is_ws    :: (c: int) -> bool { return c == #char " " || c == #char "\t"; }
 	is_newline :: (c: int) -> bool { return c == #char "\n" || c == #char "\r"; }
-	is_ident :: (c: int) -> bool { return ((c >= #char "a") && (c <= #char "z")) || ((c >= #char "A") && (c <= #char "Z")); }
+	is_ident :: (c: int) -> bool { return c == #char "_" || ((c >= #char "a") && (c <= #char "z")) || ((c >= #char "A") && (c <= #char "Z")); }
 	is_num   :: (c: int) -> bool { return c >= #char "0" && c <= #char "9"; }
 	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t.source[t.at]) { t.at += 1; } }
 	while t.at < t.source.count {
@@ -429,12 +439,12 @@ tokenise :: (t: *Tokeniser) {
 					token.view.count += 1;
 				}
 			case "&";
-			t.at += 1; token.type = .Ampersand;
-			if t.source[t.at] == #char "&" {
-				t.at += 1;
-				token.view.count += 1;
-				token.type = .AmpersandAmpersand;
-			}
+				t.at += 1; token.type = .Ampersand;
+				if t.source[t.at] == #char "&" {
+					t.at += 1;
+					token.view.count += 1;
+					token.type = .AmpersandAmpersand;
+				}
 			case "~"; t.at += 1; token.type = .Tilde;
 			case "^";
 				t.at += 1; token.type = .Caret;
@@ -489,6 +499,26 @@ tokenise :: (t: *Tokeniser) {
 					token.type = .ForwardSlashEqual;
 					t.at += 1;
 					token.view.count += 1;
+				} else if t.source[t.at] == "/" {
+					while t.at < t.source.count && !is_newline(t.source[t.at]) {
+						t.at += 1;
+					}
+					continue;
+				} else if t.source[t.at] == "*" {
+					t.at += 1;
+					while t.at + 1 < t.source.count {
+						if t.source[t.at] == "*" && t.source[t.at + 1] == "/" {
+							t.at += 2;
+							break;
+						}
+						t.at += 1;
+					}
+					continue;
+				}
+			case "\\";
+				t.at += 1;
+				if t.source[t.at] == "\n" {
+					t.at += 1;
 				}
 			case ".";
 				t.at += 1;
@@ -804,6 +834,19 @@ preprocess :: (t: *Tokeniser) {
 						table_add(*cpp.objects, name.view, object);
 					case "pragma";
 					case "include";
+						includes := "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include";
+						if current(*cpp).type == .Less {
+							delete(*cpp);
+							path := "";
+							while current(*cpp).type != .Greater {
+								path = join(path, delete(*cpp).view);
+							}
+							delete(*cpp);
+							full_path := tprint("%/%", includes, path);
+							file, success := read_entire_file(full_path);
+							assert(success);
+							include_tokens := tokenise(file);
+						}
 					case "undef";
 						table_remove(*cpp.objects, delete(*cpp).view);
 					case "elif";
@@ -872,6 +915,8 @@ preprocess :: (t: *Tokeniser) {
 				} else {
 					skip(*cpp);
 				}
+			case .Newline;
+				delete(*cpp);
 			case;
 				skip(*cpp);
 		}
@@ -2183,6 +2228,7 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 	test = #string STRING
+#include <math.h>
 typedef unsigned long long uint64;
 
 double sqrt(double x);
@@ -2539,8 +2585,6 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 	STRING
-
-	context.allocator = temp;
 
 	t0 := current_time_monotonic();
 
