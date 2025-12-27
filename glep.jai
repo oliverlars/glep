@@ -826,7 +826,7 @@ preprocess :: (t: *Tokeniser) {
 		return cpp.at == cpp.t.tokens.count;
 	}
 
-	doing_if := false;
+	if_count := 0;
 	pasted := false;
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
@@ -837,11 +837,20 @@ preprocess :: (t: *Tokeniser) {
 					case "define";
 						name := delete(*cpp);
 						object: Object;
-						while current(*cpp).type != .Newline {
-							token := delete(*cpp);
-							array_add(*object.tokens, token);
+						if current(*cpp).type == .LeftParenthesis {
+							// They need to be next to eachother
+							if next(*cpp).view.data + next(*cpp).view.count -1 == name.view.data {
+								delete_line(*cpp);
+							} else {
+								skip(*cpp);
+							}
+						} else {
+							while current(*cpp).type != .Newline {
+								token := delete(*cpp);
+								array_add(*object.tokens, token);
+							}
+							table_add(*cpp.objects, name.view, object);
 						}
-						table_add(*cpp.objects, name.view, object);
 					case "pragma";
 					case "include";
 						includes := "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include";
@@ -861,7 +870,7 @@ preprocess :: (t: *Tokeniser) {
 					case "undef";
 						table_remove(*cpp.objects, delete(*cpp).view);
 					case "elif";
-						assert(doing_if);
+						assert(if_count > 0);
 						expr := eval(*cpp);
 						if !pasted && expr != 0 {
 							while !end(*cpp) {
@@ -885,15 +894,28 @@ preprocess :: (t: *Tokeniser) {
 								}
 							}
 						}
-					case "endif";
-						assert(doing_if);
+					case "else";
+						assert(if_count > 0);
+						if_count += 1;
 						delete_line(*cpp);
-						doing_if = false;
+						if !pasted {
+							while !end(*cpp) {
+								if current(*cpp).type == .Hash {
+									break;
+								} else {
+									skip(*cpp);
+								}
+							}
+						}
+					case "endif";
+						assert(if_count > 0);
+						if_count -= 1;
+						delete_line(*cpp);
 						pasted = false;
 					case "ifdef"; #through;
 					case "ifndef"; #through;
 					case "if";
-						doing_if = true;
+						if_count += 1;
 						expr: int;
 						if directive.view == "ifdef" {
 							expr = table_contains(*cpp.objects, delete(*cpp).view).(int);
@@ -906,20 +928,15 @@ preprocess :: (t: *Tokeniser) {
 						if expr != 0 {
 							while !end(*cpp) {
 								if current(*cpp).type == .Hash {
-									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
-										break;
-									}
+									break;
 								} else {
 									skip(*cpp);
 								}
 							}
-							pasted = true;
 						} else {
 							while !end(*cpp) {
 								if current(*cpp).type == .Hash {
-									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
-										break;
-									}
+									break;
 								} else {
 									delete(*cpp);
 								}
@@ -928,19 +945,12 @@ preprocess :: (t: *Tokeniser) {
 				}
 			case .Identifier;
 				name := current(*cpp);
-				if next(*cpp).type == .LeftParenthesis {
-					// They need to be next to eachother
-					if next(*cpp).view.data + next(*cpp).view.count == name.view.data {
-						assert(false);
-					}
+				object := table_find_pointer(*cpp.objects, name.view);
+				if object {
+					delete(*cpp);
+					expand_macro(*cpp, name);
 				} else {
-					object := table_find_pointer(*cpp.objects, name.view);
-					if object {
-						delete(*cpp);
-						expand_macro(*cpp, name);
-					} else {
-						skip(*cpp);
-					}
+					skip(*cpp);
 				}
 			case .Newline;
 				delete(*cpp);
@@ -1120,7 +1130,7 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   is_function_specifier(current(p)) ||
 		   current(p).view == "struct" ||
 		   current(p).view == "enum" ||
-		   current(p).view == "enum";
+		   current(p).view == "union";
 }
 
 is_type_name :: (parser: *Parser, token: Token) -> bool {
