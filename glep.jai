@@ -664,6 +664,7 @@ preprocess :: (t: *Tokeniser) {
 	cpp.t = t;
 	current :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at]; }
 	next :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at + 1]; }
+	peek :: (cpp: *Preprocessor, amount := 0) -> Token { return cpp.t.tokens[min(cpp.t.tokens.count - 1, cpp.at + amount)]; }
 	skip :: (cpp: *Preprocessor) -> Token { 
 		result := cpp.t.tokens[cpp.at];
 		cpp.at += 1;
@@ -787,23 +788,28 @@ preprocess :: (t: *Tokeniser) {
 					if current(cpp).type == .LeftParenthesis {
 						delete(cpp);
 						name := delete(cpp);
-						lhs = table_contains(*cpp.objects, name.view).(int);
+						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
 						delete(cpp);
 					} else {
 						name := delete(cpp);
-						lhs = table_contains(*cpp.objects, name.view).(int);
+						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
 					}
 				} else {
+					defined := table_contains(*cpp.functions, current(cpp).view).(int);
+					defined |= table_contains(*cpp.objects, current(cpp).view).(int);
 					delete(cpp);
-					expanded := expand(cpp, unary_op);
-
-					// This keeps the cursor at the start of the expression prior to insertion
-					for expanded {
-						array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+					if defined {
+						expanded := expand(cpp, unary_op);
+						if expanded.count > 0 {
+							// This keeps the cursor at the start of the expression prior to insertion
+							for expanded {
+								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+							}
+							lhs = eval(cpp);
+						}
 					}
-					lhs = eval(cpp);
 				}
 			case .LeftParenthesis;
 				delete(cpp); // '('
@@ -811,16 +817,16 @@ preprocess :: (t: *Tokeniser) {
 				delete(cpp); // ')'
 			case .Minus;
 				delete(cpp);
-				lhs = -to_integer(trim_suffix(delete(cpp).view));
+				lhs = -eval(cpp);
 			case .Plus;
 				delete(cpp);
-				lhs = +to_integer(trim_suffix(delete(cpp).view));
+				lhs = +eval(cpp);
 			case .Bang;
 				delete(cpp);
-				lhs = xx !to_integer(trim_suffix(delete(cpp).view));
+				lhs = xx !eval(cpp);
 			case .Tilde;
 				delete(cpp);
-				lhs = ~to_integer(trim_suffix(delete(cpp).view));
+				lhs = ~eval(cpp);
 			case .Number;
 				lhs = to_integer(trim_suffix(delete(cpp).view));
 			case; 
@@ -895,14 +901,47 @@ preprocess :: (t: *Tokeniser) {
 	end :: (cpp: *Preprocessor) -> bool {
 		return cpp.at == cpp.t.tokens.count;
 	}
+	delete_until_el :: (cpp: *Preprocessor) {
+		depth := 0;
+		while !end(cpp) {
+			if current(cpp).type == .Hash {
+				directive := next(cpp).view;
+				if directive == "if" || directive == "ifdef" || directive == "ifndef" {
+					depth += 1;
+				} else if directive == "endif" {
+					if depth == 0 return;
+					depth -= 1;
+				} else if (directive == "else" || directive == "elif") && depth == 0 {
+					return;
+				}
+			}
+			delete(cpp);
+		}
+		return;
+	}
 
 	if_count := 0;
 	pasted := false;
+
+	Cond_State :: struct {
+		branch_taken: bool;
+	}
+
+	cond_stack: [..]Cond_State;
+	push_cond :: (state: bool) #expand {
+		array_add(*cond_stack, .{state});
+	}
+	pop_cond :: () #expand {
+		assert(cond_stack.count > 0);
+		cond_stack.count -= 1;
+	}
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
 				delete(*cpp);
 				directive := delete(*cpp);
+
+				print("Processing %, if_count now %\n", directive.view, if_count);
 				if directive.view == {
 					case "define";
 						name := delete(*cpp);
@@ -957,85 +996,66 @@ preprocess :: (t: *Tokeniser) {
 						table_remove(*cpp.objects, delete(*cpp).view);
 					case "elif";
 						assert(if_count > 0);
+						i := 0;
+						print("\n#elif ");
+						while peek(*cpp, i).type != .Newline {
+							print("%", peek(*cpp, i).view);
+							i += 1;
+						}
+						print("\n");
 						expr := eval(*cpp);
-						if !pasted && expr != 0 {
-							while !end(*cpp) {
-								if current(*cpp).type == .Hash {
-									break;
-								} else {
-									skip(*cpp);
-								}
-							}
-							pasted = true;
-						} else {
-							while !end(*cpp) {
-								if current(*cpp).type == .Hash {
-									if next(*cpp).view == "elif" || next(*cpp).view == "endif" {
-										break;
-									} else {
-										delete(*cpp);
-									}
-								} else {
-									delete(*cpp);
-								}
-							}
+						if peek(cond_stack).branch_taken || expr == 0 {
+							delete_until_el(*cpp);
 						}
 					case "else";
-						assert(if_count > 0);
+						i := 0;
+						print("\n#else ");
+						while peek(*cpp, i).type != .Newline {
+							print("%", peek(*cpp, i).view);
+							i += 1;
+						}
+						print("\n");
 						delete_line(*cpp);
-						if !pasted {
-							while !end(*cpp) {
-								if current(*cpp).type == .Hash {
-									break;
-								} else {
-									skip(*cpp);
-								}
-							}
+						if peek(cond_stack).branch_taken {
+							delete_until_el(*cpp);
 						}
 					case "endif";
-						assert(if_count > 0);
-						if_count -= 1;
+						pop_cond();
 						delete_line(*cpp);
 						pasted = false;
 					case "ifdef"; #through;
 					case "ifndef"; #through;
 					case "if";
 						if_count += 1;
+						i := 0;
+						if directive.view == {
+							case "ifdef"; print("\n#ifdef ");
+							case "ifndef"; print("\n#ifndef ");
+							case "if"; print("\n#if ");
+						}
+						while peek(*cpp, i).type != .Newline {
+							if peek(*cpp, i).view == "__has_include" {
+								a := 5;
+							}
+							print("%", peek(*cpp, i).view);
+							i += 1;
+						}
+						print("\n");
 						expr: int;
 						if directive.view == "ifdef" {
 							name := delete(*cpp);
-							if name.view == "__has_builtin" {
-								a := 0;
-							}
 							expr = table_contains(*cpp.objects, name.view).(int);
 							expr |= table_contains(*cpp.functions, name.view).(int);
 						} else if directive.view == "ifndef" {
 							name := delete(*cpp);
-							if name.view == "__has_builtin" {
-								a := 0;
-							}
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
-							expr &= (!table_contains(*cpp.functions, name.view)).(int);
+							expr |= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
 							expr = eval(*cpp);
 						}
-						delete_line(*cpp);
-						if expr != 0 {
-							while !end(*cpp) {
-								if current(*cpp).type == .Hash {
-									break;
-								} else {
-									skip(*cpp);
-								}
-							}
-						} else {
-							while !end(*cpp) {
-								if current(*cpp).type == .Hash {
-									break;
-								} else {
-									delete(*cpp);
-								}
-							}
+						push_cond(expr != 0);
+						if expr == 0 {
+							delete_until_el(*cpp);
 						}
 				}
 			case .Identifier;
@@ -2366,13 +2386,23 @@ main :: () {
 	test := "struct Thing { int a; int b; } abc = {1, 2};";
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
-	test = #string STRING
-#define X(A) A
-#if X(1)
-int b = 5;
+test = #string STRING
+#include <math.h>
+
+#if 1
+int IT_WORKS = 5;
+#if 1
+int IT_WORKS = 5;
+#else
+int IT_DOESNT_WORK = 5;
 #endif
-STRING
-rungalo := #string STRING
+
+int IT_WORKS = 5;
+
+#else
+int IT_DOESNT_WORK = 5;
+#endif
+
 typedef unsigned long long uint64;
 
 double sqrt(double x);
