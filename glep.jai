@@ -718,18 +718,20 @@ preprocess :: (t: *Tokeniser) {
 			object := table_find_pointer(*cpp.objects, name.view);
 			if function && !function.visited {
 				function.visited = true;
-				delete(cpp);
-				delete(cpp);
 				args: [..][..]Token;
-				array_reserve(*args, function.params.count);
+				array_resize(*args, function.params.count);
+
+				delete(cpp);
 				arg := 0;
 				while current(cpp).type != .RightParenthesis {
 					while current(cpp).type != .RightParenthesis &&
 						  current(cpp).type != .Comma {
 						array_add(*args[arg], delete(cpp));
 					}
-					if current(cpp).type == .Comma delete(cpp);
-					arg += 1;
+					if current(cpp).type == .Comma {
+						arg += 1;
+						delete(cpp);
+					}
 				}
 				delete(cpp);
 				find_param :: (params: [..]Token, name: string) -> bool, int {
@@ -740,17 +742,23 @@ preprocess :: (t: *Tokeniser) {
 					}
 					return false, 0;
 				}
+				print("TOKENS: ");
+				for function.tokens {
+					print("% ", it.view);
+				}
+				print("\n");
 				for function.tokens {
 					found, param_index := find_param(function.params, it.view);
 					if found {
-						delete(cpp);
 						for args[param_index] {
 							array_insert_at(*cpp.t.tokens, it, cpp.at);
+							skip(cpp);
 						}
 					} else {
 						expand(cpp, it);
 					}
 				}
+				print("\n");
 				function.visited = false;
 			} else if object && !object.visited {
 				object.visited = true;
@@ -1011,10 +1019,13 @@ preprocess :: (t: *Tokeniser) {
 				name := current(*cpp);
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
-				if object {
+				if object || function {
 					delete(*cpp);
 					expand(*cpp, name);
-				} else if function {
+					for max(0,cpp.at-20)..cpp.at+19 {
+						print("% ", t.tokens[it].view);
+					}
+					exit(0);
 				} else {
 					skip(*cpp);
 				}
