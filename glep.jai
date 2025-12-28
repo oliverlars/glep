@@ -712,13 +712,50 @@ preprocess :: (t: *Tokeniser) {
 	add_builtin(*cpp, "__SIZEOF_INT__", .{"4", .Number});
 	add_builtin(*cpp, "__SIZEOF_LONG__", .{"8", .Number});
 
-	expand_macro :: (cpp: *Preprocessor, name: Token) {
+	expand :: (cpp: *Preprocessor, name: Token) {
 		if name.type == .Identifier {
+			function := table_find_pointer(*cpp.functions, name.view);
 			object := table_find_pointer(*cpp.objects, name.view);
-			if object && !object.visited {
+			if function && !function.visited {
+				function.visited = true;
+				delete(cpp);
+				delete(cpp);
+				args: [..][..]Token;
+				array_reserve(*args, function.params.count);
+				arg := 0;
+				while current(cpp).type != .RightParenthesis {
+					while current(cpp).type != .RightParenthesis &&
+						  current(cpp).type != .Comma {
+						array_add(*args[arg], delete(cpp));
+					}
+					if current(cpp).type == .Comma delete(cpp);
+					arg += 1;
+				}
+				delete(cpp);
+				find_param :: (params: [..]Token, name: string) -> bool, int {
+					for params {
+						if name == it.view {
+							return true, it_index;
+						}
+					}
+					return false, 0;
+				}
+				for function.tokens {
+					found, param_index := find_param(function.params, it.view);
+					if found {
+						delete(cpp);
+						for args[param_index] {
+							array_insert_at(*cpp.t.tokens, it, cpp.at);
+						}
+					} else {
+						expand(cpp, it);
+					}
+				}
+				function.visited = false;
+			} else if object && !object.visited {
 				object.visited = true;
 				for object.tokens {
-					expand_macro(cpp, it);
+					expand(cpp, it);
 				}
 				object.visited = false;
 			} else {
@@ -729,10 +766,6 @@ preprocess :: (t: *Tokeniser) {
 			array_insert_at(*cpp.t.tokens, name, cpp.at);
 			skip(cpp);
 		}
-	}
-
-	expand_function :: (cpp: *Preprocessor, name: Token) {
-
 	}
  
 	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
@@ -851,15 +884,31 @@ preprocess :: (t: *Tokeniser) {
 				if directive.view == {
 					case "define";
 						name := delete(*cpp);
-						object: Object;
+						is_function_definition := false;
 						if current(*cpp).type == .LeftParenthesis {
 							// They need to be next to eachother
-							if next(*cpp).view.data + next(*cpp).view.count -1 == name.view.data {
+							if name.view.data + name.view.count == current(*cpp).view.data {
+								is_function_definition = true;
+								delete(*cpp);
+								function: Function;
+								while current(*cpp).type != .RightParenthesis {
+									array_add(*function.params, delete(*cpp));
+									if current(*cpp).type == .Comma {
+										delete(*cpp);
+									}
+								}
+								delete(*cpp);
+								while current(*cpp).type != .Newline {
+									token := delete(*cpp);
+									array_add(*function.tokens, token);
+								}
+								table_add(*cpp.functions, name.view, function);
 								delete_line(*cpp);
-							} else {
-								skip(*cpp);
 							}
-						} else {
+						}
+
+						if !is_function_definition {
+							object: Object;
 							while current(*cpp).type != .Newline {
 								token := delete(*cpp);
 								array_add(*object.tokens, token);
@@ -961,9 +1010,11 @@ preprocess :: (t: *Tokeniser) {
 			case .Identifier;
 				name := current(*cpp);
 				object := table_find_pointer(*cpp.objects, name.view);
+				function := table_find_pointer(*cpp.functions, name.view);
 				if object {
 					delete(*cpp);
-					expand_macro(*cpp, name);
+					expand(*cpp, name);
+				} else if function {
 				} else {
 					skip(*cpp);
 				}
