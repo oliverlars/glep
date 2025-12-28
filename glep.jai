@@ -901,6 +901,7 @@ preprocess :: (t: *Tokeniser) {
 	end :: (cpp: *Preprocessor) -> bool {
 		return cpp.at == cpp.t.tokens.count;
 	}
+
 	delete_until_el :: (cpp: *Preprocessor) {
 		depth := 0;
 		while !end(cpp) {
@@ -920,9 +921,6 @@ preprocess :: (t: *Tokeniser) {
 		return;
 	}
 
-	if_count := 0;
-	pasted := false;
-
 	Cond_State :: struct {
 		branch_taken: bool;
 	}
@@ -940,9 +938,13 @@ preprocess :: (t: *Tokeniser) {
 			case .Hash;
 				delete(*cpp);
 				directive := delete(*cpp);
-
-				print("Processing %, if_count now %\n", directive.view, if_count);
 				if directive.view == {
+					case "warning";
+						delete_line(*cpp);
+					case "error";
+						delete_line(*cpp);
+					case "pragma";
+						delete_line(*cpp);
 					case "define";
 						name := delete(*cpp);
 						is_function_definition := false;
@@ -976,7 +978,6 @@ preprocess :: (t: *Tokeniser) {
 							}
 							table_add(*cpp.objects, name.view, object);
 						}
-					case "pragma";
 					case "include";
 						includes := "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include";
 						if current(*cpp).type == .Less {
@@ -990,31 +991,26 @@ preprocess :: (t: *Tokeniser) {
 							file, success := read_entire_file(full_path);
 							assert(success);
 							include_tokeniser := tokenise(file);
-							preprocess(*include_tokeniser);
+							for include_tokeniser.tokens {
+								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+							}
 						}
 					case "undef";
 						table_remove(*cpp.objects, delete(*cpp).view);
 					case "elif";
-						assert(if_count > 0);
-						i := 0;
-						print("\n#elif ");
-						while peek(*cpp, i).type != .Newline {
-							print("%", peek(*cpp, i).view);
-							i += 1;
-						}
-						print("\n");
-						expr := eval(*cpp);
-						if peek(cond_stack).branch_taken || expr == 0 {
+						if peek(cond_stack).branch_taken {
 							delete_until_el(*cpp);
+						} else {
+							expr := eval(*cpp);
+							if expr != 0 {
+								peek(cond_stack).branch_taken = true;
+            					delete_line(*cpp);
+							} else {
+								delete_until_el(*cpp);
+							}
 						}
 					case "else";
 						i := 0;
-						print("\n#else ");
-						while peek(*cpp, i).type != .Newline {
-							print("%", peek(*cpp, i).view);
-							i += 1;
-						}
-						print("\n");
 						delete_line(*cpp);
 						if peek(cond_stack).branch_taken {
 							delete_until_el(*cpp);
@@ -1022,25 +1018,9 @@ preprocess :: (t: *Tokeniser) {
 					case "endif";
 						pop_cond();
 						delete_line(*cpp);
-						pasted = false;
 					case "ifdef"; #through;
 					case "ifndef"; #through;
 					case "if";
-						if_count += 1;
-						i := 0;
-						if directive.view == {
-							case "ifdef"; print("\n#ifdef ");
-							case "ifndef"; print("\n#ifndef ");
-							case "if"; print("\n#if ");
-						}
-						while peek(*cpp, i).type != .Newline {
-							if peek(*cpp, i).view == "__has_include" {
-								a := 5;
-							}
-							print("%", peek(*cpp, i).view);
-							i += 1;
-						}
-						print("\n");
 						expr: int;
 						if directive.view == "ifdef" {
 							name := delete(*cpp);
@@ -1049,7 +1029,7 @@ preprocess :: (t: *Tokeniser) {
 						} else if directive.view == "ifndef" {
 							name := delete(*cpp);
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
-							expr |= (!table_contains(*cpp.functions, name.view)).(int);
+							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
 							expr = eval(*cpp);
 						}
@@ -1069,10 +1049,6 @@ preprocess :: (t: *Tokeniser) {
 						array_insert_at(*cpp.t.tokens, it, cpp.at);
 						skip(*cpp);
 					}
-					for max(0,cpp.at-20)..cpp.at+19 {
-						print("% ", t.tokens[it].view);
-					}
-					exit(0);
 				} else {
 					skip(*cpp);
 				}
@@ -1095,7 +1071,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for p.at-20..p.at+19 {
+		for max(0, p.at-20)..p.at+19 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -1258,7 +1234,6 @@ is_declaration_start :: (p: *Parser) -> bool {
 is_type_name :: (parser: *Parser, token: Token) -> bool {
 	is_in_tags := table_contains(*parser.enums, token.view);
 	is_in_tags |= table_contains(*parser.structs, token.view);
-	if is_in_tags print("Found: %\n", token.view);
 	return is_type_qualifier(token) ||
 		   is_type_specifier(token) || is_in_tags ||
 		   table_contains(*parser.typedefs, token.view);
