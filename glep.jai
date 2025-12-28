@@ -712,62 +712,69 @@ preprocess :: (t: *Tokeniser) {
 	add_builtin(*cpp, "__SIZEOF_INT__", .{"4", .Number});
 	add_builtin(*cpp, "__SIZEOF_LONG__", .{"8", .Number});
 
-	expand :: (cpp: *Preprocessor, name: Token) {
-		if name.type == .Identifier {
-			function := table_find_pointer(*cpp.functions, name.view);
-			object := table_find_pointer(*cpp.objects, name.view);
-			if function && !function.visited {
-				function.visited = true;
-				args: [..][..]Token;
-				array_resize(*args, function.params.count);
-
-				delete(cpp);
-				arg := 0;
-				while current(cpp).type != .RightParenthesis {
-					while current(cpp).type != .RightParenthesis &&
-						  current(cpp).type != .Comma {
-						array_add(*args[arg], delete(cpp));
-					}
-					if current(cpp).type == .Comma {
-						arg += 1;
-						delete(cpp);
-					}
-				}
-				delete(cpp);
-				find_param :: (params: [..]Token, name: string) -> bool, int {
-					for params {
-						if name == it.view {
-							return true, it_index;
+	expand :: (cpp: *Preprocessor, name: Token) -> [..]Token {
+		expand_single :: (cpp: *Preprocessor, name: Token, tokens: *[..]Token) {
+			if name.type == .Identifier {
+				function := table_find_pointer(*cpp.functions, name.view);
+				object := table_find_pointer(*cpp.objects, name.view);
+				if function && !function.visited {
+					function.visited = true;
+					args: [..][..]Token;
+					array_resize(*args, function.params.count);
+					delete(cpp);
+					arg := 0;
+					while current(cpp).type != .RightParenthesis {
+						while current(cpp).type != .RightParenthesis &&
+							current(cpp).type != .Comma {
+							array_add(*args[arg], delete(cpp));
+						}
+						if current(cpp).type == .Comma {
+							arg += 1;
+							delete(cpp);
 						}
 					}
-					return false, 0;
-				}
-				for function.tokens {
-					found, param_index := find_param(function.params, it.view);
-					if found {
-						for args[param_index] {
-							array_insert_at(*cpp.t.tokens, it, cpp.at);
-							skip(cpp);
+					delete(cpp);
+					find_param :: (params: [..]Token, name: string) -> bool, int {
+						for params {
+							if name == it.view {
+								return true, it_index;
+							}
 						}
-					} else {
-						expand(cpp, it);
+						return false, 0;
 					}
+					for function.tokens {
+						found, param_index := find_param(function.params, it.view);
+						if found {
+							for args[param_index] {
+								//array_insert_at(*cpp.t.tokens, it, cpp.at);
+								//skip(cpp);
+								array_add(tokens, it);
+							}
+						} else {
+							expand_single(cpp, it, tokens);
+						}
+					}
+					function.visited = false;
+				} else if object && !object.visited {
+					object.visited = true;
+					for object.tokens {
+						expand_single(cpp, it, tokens);
+					}
+					object.visited = false;
+				} else {
+					//array_insert_at(*cpp.t.tokens, name, cpp.at);
+					//skip(cpp);
+					array_add(tokens, name);
 				}
-				function.visited = false;
-			} else if object && !object.visited {
-				object.visited = true;
-				for object.tokens {
-					expand(cpp, it);
-				}
-				object.visited = false;
 			} else {
-				array_insert_at(*cpp.t.tokens, name, cpp.at);
-				skip(cpp);
+				//array_insert_at(*cpp.t.tokens, name, cpp.at);
+				//skip(cpp);
+				array_add(tokens, name);
 			}
-		} else {
-			array_insert_at(*cpp.t.tokens, name, cpp.at);
-			skip(cpp);
 		}
+		result: [..]Token;
+		expand_single(cpp, name, *result);
+		return result;
 	}
  
 	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
@@ -781,15 +788,22 @@ preprocess :: (t: *Tokeniser) {
 						delete(cpp);
 						name := delete(cpp);
 						lhs = table_contains(*cpp.objects, name.view).(int);
-						lhs &= table_contains(*cpp.objects, name.view).(int);
+						lhs |= table_contains(*cpp.objects, name.view).(int);
 						delete(cpp);
 					} else {
 						name := delete(cpp);
 						lhs = table_contains(*cpp.objects, name.view).(int);
-						lhs &= table_contains(*cpp.objects, name.view).(int);
+						lhs |= table_contains(*cpp.objects, name.view).(int);
 					}
 				} else {
+					delete(cpp);
+					expanded := expand(cpp, unary_op);
 
+					// This keeps the cursor at the start of the expression prior to insertion
+					for expanded {
+						array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+					}
+					lhs = eval(cpp);
 				}
 			case .LeftParenthesis;
 				delete(cpp); // '('
@@ -968,7 +982,6 @@ preprocess :: (t: *Tokeniser) {
 						}
 					case "else";
 						assert(if_count > 0);
-						if_count += 1;
 						delete_line(*cpp);
 						if !pasted {
 							while !end(*cpp) {
@@ -1031,7 +1044,11 @@ preprocess :: (t: *Tokeniser) {
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
 					delete(*cpp);
-					expand(*cpp, name);
+					expanded := expand(*cpp, name);
+					for expanded {
+						array_insert_at(*cpp.t.tokens, it, cpp.at);
+						skip(*cpp);
+					}
 					for max(0,cpp.at-20)..cpp.at+19 {
 						print("% ", t.tokens[it].view);
 					}
@@ -1039,8 +1056,6 @@ preprocess :: (t: *Tokeniser) {
 				} else {
 					skip(*cpp);
 				}
-			case .Newline;
-				delete(*cpp);
 			case;
 				skip(*cpp);
 		}
@@ -2352,7 +2367,12 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 	test = #string STRING
-#include <math.h>
+#define X(A) A
+#if X(1)
+int b = 5;
+#endif
+STRING
+rungalo := #string STRING
 typedef unsigned long long uint64;
 
 double sqrt(double x);
@@ -2717,6 +2737,14 @@ int main(int argc, char *argv[]) {
 	tokenise(*tokeniser);
 
 	preprocess(*tokeniser);
+
+	tokens_no_newlines: [..]Token;
+	for tokeniser.tokens {
+		if it.type != .Newline {
+			array_add(*tokens_no_newlines, it);
+		}
+	}
+	tokeniser.tokens = tokens_no_newlines;
 
 	parser: Parser;
 	parser.tokens = tokeniser.tokens;
