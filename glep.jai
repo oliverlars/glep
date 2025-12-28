@@ -742,11 +742,6 @@ preprocess :: (t: *Tokeniser) {
 					}
 					return false, 0;
 				}
-				print("TOKENS: ");
-				for function.tokens {
-					print("% ", it.view);
-				}
-				print("\n");
 				for function.tokens {
 					found, param_index := find_param(function.params, it.view);
 					if found {
@@ -758,7 +753,6 @@ preprocess :: (t: *Tokeniser) {
 						expand(cpp, it);
 					}
 				}
-				print("\n");
 				function.visited = false;
 			} else if object && !object.visited {
 				object.visited = true;
@@ -785,11 +779,17 @@ preprocess :: (t: *Tokeniser) {
 					delete(cpp);
 					if current(cpp).type == .LeftParenthesis {
 						delete(cpp);
-						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
+						name := delete(cpp);
+						lhs = table_contains(*cpp.objects, name.view).(int);
+						lhs &= table_contains(*cpp.objects, name.view).(int);
 						delete(cpp);
 					} else {
-						lhs = table_contains(*cpp.objects, delete(cpp).view).(int);
+						name := delete(cpp);
+						lhs = table_contains(*cpp.objects, name.view).(int);
+						lhs &= table_contains(*cpp.objects, name.view).(int);
 					}
+				} else {
+
 				}
 			case .LeftParenthesis;
 				delete(cpp); // '('
@@ -990,9 +990,19 @@ preprocess :: (t: *Tokeniser) {
 						if_count += 1;
 						expr: int;
 						if directive.view == "ifdef" {
-							expr = table_contains(*cpp.objects, delete(*cpp).view).(int);
+							name := delete(*cpp);
+							if name.view == "__has_builtin" {
+								a := 0;
+							}
+							expr = table_contains(*cpp.objects, name.view).(int);
+							expr |= table_contains(*cpp.functions, name.view).(int);
 						} else if directive.view == "ifndef" {
-							expr = (!table_contains(*cpp.objects, delete(*cpp).view)).(int);
+							name := delete(*cpp);
+							if name.view == "__has_builtin" {
+								a := 0;
+							}
+							expr = (!table_contains(*cpp.objects, name.view)).(int);
+							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
 							expr = eval(*cpp);
 						}
