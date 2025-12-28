@@ -1,5 +1,6 @@
 #import "Basic";
 #import "File";
+#import "File_Utilities";
 
 #import "Hash_Table";
 #import "Hash";
@@ -657,6 +658,7 @@ preprocess :: (t: *Tokeniser) {
 	Preprocessor :: struct {
 		at: int;
 		t: *Tokeniser;
+		path: string;
 		objects: Table(string, Object);
 		functions: Table(string, Function);
 	}
@@ -874,9 +876,11 @@ preprocess :: (t: *Tokeniser) {
 				case .Caret;
 					lhs = lhs ^ eval(cpp, next_min);
 				case .AmpersandAmpersand;
-					lhs = xx (lhs.(bool) && eval(cpp, next_min).(bool));
+					rhs := eval(cpp, next_min).(bool);
+					lhs = xx (lhs.(bool) && rhs);
 				case .PipePipe;
-					lhs = xx (lhs.(bool) || eval(cpp, next_min).(bool));
+					rhs :=  eval(cpp, next_min).(bool);
+					lhs = xx (lhs.(bool) || rhs);
 				case .Question;
 					on_true := eval(cpp);
 					delete(cpp); // :
@@ -979,7 +983,10 @@ preprocess :: (t: *Tokeniser) {
 							table_add(*cpp.objects, name.view, object);
 						}
 					case "include";
-						includes := "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include";
+						includes := string.["/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+						"C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22621.0\\ucrt",
+						"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.41.34120\\include"];
+						
 						if current(*cpp).type == .Less {
 							delete(*cpp);
 							path := "";
@@ -987,9 +994,17 @@ preprocess :: (t: *Tokeniser) {
 								path = join(path, delete(*cpp).view);
 							}
 							delete(*cpp);
-							full_path := tprint("%/%", includes, path);
-							file, success := read_entire_file(full_path);
-							assert(success);
+							file: string;
+							found := false;
+							for includes {
+								full_path := tprint("%\\%", it, path);
+								if file_exists(full_path) {
+									file, found = read_entire_file(full_path);
+									cpp.path = full_path;
+									break;
+								}
+							}
+							assert(found);
 							include_tokeniser := tokenise(file);
 							for include_tokeniser.tokens {
 								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
@@ -2362,7 +2377,10 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 test = #string STRING
-#include <math.h>
+#include <time.h>
+
+#if !defined(RUNGALO_BUNGALO) && defined(RINKY_DINKY)
+#endif
 
 #if 1
 int IT_WORKS = 5;
