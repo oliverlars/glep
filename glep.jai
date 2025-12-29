@@ -645,19 +645,21 @@ tokenise :: (t: *Tokeniser) {
 	}
 }
 
-preprocess :: (t: *Tokeniser) {
+preprocess :: (t: *Tokeniser) -> [..]Token {
 	Object :: struct {
 		visited: bool;
 		tokens: [..]Token;
 	}
 	Function :: struct {
 		visited: bool;
+		variadic: bool;
 		params: [..]Token;
 		tokens: [..]Token;
 	}
 	Preprocessor :: struct {
 		at: int;
 		t: *Tokeniser;
+		tokens: [..]Token;
 		path: string;
 		objects: Table(string, Object);
 		functions: Table(string, Function);
@@ -673,6 +675,15 @@ preprocess :: (t: *Tokeniser) {
 		return result;
 	}
 
+	paste :: (cpp: *Preprocessor) {
+		token := skip(cpp);
+		array_add(*cpp.tokens, token);
+	}
+
+	insert :: (cpp: *Preprocessor, token: Token) {
+		array_add(*cpp.tokens, token);
+	}
+
 	expect :: (cpp: *Preprocessor, token_type: Token_Type) -> Token { 
 		if current(cpp).type != token_type { 
 			print("Expected token % but got %", current(cpp).type, token_type);
@@ -680,12 +691,6 @@ preprocess :: (t: *Tokeniser) {
 		}
 
 		return skip(cpp);
-	}
-
-	delete :: (cpp: *Preprocessor) -> Token {
-		result := current(cpp);
-		array_ordered_remove_by_index(*cpp.t.tokens, cpp.at);
-		return result;
 	}
 
 	add_builtin :: (cpp: *Preprocessor, builtin: string, token: Token) {
@@ -703,6 +708,8 @@ preprocess :: (t: *Tokeniser) {
 		}
 		return result;
 	}
+
+	
 
 	add_builtin(*cpp, "__STDC__", .{"1", .Number});
 	add_builtin(*cpp, "__STDC_VERSION__", .{"201710L", .Number});
@@ -723,20 +730,29 @@ preprocess :: (t: *Tokeniser) {
 				if function && !function.visited {
 					function.visited = true;
 					args: [..][..]Token;
-					array_resize(*args, function.params.count);
-					delete(cpp);
+					skip(cpp);
 					arg := 0;
 					while current(cpp).type != .RightParenthesis {
-						while current(cpp).type != .RightParenthesis &&
-							current(cpp).type != .Comma {
-							array_add(*args[arg], delete(cpp));
+						arg_tokens: [..]Token;
+						paren_depth := 0;
+						while true {
+							if current(cpp).type == .LeftParenthesis {
+								paren_depth += 1;
+							} else if current(cpp).type == .RightParenthesis {
+								if paren_depth == 0 break;
+								paren_depth -= 1;
+							} else if current(cpp).type == .Comma && paren_depth == 0 {
+								break;
+							}
+							array_add(*arg_tokens, skip(cpp));
 						}
+						array_add(*args, arg_tokens);
 						if current(cpp).type == .Comma {
 							arg += 1;
-							delete(cpp);
+							skip(cpp);
 						}
 					}
-					delete(cpp);
+					skip(cpp);
 					find_param :: (params: [..]Token, name: string) -> bool, int {
 						for params {
 							if name == it.view {
@@ -749,8 +765,6 @@ preprocess :: (t: *Tokeniser) {
 						found, param_index := find_param(function.params, it.view);
 						if found {
 							for args[param_index] {
-								//array_insert_at(*cpp.t.tokens, it, cpp.at);
-								//skip(cpp);
 								array_add(tokens, it);
 							}
 						} else {
@@ -786,51 +800,51 @@ preprocess :: (t: *Tokeniser) {
 		if unary_op.type == {
 			case .Identifier;
 				if unary_op.view == "defined" {
-					delete(cpp);
+					skip(cpp);
 					if current(cpp).type == .LeftParenthesis {
-						delete(cpp);
-						name := delete(cpp);
+						skip(cpp);
+						name := skip(cpp);
 						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
-						delete(cpp);
+						skip(cpp);
 					} else {
-						name := delete(cpp);
+						name := skip(cpp);
 						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
 					}
 				} else {
 					defined := table_contains(*cpp.functions, current(cpp).view).(int);
 					defined |= table_contains(*cpp.objects, current(cpp).view).(int);
-					delete(cpp);
+					skip(cpp);
 					if defined {
 						expanded := expand(cpp, unary_op);
 						if expanded.count > 0 {
 							// This keeps the cursor at the start of the expression prior to insertion
 							for expanded {
-								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+								insert(cpp, it);
 							}
 							lhs = eval(cpp);
 						}
 					}
 				}
 			case .LeftParenthesis;
-				delete(cpp); // '('
+				skip(cpp); // '('
 				lhs = eval(cpp);
-				delete(cpp); // ')'
+				skip(cpp); // ')'
 			case .Minus;
-				delete(cpp);
+				skip(cpp);
 				lhs = -eval(cpp);
 			case .Plus;
-				delete(cpp);
+				skip(cpp);
 				lhs = +eval(cpp);
 			case .Bang;
-				delete(cpp);
+				skip(cpp);
 				lhs = xx !eval(cpp);
 			case .Tilde;
-				delete(cpp);
+				skip(cpp);
 				lhs = ~eval(cpp);
 			case .Number;
-				lhs = to_integer(trim_suffix(delete(cpp).view));
+				lhs = to_integer(trim_suffix(skip(cpp).view));
 			case; 
 				print("Unexpected unary operator");
 				assert(false);
@@ -842,7 +856,7 @@ preprocess :: (t: *Tokeniser) {
 			if prec < min_prec break;
 
 			if !is_binary_op(op) break;
-			delete(cpp);
+			skip(cpp);
 			next_min := prec + is_left_associative(op).(int);
 			if op.type == {
 				case .Asterisk;
@@ -883,7 +897,7 @@ preprocess :: (t: *Tokeniser) {
 					lhs = xx (lhs.(bool) || rhs);
 				case .Question;
 					on_true := eval(cpp);
-					delete(cpp); // :
+					skip(cpp); // :
 					on_false := eval(cpp, next_min);
 					if lhs != 0 {
 						lhs = on_true;
@@ -896,9 +910,9 @@ preprocess :: (t: *Tokeniser) {
 		return lhs;
 	}
 
-	delete_line :: (cpp: *Preprocessor) {
+	skip_line :: (cpp: *Preprocessor) {
 		while current(cpp).type != .Newline {
-			delete(cpp);
+			skip(cpp);
 		}
 	}
 
@@ -906,7 +920,7 @@ preprocess :: (t: *Tokeniser) {
 		return cpp.at == cpp.t.tokens.count;
 	}
 
-	delete_until_el :: (cpp: *Preprocessor) {
+	skip_until_el :: (cpp: *Preprocessor) {
 		depth := 0;
 		while !end(cpp) {
 			if current(cpp).type == .Hash {
@@ -920,9 +934,8 @@ preprocess :: (t: *Tokeniser) {
 					return;
 				}
 			}
-			delete(cpp);
+			skip(cpp);
 		}
-		return;
 	}
 
 	Cond_State :: struct {
@@ -940,44 +953,48 @@ preprocess :: (t: *Tokeniser) {
 	while cpp.at < t.tokens.count {
 		if current(*cpp).type == {
 			case .Hash;
-				delete(*cpp);
-				directive := delete(*cpp);
+				skip(*cpp);
+				directive := skip(*cpp);
 				if directive.view == {
 					case "warning";
-						delete_line(*cpp);
+						skip_line(*cpp);
 					case "error";
-						delete_line(*cpp);
+						skip_line(*cpp);
 					case "pragma";
-						delete_line(*cpp);
+						skip_line(*cpp);
 					case "define";
-						name := delete(*cpp);
+						name := skip(*cpp);
 						is_function_definition := false;
 						if current(*cpp).type == .LeftParenthesis {
 							// They need to be next to eachother
 							if name.view.data + name.view.count == current(*cpp).view.data {
 								is_function_definition = true;
-								delete(*cpp);
+								skip(*cpp);
 								function: Function;
 								while current(*cpp).type != .RightParenthesis {
-									array_add(*function.params, delete(*cpp));
+									if current(*cpp).type == .Ellipsis {
+										function.variadic = true;
+									} else {
+										array_add(*function.params, skip(*cpp));
+									}
 									if current(*cpp).type == .Comma {
-										delete(*cpp);
+										skip(*cpp);
 									}
 								}
-								delete(*cpp);
+								skip(*cpp);
 								while current(*cpp).type != .Newline {
-									token := delete(*cpp);
+									token := skip(*cpp);
 									array_add(*function.tokens, token);
 								}
 								table_add(*cpp.functions, name.view, function);
-								delete_line(*cpp);
+								skip_line(*cpp);
 							}
 						}
 
 						if !is_function_definition {
 							object: Object;
 							while current(*cpp).type != .Newline {
-								token := delete(*cpp);
+								token := skip(*cpp);
 								array_add(*object.tokens, token);
 							}
 							table_add(*cpp.objects, name.view, object);
@@ -988,16 +1005,16 @@ preprocess :: (t: *Tokeniser) {
 						"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.41.34120\\include"];
 						
 						if current(*cpp).type == .Less {
-							delete(*cpp);
+							skip(*cpp);
 							path := "";
 							while current(*cpp).type != .Greater {
-								path = join(path, delete(*cpp).view);
+								path = join(path, skip(*cpp).view);
 							}
-							delete(*cpp);
+							skip(*cpp);
 							file: string;
 							found := false;
 							for includes {
-								full_path := tprint("%\\%", it, path);
+								full_path := tprint("%/%", it, path);
 								if file_exists(full_path) {
 									file, found = read_entire_file(full_path);
 									cpp.path = full_path;
@@ -1011,38 +1028,38 @@ preprocess :: (t: *Tokeniser) {
 							}
 						}
 					case "undef";
-						table_remove(*cpp.objects, delete(*cpp).view);
+						table_remove(*cpp.objects, skip(*cpp).view);
 					case "elif";
 						if peek(cond_stack).branch_taken {
-							delete_until_el(*cpp);
+							skip_until_el(*cpp);
 						} else {
 							expr := eval(*cpp);
 							if expr != 0 {
 								peek(cond_stack).branch_taken = true;
-            					delete_line(*cpp);
+            					skip_line(*cpp);
 							} else {
-								delete_until_el(*cpp);
+								skip_until_el(*cpp);
 							}
 						}
 					case "else";
 						i := 0;
-						delete_line(*cpp);
+						skip_line(*cpp);
 						if peek(cond_stack).branch_taken {
-							delete_until_el(*cpp);
+							skip_until_el(*cpp);
 						}
 					case "endif";
 						pop_cond();
-						delete_line(*cpp);
+						skip_line(*cpp);
 					case "ifdef"; #through;
 					case "ifndef"; #through;
 					case "if";
 						expr: int;
 						if directive.view == "ifdef" {
-							name := delete(*cpp);
+							name := skip(*cpp);
 							expr = table_contains(*cpp.objects, name.view).(int);
 							expr |= table_contains(*cpp.functions, name.view).(int);
 						} else if directive.view == "ifndef" {
-							name := delete(*cpp);
+							name := skip(*cpp);
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
@@ -1050,7 +1067,7 @@ preprocess :: (t: *Tokeniser) {
 						}
 						push_cond(expr != 0);
 						if expr == 0 {
-							delete_until_el(*cpp);
+							skip_until_el(*cpp);
 						}
 				}
 			case .Identifier;
@@ -1058,19 +1075,22 @@ preprocess :: (t: *Tokeniser) {
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
-					delete(*cpp);
+					skip(*cpp);
 					expanded := expand(*cpp, name);
 					for expanded {
-						array_insert_at(*cpp.t.tokens, it, cpp.at);
-						skip(*cpp);
+						insert(*cpp, it);
+						cpp.at += 1;
 					}
 				} else {
-					skip(*cpp);
+					// THis doesn't seem right.
+					paste(*cpp);
 				}
 			case;
-				skip(*cpp);
+				paste(*cpp);
 		}
 	}
+
+	return cpp.tokens;
 }
 
 skip :: (p: *Parser) {
@@ -2377,7 +2397,7 @@ main :: () {
 	test = "enum { A = 0, B = 1, C = 2 } cba;";
 
 test = #string STRING
-#include <time.h>
+#include <math.h>
 
 #if !defined(RUNGALO_BUNGALO) && defined(RINKY_DINKY)
 #endif
@@ -2759,18 +2779,23 @@ int main(int argc, char *argv[]) {
 	tokeniser.source = test;
 	tokenise(*tokeniser);
 
-	preprocess(*tokeniser);
+	tokens := preprocess(*tokeniser);
+
+	output: string;
+	for tokens {
+		output = join(output, tprint("% ", it.view));
+	}
+	write_entire_file("processed.c", output);
 
 	tokens_no_newlines: [..]Token;
-	for tokeniser.tokens {
+	for tokens {
 		if it.type != .Newline {
 			array_add(*tokens_no_newlines, it);
 		}
 	}
-	tokeniser.tokens = tokens_no_newlines;
 
 	parser: Parser;
-	parser.tokens = tokeniser.tokens;
+	parser.tokens = tokens_no_newlines;
 
 	tu := parse_translation_unit(*parser);
 
