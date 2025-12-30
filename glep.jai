@@ -673,17 +673,23 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 	}
 	cpp: Preprocessor;
 	cpp.t = t;
-	current :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at]; }
+	current :: (cpp: *Preprocessor) -> Token { 
+		token := cpp.t.tokens[cpp.at];
+		print("current: %\n", token.view);
+		return token;
+	}
 	next :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at + 1]; }
 	peek :: (cpp: *Preprocessor, amount := 0) -> Token { return cpp.t.tokens[min(cpp.t.tokens.count - 1, cpp.at + amount)]; }
 	skip :: (cpp: *Preprocessor) -> Token { 
 		result := cpp.t.tokens[cpp.at];
 		cpp.at += 1;
+		print("skip: %\n", result.view);
 		return result;
 	}
 
 	paste :: (cpp: *Preprocessor) {
 		token := skip(cpp);
+		print("paste: %\n", token.view);
 		array_add(*cpp.tokens, token);
 	}
 
@@ -841,11 +847,16 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 					}
 				} else {
 					name := tokens[at.*];
+					if name.view == "T05_QUAD" {
+						a := 5;
+					}
 					defined := table_contains(*cpp.functions, name.view).(int);
 					defined |= table_contains(*cpp.objects, name.view).(int);
 					at.* += 1;
 					if defined {
+						print("BEFORE EXPANDED: %\n", tokens);
 						expanded := expand(cpp, name, tokens, at);
+						print("AFTER EXPANDED: %", expanded);
 						combined: [..]Token;
 						array_copy(*combined, tokens);
 						for expanded {
@@ -1003,6 +1014,9 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						skip_line(*cpp);
 					case "define";
 						name := skip(*cpp);
+						if name.view == "T05_DOUBLE" {
+							a := 5;
+						}
 						is_function_definition := false;
 						if current(*cpp).type == .LeftParenthesis {
 							// They need to be next to eachother
@@ -2333,7 +2347,7 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/minimal_unit_tests.c");
+	minimal := read_entire_file("tests/cpp/minimal.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
