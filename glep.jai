@@ -722,37 +722,51 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 	add_builtin(*cpp, "__SIZEOF_INT__", .{"4", .Number});
 	add_builtin(*cpp, "__SIZEOF_LONG__", .{"8", .Number});
 
-	expand :: (cpp: *Preprocessor, name: Token) -> [..]Token {
-		expand_single :: (cpp: *Preprocessor, name: Token, tokens: *[..]Token) {
+	expand :: (cpp: *Preprocessor, name: Token, tokens: [..]Token, at: *int) -> [..]Token {
+		expand_single :: (cpp: *Preprocessor, name: Token, tokens: [..]Token, at: *int, expanded: *[..]Token) {
 			if name.type == .Identifier {
 				function := table_find_pointer(*cpp.functions, name.view);
 				object := table_find_pointer(*cpp.objects, name.view);
 				if function && !function.visited {
 					function.visited = true;
 					args: [..][..]Token;
-					skip(cpp);
-					arg := 0;
-					while current(cpp).type != .RightParenthesis {
+					at.* += 1;
+					while tokens[at.*].type != .RightParenthesis {
 						arg_tokens: [..]Token;
 						paren_depth := 0;
 						while true {
-							if current(cpp).type == .LeftParenthesis {
+							if tokens[at.*].type == .LeftParenthesis {
 								paren_depth += 1;
-							} else if current(cpp).type == .RightParenthesis {
+							} else if tokens[at.*].type == .RightParenthesis {
 								if paren_depth == 0 break;
 								paren_depth -= 1;
-							} else if current(cpp).type == .Comma && paren_depth == 0 {
+							} else if tokens[at.*].type == .Comma && paren_depth == 0 {
 								break;
 							}
-							array_add(*arg_tokens, skip(cpp));
+							array_add(*arg_tokens, tokens[at.*]);
+							at.* += 1;
 						}
 						array_add(*args, arg_tokens);
-						if current(cpp).type == .Comma {
-							arg += 1;
-							skip(cpp);
+						if tokens[at.*].type == .Comma {
+							at.* += 1;
 						}
 					}
-					skip(cpp);
+					at.* += 1;
+
+					va_args: [..]Token;
+					if function.variadic {
+						for function.params.count..args.count-1 {
+							if va_args.count > 0 {
+								array_add(*va_args, .{",", .Comma});
+							}
+							for args[it] {
+								array_add(*va_args, it);
+							}
+						}
+					}
+
+
+
 					find_param :: (params: [..]Token, name: string) -> bool, int {
 						for params {
 							if name == it.view {
@@ -762,143 +776,152 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						return false, 0;
 					}
 					for function.tokens {
-						found, param_index := find_param(function.params, it.view);
-						if found {
-							for args[param_index] {
-								array_add(tokens, it);
+						if function.variadic  && it.view == "__VA_ARGS__" {
+							for va_args {
+								array_add(expanded, it);
 							}
 						} else {
-							expand_single(cpp, it, tokens);
+							found, param_index := find_param(function.params, it.view);
+							if found {
+								for args[param_index] {
+									array_add(expanded, it);
+								}
+							} else {
+								inner_at := 0;
+								expand_single(cpp, it, tokens, *inner_at, expanded);
+							}
 						}
 					}
 					function.visited = false;
 				} else if object && !object.visited {
 					object.visited = true;
 					for object.tokens {
-						expand_single(cpp, it, tokens);
+						inner_at := 0;
+						expand_single(cpp, it, tokens, *inner_at, expanded);
 					}
 					object.visited = false;
 				} else {
-					//array_insert_at(*cpp.t.tokens, name, cpp.at);
-					//skip(cpp);
-					array_add(tokens, name);
+					array_add(expanded, name);
 				}
 			} else {
-				//array_insert_at(*cpp.t.tokens, name, cpp.at);
-				//skip(cpp);
-				array_add(tokens, name);
+				array_add(expanded, name);
 			}
 		}
-		result: [..]Token;
-		expand_single(cpp, name, *result);
-		return result;
+		expanded: [..]Token;
+		expand_single(cpp, name, tokens, at, *expanded);
+		return expanded;
 	}
- 
-	eval :: (cpp: *Preprocessor, min_prec := 0) -> int {
+
+	eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int {
 		lhs := 0;
-		unary_op := current(cpp);
+		unary_op := tokens[at.*];
 		if unary_op.type == {
 			case .Identifier;
 				if unary_op.view == "defined" {
-					skip(cpp);
-					if current(cpp).type == .LeftParenthesis {
-						skip(cpp);
-						name := skip(cpp);
+					at.* += 1;
+					if tokens[at.*].type == .LeftParenthesis {
+						at.* += 1;
+						name := tokens[at.*];
+						at.* += 1;
 						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
-						skip(cpp);
+						at.* += 1;
 					} else {
-						name := skip(cpp);
+						name := tokens[at.*];
+						at.* += 1;
 						lhs = table_contains(*cpp.functions, name.view).(int);
 						lhs |= table_contains(*cpp.objects, name.view).(int);
 					}
 				} else {
-					defined := table_contains(*cpp.functions, current(cpp).view).(int);
-					defined |= table_contains(*cpp.objects, current(cpp).view).(int);
-					skip(cpp);
+					name := tokens[at.*];
+					defined := table_contains(*cpp.functions, name.view).(int);
+					defined |= table_contains(*cpp.objects, name.view).(int);
+					at.* += 1;
 					if defined {
-						expanded := expand(cpp, unary_op);
-						if expanded.count > 0 {
-							// This keeps the cursor at the start of the expression prior to insertion
-							for expanded {
-								insert(cpp, it);
-							}
-							lhs = eval(cpp);
+						expanded := expand(cpp, name, tokens, at);
+						combined: [..]Token;
+						array_copy(*combined, tokens);
+						for expanded {
+							array_insert_at(*combined, it, at.* + it_index);
 						}
+						lhs = eval(cpp, combined, at);
+					} else {
+						lhs = 0;
 					}
 				}
 			case .LeftParenthesis;
-				skip(cpp); // '('
-				lhs = eval(cpp);
-				skip(cpp); // ')'
+				at.* += 1; // '('
+				lhs = eval(cpp, tokens, at);
+				at.* += 1; // ')'
 			case .Minus;
-				skip(cpp);
-				lhs = -eval(cpp);
+				at.* += 1;
+				lhs = -eval(cpp, tokens, at);
 			case .Plus;
-				skip(cpp);
-				lhs = +eval(cpp);
+				at.* += 1;
+				lhs = +eval(cpp, tokens, at);
 			case .Bang;
-				skip(cpp);
-				lhs = xx !eval(cpp);
+				at.* += 1;
+				lhs = xx !eval(cpp, tokens, at);
 			case .Tilde;
-				skip(cpp);
-				lhs = ~eval(cpp);
+				at.* += 1;
+				lhs = ~eval(cpp, tokens, at);
 			case .Number;
-				lhs = to_integer(trim_suffix(skip(cpp).view));
+				lhs = to_integer(trim_suffix(tokens[at.*].view));
+				at.* += 1;
 			case; 
-				print("Unexpected unary operator");
+				print("Unexpected unary operator: %\n", unary_op.type);
 				assert(false);
 		}
 
-		while true {
-			op := current(cpp);
+		while at.* < tokens.count {
+			op := tokens[at.*];
 			prec := precedence_of(op);
 			if prec < min_prec break;
 
 			if !is_binary_op(op) break;
-			skip(cpp);
+			at.* += 1;
 			next_min := prec + is_left_associative(op).(int);
 			if op.type == {
 				case .Asterisk;
-					lhs = lhs * eval(cpp, next_min);
+					lhs = lhs * eval(cpp, tokens, at, next_min);
 				case .ForwardSlash;
-					lhs = lhs / eval(cpp, next_min);
+					lhs = lhs / eval(cpp, tokens, at, next_min);
 				case .Plus;
-					lhs = lhs + eval(cpp, next_min);
+					lhs = lhs + eval(cpp, tokens, at, next_min);
 				case .Minus;
-					lhs = lhs - eval(cpp, next_min);
+					lhs = lhs - eval(cpp, tokens, at, next_min);
 				case .LessLess;
-					lhs = lhs << eval(cpp, next_min);
+					lhs = lhs << eval(cpp, tokens, at, next_min);
 				case .GreaterGreater;
-					lhs = lhs >> eval(cpp, next_min);
+					lhs = lhs >> eval(cpp, tokens, at, next_min);
 				case .Less;
-					lhs = xx (lhs < eval(cpp, next_min));
+					lhs = xx (lhs < eval(cpp, tokens, at, next_min));
 				case .Greater;
-					lhs = xx (lhs > eval(cpp, next_min));
+					lhs = xx (lhs > eval(cpp, tokens, at, next_min));
 				case .LessEqual;
-					lhs = xx (lhs <= eval(cpp, next_min));
+					lhs = xx (lhs <= eval(cpp, tokens, at, next_min));
 				case .GreaterEqual;
-					lhs = xx (lhs >= eval(cpp, next_min));
+					lhs = xx (lhs >= eval(cpp, tokens, at, next_min));
 				case .EqualEqual;
-					lhs = xx (lhs == eval(cpp, next_min));
+					lhs = xx (lhs == eval(cpp, tokens, at, next_min));
 				case .BangEqual;
-					lhs = xx (lhs != eval(cpp, next_min));
+					lhs = xx (lhs != eval(cpp, tokens, at, next_min));
 				case .Ampersand;
-					lhs = lhs & eval(cpp, next_min);
+					lhs = lhs & eval(cpp, tokens, at, next_min);
 				case .Pipe;
-					lhs = lhs | eval(cpp, next_min);
+					lhs = lhs | eval(cpp, tokens, at, next_min);
 				case .Caret;
-					lhs = lhs ^ eval(cpp, next_min);
+					lhs = lhs ^ eval(cpp, tokens, at, next_min);
 				case .AmpersandAmpersand;
-					rhs := eval(cpp, next_min).(bool);
+					rhs := eval(cpp, tokens, at, next_min).(bool);
 					lhs = xx (lhs.(bool) && rhs);
 				case .PipePipe;
-					rhs :=  eval(cpp, next_min).(bool);
+					rhs := eval(cpp, tokens, at, next_min).(bool);
 					lhs = xx (lhs.(bool) || rhs);
 				case .Question;
-					on_true := eval(cpp);
-					skip(cpp); // :
-					on_false := eval(cpp, next_min);
+					on_true := eval(cpp, tokens, at);
+					at.* += 1; // ':'
+					on_false := eval(cpp, tokens, at, next_min);
 					if lhs != 0 {
 						lhs = on_true;
 					} else {
@@ -914,6 +937,15 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 		while current(cpp).type != .Newline {
 			skip(cpp);
 		}
+	}
+
+	copy_line :: (cpp: *Preprocessor) -> [..]Token {
+		result: [..]Token;
+		while current(cpp).type != .Newline {
+			array_add(*result, skip(cpp));
+		}
+		skip(cpp);
+		return result;
 	}
 
 	end :: (cpp: *Preprocessor) -> bool {
@@ -974,6 +1006,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 								while current(*cpp).type != .RightParenthesis {
 									if current(*cpp).type == .Ellipsis {
 										function.variadic = true;
+										skip(*cpp);
 									} else {
 										array_add(*function.params, skip(*cpp));
 									}
@@ -1033,10 +1066,10 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						if peek(cond_stack).branch_taken {
 							skip_until_el(*cpp);
 						} else {
-							expr := eval(*cpp);
+							start := 0;
+							expr := eval(*cpp, copy_line(*cpp), *start);
 							if expr != 0 {
 								peek(cond_stack).branch_taken = true;
-            					skip_line(*cpp);
 							} else {
 								skip_until_el(*cpp);
 							}
@@ -1063,7 +1096,8 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
-							expr = eval(*cpp);
+							start := 0;
+							expr = eval(*cpp, copy_line(*cpp), *start);
 						}
 						push_cond(expr != 0);
 						if expr == 0 {
@@ -1076,7 +1110,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
 					skip(*cpp);
-					expanded := expand(*cpp, name);
+					expanded := expand(*cpp, name, cpp.t.tokens, *cpp.at);
 					for expanded {
 						insert(*cpp, it);
 						cpp.at += 1;
@@ -1167,6 +1201,8 @@ is_type_specifier :: (token: Token) -> bool {
 	case "double";   #through;
 	case "signed";   #through;
 	case "unsigned"; #through;
+	case "_Float16"; #through;
+	case "_Bool"; #through;
 	case "bool";
 		return true;
 	case;
