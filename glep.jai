@@ -1856,8 +1856,9 @@ main :: () {
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
 	// minimal = #string STRING
-	// #if -(-5) != 5 || +5 != 5 || !0 != 1 || !!1 != 1
-	// #error "TEST 20 FAILED: Unary operators"
+	// #define T04_ADD(a, b) ((a) + (b))
+	// #if T04_ADD(2, 3) != 5
+	// #error "TEST 04 FAILED: Function macro basic"
 	// #endif
 	// STRING
 	tokeniser: Tokeniser;

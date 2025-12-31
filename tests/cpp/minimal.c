@@ -79,7 +79,7 @@ int T09_PASTE(var, 9) = 9;
 #define T12_A X
 #define T12_B Y
 #define T12_XY 300
-#define T12_PASTE(a, b) a ## b
+#define T12_PASTE(a, b) a ##b
 #define T12_XPASTE(a, b) T12_PASTE(a, b)
 #if T12_XPASTE(T12_A, T12_B) != 300
 #error "TEST 12 FAILED: Indirect paste prescans"
