@@ -657,11 +657,15 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 		visited: bool;
 		tokens: [..]Token;
 	}
+
 	Function :: struct {
 		visited: bool;
 		variadic: bool;
 		params: [..]Token;
 		tokens: [..]Token;
+	}
+	Cursor :: struct {
+		at: int;
 	}
 	Preprocessor :: struct {
 		at: int;
@@ -735,36 +739,62 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 	add_builtin(*cpp, "__SIZEOF_INT__", .{"4", .Number});
 	add_builtin(*cpp, "__SIZEOF_LONG__", .{"8", .Number});
 
-	expand :: (cpp: *Preprocessor, name: Token, tokens: [..]Token, at: *int) -> [..]Token {
-		expand_single :: (cpp: *Preprocessor, name: Token, tokens: [..]Token, at: *int, expanded: *[..]Token) {
-			if name.type == .Identifier {
-				function := table_find_pointer(*cpp.functions, name.view);
-				object := table_find_pointer(*cpp.objects, name.view);
+	subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]Token, va_args: [..]Token) -> [..]Token {
+		result: [..]Token;
+		for body {
+			matched_param := false;
+			for param, param_index: params {
+				if param.view == it.view {
+					for arg: args[param_index] {
+						array_add(*result, arg);
+					}
+					matched_param = true;
+				}
+			}
+			if matched_param continue;
+			if it.view == "__VA_ARGS__" {
+				for va_args {
+					array_add(*result, it);
+				}
+			} else {
+				array_add(*result, it);
+			}
+		}
+		return result;
+	}
+
+	expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
+		result: [..]Token;
+		at := 0;
+		while at < tokens.count {
+			token := tokens[at];
+			if token.type == .Identifier {
+				function := table_find_pointer(*cpp.functions, token.view);
+				object := table_find_pointer(*cpp.objects, token.view);
+				at += 1;
 				if function && !function.visited {
-					function.visited = true;
 					args: [..][..]Token;
-					at.* += 1;
-					while tokens[at.*].type != .RightParenthesis {
+					at += 1;
+					while tokens[at].type != .RightParenthesis {
 						arg_tokens: [..]Token;
 						paren_depth := 0;
 						while true {
-							if tokens[at.*].type == .LeftParenthesis {
+							if tokens[at].type == .LeftParenthesis {
 								paren_depth += 1;
-							} else if tokens[at.*].type == .RightParenthesis {
+							} else if tokens[at].type == .RightParenthesis {
 								if paren_depth == 0 break;
 								paren_depth -= 1;
-							} else if tokens[at.*].type == .Comma && paren_depth == 0 {
+							} else if tokens[at].type == .Comma && paren_depth == 0 {
 								break;
 							}
-							array_add(*arg_tokens, tokens[at.*]);
-							at.* += 1;
+							array_add(*arg_tokens, tokens[at]);
+							at += 1;
 						}
 						array_add(*args, arg_tokens);
-						if tokens[at.*].type == .Comma {
-							at.* += 1;
+						if tokens[at].type == .Comma {
+							at += 1;
 						}
 					}
-					at.* += 1;
 
 					va_args: [..]Token;
 					if function.variadic {
@@ -778,51 +808,36 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						}
 					}
 
-
-
-					find_param :: (params: [..]Token, name: string) -> bool, int {
-						for params {
-							if name == it.view {
-								return true, it_index;
-							}
-						}
-						return false, 0;
+					at += 1;
+					body := subst(cpp, function.tokens, function.params, args, va_args);
+					print("SUBST BODY: ");
+					for body {
+						print("%", it.view);
 					}
-					for function.tokens {
-						if function.variadic  && it.view == "__VA_ARGS__" {
-							for va_args {
-								array_add(expanded, it);
-							}
-						} else {
-							found, param_index := find_param(function.params, it.view);
-							if found {
-								for args[param_index] {
-									array_add(expanded, it);
-								}
-							} else {
-								inner_at := 0;
-								expand_single(cpp, it, tokens, *inner_at, expanded);
-							}
-						}
-					}
+					print("\n");
+					function.visited = true;
+					expanded := expand(cpp, body);
 					function.visited = false;
+					for expanded {
+						array_add(*result, it);
+					}
 				} else if object && !object.visited {
 					object.visited = true;
-					for object.tokens {
-						inner_at := 0;
-						expand_single(cpp, it, tokens, *inner_at, expanded);
-					}
+					expanded := expand(cpp, object.tokens);
 					object.visited = false;
+					for expanded {
+						array_add(*result, it);
+					}
 				} else {
-					array_add(expanded, name);
+					array_add(*result, token);
+					at += 1;
 				}
 			} else {
-				array_add(expanded, name);
+				array_add(*result, token);
+				at += 1;
 			}
 		}
-		expanded: [..]Token;
-		expand_single(cpp, name, tokens, at, *expanded);
-		return expanded;
+		return result;
 	}
 
 	eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int {
@@ -846,26 +861,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						lhs |= table_contains(*cpp.objects, name.view).(int);
 					}
 				} else {
-					name := tokens[at.*];
-					if name.view == "T05_QUAD" {
-						a := 5;
-					}
-					defined := table_contains(*cpp.functions, name.view).(int);
-					defined |= table_contains(*cpp.objects, name.view).(int);
-					at.* += 1;
-					if defined {
-						print("BEFORE EXPANDED: %\n", tokens);
-						expanded := expand(cpp, name, tokens, at);
-						print("AFTER EXPANDED: %", expanded);
-						combined: [..]Token;
-						array_copy(*combined, tokens);
-						for expanded {
-							array_insert_at(*combined, it, at.* + it_index);
-						}
-						lhs = eval(cpp, combined, at);
-					} else {
-						lhs = 0;
-					}
+					assert(false);
 				}
 			case .LeftParenthesis;
 				at.* += 1; // '('
@@ -1040,6 +1036,10 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 									token := skip(*cpp);
 									array_add(*function.tokens, token);
 								}
+
+								print("FUNCTION PARAMS: %\n", function.params);
+								print("FUNCTION BODY: %\n", function.tokens);
+
 								table_add(*cpp.functions, name.view, function);
 								skip_line(*cpp);
 							}
@@ -1117,8 +1117,19 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
+							to_expand := copy_line(*cpp);
+							print("TO EXPAND: %\n\n", to_expand);
+							for to_expand {
+								print("%", it.view);
+							}
+							print("\n");
+							expanded := expand(*cpp, to_expand);
+							for expanded {
+								print("%", it.view);
+							}
+							print("\n");
 							start := 0;
-							expr = eval(*cpp, copy_line(*cpp), *start);
+							expr = eval(*cpp, expanded, *start);
 						}
 						push_cond(expr != 0);
 						if expr == 0 {
@@ -1130,11 +1141,10 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
-					skip(*cpp);
-					expanded := expand(*cpp, name, cpp.t.tokens, *cpp.at);
+					
+					expanded := expand(*cpp, copy_line(*cpp));
 					for expanded {
 						insert(*cpp, it);
-						cpp.at += 1;
 					}
 				} else {
 					// THis doesn't seem right.
@@ -2348,6 +2358,13 @@ main :: () {
 
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
+	minimal = #string STRING
+	#define T05_DOUBLE(x) ((x) * 2)
+	#define T05_QUAD(x) T05_DOUBLE(T05_DOUBLE(x))
+	#if T05_QUAD(3) != 12
+	#error "TEST 05 FAILED: Nested function macros"
+	#endif
+	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
