@@ -388,14 +388,6 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 		return result;
 	}
 
-	copy_line_no_skip :: (cpp: *Preprocessor) -> [..]Token {
-		result: [..]Token;
-		while current(cpp).type != .Newline {
-			array_add(*result, skip(cpp));
-		}
-		return result;
-	}
-
 	end :: (cpp: *Preprocessor) -> bool {
 		return cpp.at == cpp.t.tokens.count;
 	}
@@ -547,22 +539,22 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 					case "ifndef"; #through;
 					case "if";
 						expr: int;
-						print("#if ");
-						line := copy_line_no_skip(*cpp);
-						for line {
-							print("% ", it);
-						}
-						print("\n");
+						line := copy_line(*cpp);
 						if directive.view == "ifdef" {
-							name := skip(*cpp);
+							name := line[0];
 							expr = table_contains(*cpp.objects, name.view).(int);
 							expr |= table_contains(*cpp.functions, name.view).(int);
 						} else if directive.view == "ifndef" {
-							name := skip(*cpp);
+							name := line[0];
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
-							to_expand := copy_line(*cpp);
+							to_expand := line;
+							print("#if ");
+							for to_expand {
+								print("% ", it.view);
+							}
+							print("\n");
 							no_defineds: [..]Token;
 							at := 0;
 							//print("TO_EXPAND: %\n", to_expand);
@@ -595,6 +587,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							expanded := expand(*cpp, no_defineds);
 							start := 0;
 							expr = eval(*cpp, expanded, *start);
+							print("EVAL: %\n", expr);
 						}
 						push_cond(expr != 0);
 						if expr == 0 {
