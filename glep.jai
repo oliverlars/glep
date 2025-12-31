@@ -1862,10 +1862,10 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/conditional.c");
-	minimal = #string STRING
-	#include <stdio.h>
-	STRING
+	minimal := read_entire_file("tests/cpp/minimal.c");
+	// minimal = #string STRING
+	// #include <stdio.h>
+	// STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);

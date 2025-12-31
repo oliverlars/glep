@@ -133,12 +133,18 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 		it := body[at];
 		if it.type == .Hash {
 			found, index := find_arg(params, args, body[at + 1]);
-			assert(found);
 			stringed: Token;
 			stringed.type = .String;
 			view: string;
-			for args[index] {
-				view = join(view, it.view);
+			if found {
+				for args[index] {
+					view = join(view, it.view);
+				}
+			} else {
+				assert(body[at + 1].view == "__VA_ARGS__");
+				for va_args {
+					view = join(view, it.view);
+				}
 			}
 			stringed.view = view;
 			array_add(*result, stringed);
@@ -152,13 +158,24 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			} else {
 				array_add(*left_tokens, body[at]);
 			}
-			
+
 			right_tokens: [..]Token;
 			found_right, index_right := find_arg(params, args, body[at + 2]);
 			if found_right {
 				right_tokens = args[index_right];
 			} else {
 				array_add(*right_tokens, body[at + 2]);
+			}
+
+			for i: 0..left_tokens.count - 2 {
+				array_add(*result, left_tokens[i]);
+			}
+			
+			glued := glue_tokens(left_tokens[left_tokens.count - 1], right_tokens[0]);
+			array_add(*result, glued);
+			
+			for i: 1..right_tokens.count - 1 {
+				array_add(*result, right_tokens[i]);
 			}
 
 			at += 3;
