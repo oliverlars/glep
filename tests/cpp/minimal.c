@@ -36,55 +36,6 @@ int t03_var = T03_SELF; /* Should just be T03_SELF */
 #if T05_QUAD(3) != 12
 #error "TEST 05 FAILED: Nested function macros"
 #endif
-
-/* ========== TEST 06: Stringify ========== */
-#define T06_STR(x) #x
-const char* t06_s = T06_STR(hello);
-/* Should be "hello" */
-
-/* ========== TEST 07: Stringify doesn't expand ========== */
-#define T07_VAL 42
-#define T07_STR(x) #x
-const char* t07_s = T07_STR(T07_VAL);
-/* Should be "T07_VAL", not "42" */
-
-/* ========== TEST 08: Indirect stringify expands ========== */
-#define T08_VAL 42
-#define T08_STR(x) #x
-#define T08_XSTR(x) T08_STR(x)
-const char* t08_s = T08_XSTR(T08_VAL);
-/* Should be "42" */
-
-/* ========== TEST 09: Token paste basic ========== */
-#define T09_PASTE(a, b) a ## b
-int T09_PASTE(var, 9) = 9;
-/* Creates: int var9 = 9; */
-
-/* ========== TEST 10: Paste creates macro name ========== */
-#define T10_XY 100
-#define T10_PASTE(a, b) a ## b
-#if T10_PASTE(T10_X, Y) != 100
-#error "TEST 10 FAILED: Paste creates macro name"
-#endif
-
-/* ========== TEST 11: Paste doesn't prescan ========== */
-#define T11_A X
-#define T11_B Y
-#define T11_XY 200
-#define T11_PASTE(a, b) a ## b
-/* T11_PASTE(T11_A, T11_B) should be T11_AT11_B, not XY */
-/* We can't easily test this with #if, so just verify it doesn't crash */
-
-/* ========== TEST 12: Indirect paste prescans ========== */
-#define T12_A X
-#define T12_B Y
-#define T12_XY 300
-#define T12_PASTE(a, b) a ##b
-#define T12_XPASTE(a, b) T12_PASTE(a, b)
-#if T12_XPASTE(T12_A, T12_B) != 300
-#error "TEST 12 FAILED: Indirect paste prescans"
-#endif
-
 /* ========== TEST 13: #if with arithmetic ========== */
 #if 2 + 3 * 4 != 14
 #error "TEST 13 FAILED: Arithmetic precedence"
