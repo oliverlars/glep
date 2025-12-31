@@ -1855,15 +1855,9 @@ main :: () {
 
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
-// 	minimal = #string STRING
-// #define T21_EXISTS 1
-// #if !defined(T21_EXISTS)
-// #error "TEST 21 FAILED: defined() true case"
-// #endif
-// #if defined(T21_NOT_EXISTS)
-// #error "TEST 21 FAILED: defined() false case"
-// #endif
-// 	STRING
+	minimal = #string STRING
+	#include <math.h>
+	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
