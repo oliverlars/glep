@@ -859,12 +859,13 @@ is_assign_op :: (token: Token) -> bool {
 
 precedence_of :: (token: Token) -> int {
 	if token.type == {
-		case .Percent;      return 12;
-		case .ForwardSlash; return 12;
-		case .Asterisk;     return 12;
+		case .Percent;      return 13;
+		case .ForwardSlash; return 13;
+		case .Asterisk;     return 13;
 		
-		case .Minus;          return 11;
-		case .Plus;           return 11;
+		case .Minus;          return 12;
+		case .Plus;           return 12;
+
 		case .GreaterGreater; return 11;
 		case .LessLess;       return 11;
 
@@ -1007,8 +1008,6 @@ is_binary_op :: (token: Token) -> bool {
 		case .Asterisk; #through;
 		case .ForwardSlash; #through;
 		case .Bang; #through;
-		case .PlusPlus; #through;
-		case .MinusMinus; #through;
 		case .Tilde; #through;
 		case .Caret;   #through;
 		case .Percent; #through;
@@ -1856,6 +1855,11 @@ main :: () {
 
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
+	minimal = #string STRING
+	#if -(-5) != 5 || +5 != 5 || !0 != 1 || !!1 != 1
+	#error "TEST 20 FAILED: Unary operators"
+	#endif
+	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
