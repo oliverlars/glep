@@ -1855,11 +1855,11 @@ main :: () {
 
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
-	minimal = #string STRING
-	#if -(-5) != 5 || +5 != 5 || !0 != 1 || !!1 != 1
-	#error "TEST 20 FAILED: Unary operators"
-	#endif
-	STRING
+	// minimal = #string STRING
+	// #if -(-5) != 5 || +5 != 5 || !0 != 1 || !!1 != 1
+	// #error "TEST 20 FAILED: Unary operators"
+	// #endif
+	// STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
