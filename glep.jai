@@ -12,6 +12,7 @@
 Token_Type :: enum {
 	Invalid;
 	Hash;
+	HashHash;
 	Newline;
 	Asterisk;
 	Comma;
@@ -433,7 +434,14 @@ tokenise :: (t: *Tokeniser) {
 			case "["; t.at += 1; token.type = .LeftBracket;
 			case "]"; t.at += 1; token.type = .RightBracket;
 			case "?"; t.at += 1; token.type = .Question;
-			case "#"; t.at += 1; token.type = .Hash;
+			case "#";
+				token.type = .Hash;
+				t.at += 1;
+				if t.source[t.at] == "#" {
+					token.type = .HashHash;
+					t.at += 1;
+					token.view.count += 1;
+				}
 			case "\n"; #through;
 			case "\r"; t.at += 1; token.type = .Newline;
 			case "*";
@@ -669,7 +677,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for max(0, p.at-20)..p.at+19 {
+		for max(0, p.at-20)..p.at-1 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -1854,9 +1862,10 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/minimal.c");
+	minimal := read_entire_file("tests/cpp/conditional.c");
 	minimal = #string STRING
-	#include <stdlib.h>
+	#define STR_IT(x) #x
+	const char* no_prescan = STR_IT(FIVE);
 	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;

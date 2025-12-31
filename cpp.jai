@@ -45,7 +45,6 @@ expect :: (cpp: *Preprocessor, token_type: Token_Type) -> Token {
 		print("Expected token % but got %", current(cpp).type, token_type);
 		assert(false);
 	}
-
 	return skip(cpp);
 }
 
@@ -109,19 +108,42 @@ hideset_intersect :: (a: [..]string, b: [..]string) -> [..]string {
 
 subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]Token, va_args: [..]Token) -> [..]Token {
 	result: [..]Token;
-	for body {
-		matched_param := false;
+
+	find_arg :: (params: [..]Token, args: [..][..]Token, token: Token) -> bool, int {
+		found := false;
+		index := 0;
 		for param, param_index: params {
-			if param.view == it.view {
-				expanded_arg := expand(cpp, args[param_index]);
-				for arg: expanded_arg {
-					array_add(*result, arg);
-				}
-				matched_param = true;
+			if param.view == token.view {
+				index = param_index;
+				found = true;
 				break;
 			}
 		}
-		if matched_param continue;
+		return found, index;
+	}
+	for at: 0..body.count-1 {
+		it := body[at];
+		if it.type == .Hash {
+			found, index := find_arg(params, args, body[at + 1]);
+			assert(found);
+			stringed: Token;
+			stringed.type = .String;
+			view: string;
+			for args[index] {
+				view = join(view, it.view);
+			}
+			stringed.view = view;
+			array_add(*result, stringed);
+			at += 1;
+			continue;
+		} else {
+			matched_param, param_index := find_arg(params, args, it);
+			expanded_arg := expand(cpp, args[param_index]);
+			for arg: expanded_arg {
+				array_add(*result, arg);
+			}
+			if matched_param continue;
+		}
 		if it.view == "__VA_ARGS__" {
 			expanded_va := expand(cpp, va_args);
 			for expanded_va {
@@ -367,7 +389,10 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 	add_builtin(*cpp, "__APPLE__", "1", .Number);
 	add_builtin(*cpp, "__MACH__", "1", .Number);
 	add_builtin(*cpp, "__aarch64__", "1", .Number);
+	add_builtin(*cpp, "__arm__", "1", .Number);
 	add_builtin(*cpp, "__arm64__", "1", .Number);
+	add_builtin(*cpp, "__GNUC__", "4", .Number);
+	add_builtin(*cpp, "__GNUC_MINOR__", "2", .Number);
 	add_builtin(*cpp, "__LP64__", "1", .Number);
 	add_builtin(*cpp, "__SIZEOF_POINTER__", "8", .Number);
 	add_builtin(*cpp, "__SIZEOF_INT__", "4", .Number);
@@ -506,6 +531,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 								}
 							}
 							assert(found);
+							print("Loading include %\n", cpp.path);
 							include_tokeniser := tokenise(file);
 							for include_tokeniser.tokens {
 								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
@@ -515,11 +541,21 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 					case "undef";
 						table_remove(*cpp.objects, skip(*cpp).view);
 					case "elif";
+						line := copy_line(*cpp);
+						if peek(cond_stack).branch_taken {
+							print("NOT TAKING ");
+						}
+						print("#elif ");
+						for line {
+							print("% ", it.view);
+						}
+						print("\n");
 						if peek(cond_stack).branch_taken {
 							skip_until_el(*cpp);
 						} else {
 							start := 0;
-							expr := eval(*cpp, copy_line(*cpp), *start);
+							expr := eval(*cpp, line, *start);
+							print("EXPR: %", expr);
 							if expr != 0 {
 								peek(cond_stack).branch_taken = true;
 							} else {
