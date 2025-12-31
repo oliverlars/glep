@@ -106,6 +106,14 @@ hideset_intersect :: (a: [..]string, b: [..]string) -> [..]string {
 	return result;
 }
 
+glue_tokens :: (left: Token, right: Token) -> Token {
+	glued: Token;
+	glued.type = .Identifier;
+	glued.view = join(left.view, right.view);
+	glued.hideset = hideset_intersect(left.hideset, right.hideset);
+	return glued;
+}
+
 subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]Token, va_args: [..]Token) -> [..]Token {
 	result: [..]Token;
 
@@ -135,6 +143,25 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			stringed.view = view;
 			array_add(*result, stringed);
 			at += 1;
+			continue;
+		} else if at + 1 < body.count && body[at + 1].type == .HashHash {
+			left_tokens: [..]Token;
+			found_left, index_left := find_arg(params, args, body[at]);
+			if found_left {
+				left_tokens = args[index_left];
+			} else {
+				array_add(*left_tokens, body[at]);
+			}
+			
+			right_tokens: [..]Token;
+			found_right, index_right := find_arg(params, args, body[at + 2]);
+			if found_right {
+				right_tokens = args[index_right];
+			} else {
+				array_add(*right_tokens, body[at + 2]);
+			}
+
+			at += 3;
 			continue;
 		} else {
 			matched_param, param_index := find_arg(params, args, it);

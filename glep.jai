@@ -1864,8 +1864,7 @@ main :: () {
 
 	minimal := read_entire_file("tests/cpp/conditional.c");
 	minimal = #string STRING
-	#define STR_IT(x) #x
-	const char* no_prescan = STR_IT(FIVE);
+	#include <stdio.h>
 	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
