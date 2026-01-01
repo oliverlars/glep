@@ -182,9 +182,11 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			continue;
 		} else {
 			matched_param, param_index := find_arg(params, args, it);
-			expanded_arg := expand(cpp, args[param_index]);
-			for arg: expanded_arg {
-				array_add(*result, arg);
+			if matched_param {
+				expanded_arg := expand(cpp, args[param_index]);
+				for arg: expanded_arg {
+					array_add(*result, arg);
+				}
 			}
 			if matched_param continue;
 		}
@@ -633,6 +635,9 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							print("#if ");
 							for to_expand {
 								print("% ", it.view);
+								if it.view == "__has_include" {
+									a := 5;
+								}
 							}
 							print("\n");
 							no_defineds: [..]Token;

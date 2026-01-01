@@ -1863,9 +1863,9 @@ main :: () {
 
 
 	minimal := read_entire_file("tests/cpp/minimal.c");
-	// minimal = #string STRING
-	// #include <stdio.h>
-	// STRING
+	minimal = #string STRING
+	#include <stdio.h>
+	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
