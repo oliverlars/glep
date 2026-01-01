@@ -437,8 +437,6 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 	add_builtin(*cpp, "__aarch64__", "1", .Number);
 	add_builtin(*cpp, "__arm__", "1", .Number);
 	add_builtin(*cpp, "__arm64__", "1", .Number);
-	add_builtin(*cpp, "__GNUC__", "4", .Number);
-	add_builtin(*cpp, "__GNUC_MINOR__", "2", .Number);
 	add_builtin(*cpp, "__LP64__", "1", .Number);
 	add_builtin(*cpp, "__SIZEOF_POINTER__", "8", .Number);
 	add_builtin(*cpp, "__SIZEOF_INT__", "4", .Number);
@@ -556,6 +554,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 						}
 					case "include";
 						includes := string.["/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+						"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17",
 						"C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22621.0\\ucrt",
 						"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.41.34120\\include"];
 						
@@ -603,7 +602,7 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							expr := eval(*cpp, line, *start);
 							print("EXPR: %", expr);
 							if expr != 0 {
-								peek(cond_stack).branch_taken = true;
+								peek_pointer(cond_stack).branch_taken = true;
 							} else {
 								skip_until_el(*cpp);
 							}

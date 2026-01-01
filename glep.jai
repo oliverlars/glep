@@ -656,6 +656,12 @@ tokenise :: (t: *Tokeniser) {
 					t.at += 1;
 					token.view.count = t.source.data + t.at - token.view.data - 2;
 					token.view.data += 1;
+				} else {
+					token.type = .Invalid;
+					while !is_ws(t.source[t.at]) {
+						t.at += 1;
+					}
+					token.view.count = t.source.data + t.at - token.view.data - 2;
 				}
 			}
 		}
@@ -1862,7 +1868,7 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/minimal.c");
+	minimal := read_entire_file("tests/cpp/conditional.c");
 	minimal = #string STRING
 	#include <stdio.h>
 	STRING
