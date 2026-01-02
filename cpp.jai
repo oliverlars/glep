@@ -12,40 +12,43 @@ Cursor :: struct {
 }
 Preprocessor :: struct {
 	at: int;
-	t: *Tokeniser;
-	tokens: [..]Token;
-	path: string;
+	path_stack: [..]string;
+	cond_stack: [..]Cond_State;
 	objects: Table(string, Object);
 	functions: Table(string, Function);
 }
 
-current :: (cpp: *Preprocessor) -> Token { 
-	token := cpp.t.tokens[cpp.at];
+Cond_State :: struct {
+	branch_taken: bool;
+}
+	
+push_cond :: (cpp: *Preprocessor, state: bool) #expand {
+	array_add(*cpp.cond_stack, .{state});
+}
+pop_cond :: (cpp: *Preprocessor) {
+	assert(cpp.cond_stack.count > 0);
+	cpp.cond_stack.count -= 1;
+}
+
+current :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { 
+	token := src_tokens[cpp.at];
 	return token;
 }
-next :: (cpp: *Preprocessor) -> Token { return cpp.t.tokens[cpp.at + 1]; }
-peek :: (cpp: *Preprocessor, amount := 0) -> Token { return cpp.t.tokens[min(cpp.t.tokens.count - 1, cpp.at + amount)]; }
-skip :: (cpp: *Preprocessor) -> Token { 
-	result := cpp.t.tokens[cpp.at];
+next :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { return src_tokens[cpp.at + 1]; }
+peek :: (cpp: *Preprocessor, src_tokens: [..]Token, amount := 0) -> Token { return src_tokens[min(src_tokens.count - 1, cpp.at + amount)]; }
+skip :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { 
+	result := src_tokens[cpp.at];
 	cpp.at += 1;
 	return result;
 }
 
-paste :: (cpp: *Preprocessor) {
-	token := skip(cpp);
-	array_add(*cpp.tokens, token);
+paste :: (cpp: *Preprocessor, src_tokens: [..]Token, dst_tokens: *[..]Token) {
+	token := skip(cpp, src_tokens);
+	array_add(dst_tokens, token);
 }
 
-insert :: (cpp: *Preprocessor, token: Token) {
-	array_add(*cpp.tokens, token);
-}
-
-expect :: (cpp: *Preprocessor, token_type: Token_Type) -> Token { 
-	if current(cpp).type != token_type { 
-		print("Expected token % but got %", current(cpp).type, token_type);
-		assert(false);
-	}
-	return skip(cpp);
+insert :: (cpp: *Preprocessor, token: Token, dst_tokens: *[..]Token) {
+	array_add(dst_tokens, token);
 }
 
 add_builtin :: (cpp: *Preprocessor, builtin: string, view: string, type: Token_Type) {
@@ -426,168 +429,221 @@ eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int 
 	return lhs;
 }
 
-preprocess :: (t: *Tokeniser) -> [..]Token {
-	cpp: Preprocessor;
-	cpp.t = t;
+add_all_builtins :: (cpp: *Preprocessor) {
+	add_builtin(cpp, "TARGET_CPU_ARM64", "1", .Number);
+	add_builtin(cpp, "__STDC__", "1", .Number);
+	add_builtin(cpp, "__STDC_VERSION__", "201112L", .Number);
+	add_builtin(cpp, "__APPLE__", "1", .Number);
+	add_builtin(cpp, "__MACH__", "1", .Number);
+	add_builtin(cpp, "__aarch64__", "1", .Number);
+	add_builtin(cpp, "__arm64__", "1", .Number);
+	add_builtin(cpp, "__arm64", "1", .Number);
+	add_builtin(cpp, "__LP64__", "1", .Number);
+	add_builtin(cpp, "_LP64", "1", .Number);
+	add_builtin(cpp, "__SIZEOF_DOUBLE__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_POINTER__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_INT__", "4", .Number);
+	add_builtin(cpp, "__SIZEOF_LONG__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_LONG_DOUBLE__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_LONG_LONG__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_PTRDIFF_T__", "8", .Number);
+	add_builtin(cpp, "__SIZEOF_SHORT__", "2", .Number);
+	add_builtin(cpp, "__SIZEOF_SIZE_T__", "8", .Number);
+	add_builtin(cpp, "__C99_MACRO_WITH_VA_ARGS", "1", .Number);
+}
 
-	add_builtin(*cpp, "__STDC__", "1", .Number);
-	add_builtin(*cpp, "__STDC_VERSION__", "201710L", .Number);
-	add_builtin(*cpp, "__APPLE__", "1", .Number);
-	add_builtin(*cpp, "__MACH__", "1", .Number);
-	add_builtin(*cpp, "__aarch64__", "1", .Number);
-	add_builtin(*cpp, "__arm__", "1", .Number);
-	add_builtin(*cpp, "__arm64__", "1", .Number);
-	add_builtin(*cpp, "__LP64__", "1", .Number);
-	add_builtin(*cpp, "__SIZEOF_POINTER__", "8", .Number);
-	add_builtin(*cpp, "__SIZEOF_INT__", "4", .Number);
-	add_builtin(*cpp, "__SIZEOF_LONG__", "8", .Number);
+preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 
-	skip_line :: (cpp: *Preprocessor) {
-		while current(cpp).type != .Newline {
-			skip(cpp);
+	dst_tokens: [..]Token;
+
+	skip_line :: (cpp: *Preprocessor, src_tokens: [..]Token) {
+		while current(cpp, src_tokens).type != .Newline {
+			skip(cpp, src_tokens);
 		}
 	}
 
-	copy_line :: (cpp: *Preprocessor) -> [..]Token {
+	copy_line :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 		result: [..]Token;
-		while current(cpp).type != .Newline {
-			array_add(*result, skip(cpp));
+		while current(cpp, src_tokens).type != .Newline {
+			array_add(*result, skip(cpp, src_tokens));
 		}
-		skip(cpp);
+		skip(cpp, src_tokens);
 		return result;
 	}
 
-	end :: (cpp: *Preprocessor) -> bool {
-		return cpp.at == cpp.t.tokens.count;
+	end :: (cpp: *Preprocessor, src_tokens: [..]Token) -> bool {
+		return cpp.at == src_tokens.count;
 	}
 
-	skip_until_el :: (cpp: *Preprocessor) {
+	skip_until_el :: (cpp: *Preprocessor, src_tokens: [..]Token) {
 		depth := 0;
-		while !end(cpp) {
-			if current(cpp).type == .Hash {
-				directive := next(cpp).view;
+		while !end(cpp, src_tokens) {
+			if current(cpp, src_tokens).type == .Hash {
+				directive := next(cpp, src_tokens).view;
 				if directive == "if" || directive == "ifdef" || directive == "ifndef" {
 					depth += 1;
 				} else if directive == "endif" {
-					if depth == 0 return;
+					if depth == 0 {
+						//print("\nAFTER ENDIF DEPTH 0: %\n", next(cpp).view);
+						return;
+					}
 					depth -= 1;
 				} else if (directive == "else" || directive == "elif") && depth == 0 {
 					return;
 				}
 			}
-			skip(cpp);
+			skip(cpp, src_tokens);
 		}
 	}
 
-	Cond_State :: struct {
-		branch_taken: bool;
-	}
-
-	cond_stack: [..]Cond_State;
-	push_cond :: (state: bool) #expand {
-		array_add(*cond_stack, .{state});
-	}
-	pop_cond :: () #expand {
-		assert(cond_stack.count > 0);
-		cond_stack.count -= 1;
-	}
-	while cpp.at < t.tokens.count {
-		if current(*cpp).type == {
+	while !end(cpp, src_tokens) {
+		if current(cpp, src_tokens).type == {
 			case .Hash;
-				skip(*cpp);
-				directive := skip(*cpp);
+				skip(cpp, src_tokens);
+				directive := skip(cpp, src_tokens);
 				if directive.view == {
 					case "warning";
 						print("#warning: ");
-						line := copy_line(*cpp);
+						line := copy_line(cpp, src_tokens);
 						for line {
 							print("% ", it.view);
 						}
 						print("\n");
 					case "error";
 						print("#error: ");
-						line := copy_line(*cpp);
+						line := copy_line(cpp, src_tokens);
 						for line {
 							print("% ", it.view);
 						}
 						print("\n");
 					case "pragma";
-						skip_line(*cpp);
+						skip_line(cpp, src_tokens);
 					case "define";
-						name := skip(*cpp);
+						name := skip(cpp, src_tokens);
 						is_function_definition := false;
-						if current(*cpp).type == .LeftParenthesis {
+						if current(cpp, src_tokens).type == .LeftParenthesis {
 							// They need to be next to eachother
-							if name.view.data + name.view.count == current(*cpp).view.data {
+							if name.view.data + name.view.count == current(cpp, src_tokens).view.data {
 								is_function_definition = true;
-								skip(*cpp);
+								skip(cpp, src_tokens);
 								function: Function;
-								while current(*cpp).type != .RightParenthesis {
-									if current(*cpp).type == .Ellipsis {
+								while current(cpp, src_tokens).type != .RightParenthesis {
+									if current(cpp, src_tokens).type == .Ellipsis {
 										function.variadic = true;
-										skip(*cpp);
+										skip(cpp, src_tokens);
 									} else {
-										array_add(*function.params, skip(*cpp));
+										array_add(*function.params, skip(cpp, src_tokens));
 									}
-									if current(*cpp).type == .Comma {
-										skip(*cpp);
+									if current(cpp, src_tokens).type == .Comma {
+										skip(cpp, src_tokens);
 									}
 								}
-								skip(*cpp);
-								while current(*cpp).type != .Newline {
-									token := skip(*cpp);
+								skip(cpp, src_tokens);
+								while current(cpp, src_tokens).type != .Newline {
+									token := skip(cpp, src_tokens);
 									array_add(*function.tokens, token);
 								}
 
 								table_add(*cpp.functions, name.view, function);
-								skip_line(*cpp);
+								skip_line(cpp, src_tokens);
 							}
 						}
 
 						if !is_function_definition {
 							object: Object;
-							while current(*cpp).type != .Newline {
-								token := skip(*cpp);
+							while current(cpp, src_tokens).type != .Newline {
+								token := skip(cpp, src_tokens);
 								array_add(*object.tokens, token);
 							}
 							table_add(*cpp.objects, name.view, object);
 						}
 					case "include";
-						includes := string.["/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
-						"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17",
-						"C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22621.0\\ucrt",
-						"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.41.34120\\include"];
-						
-						if current(*cpp).type == .Less {
-							skip(*cpp);
-							path := "";
-							while current(*cpp).type != .Greater {
-								path = join(path, skip(*cpp).view);
+						includes := string.[
+							"/usr/local/include",
+							"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include",
+							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+							"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include",
+							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks",
+							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks",
+						];
+						if current(cpp, src_tokens).type == .String {
+							include_path := skip(cpp, src_tokens).view;
+							file: string;
+							found := false;
+							current_path := parse_path(peek(cpp.path_stack));
+							current_path.words.count -= 1;
+							resolved_path := parse_path(tprint("%/%", path_to_string(current_path), include_path));
+							path := path_to_string(resolved_path);
+							print("RESOLVED: %\n", path);
+							print("Loading include %\n", peek(cpp.path_stack));
+							file, found = read_entire_file(path);
+							if found {
+								array_add(*cpp.path_stack, path);
+								include_tokeniser := tokenise(file);
+								at := cpp.at;
+								cpp.at = 0;
+								include_tokens := preprocess(cpp, include_tokeniser.tokens);
+								for include_tokens {
+									array_add(*dst_tokens, it);
+								}
+								cpp.at = at;
+								cpp.path_stack.count -= 1;
+							} else {
+								for includes {
+									full_path := tprint("%/%", it, include_path);
+									if file_exists(full_path) {
+										file, found = read_entire_file(full_path);
+										array_add(*cpp.path_stack, full_path);
+										break;
+									}
+								}
+								assert(found);
+								print("Loading include %\n", peek(cpp.path_stack));
+								include_tokeniser := tokenise(file);
+								at := cpp.at;
+								cpp.at = 0;
+								include_tokens := preprocess(cpp, include_tokeniser.tokens);
+								for include_tokens {
+									array_add(*dst_tokens, it);
+								}
+								cpp.at = at;
+								cpp.path_stack.count -= 1;
 							}
-							skip(*cpp);
+						} else if current(cpp, src_tokens).type == .Less {
+							skip(cpp, src_tokens);
+							path := "";
+							while current(cpp, src_tokens).type != .Greater {
+								path = join(path, skip(cpp, src_tokens).view);
+							}
+							skip(cpp, src_tokens);
 							file: string;
 							found := false;
 							for includes {
 								full_path := tprint("%/%", it, path);
 								if file_exists(full_path) {
 									file, found = read_entire_file(full_path);
-									cpp.path = full_path;
+									array_add(*cpp.path_stack, full_path);
 									break;
 								}
 							}
 							assert(found);
-							print("Loading include %\n", cpp.path);
+							print("Loading include %\n", peek(cpp.path_stack));
 							include_tokeniser := tokenise(file);
-							for include_tokeniser.tokens {
-								array_insert_at(*cpp.t.tokens, it, cpp.at + it_index);
+							at := cpp.at;
+							cpp.at = 0;
+							include_tokens := preprocess(cpp, include_tokeniser.tokens);
+							for include_tokens {
+								array_add(*dst_tokens, it);
 							}
+							cpp.at = at;
+							cpp.path_stack.count -= 1;
 						}
-						skip_line(*cpp);
+						skip_line(cpp, src_tokens);
 					case "undef";
-						table_remove(*cpp.objects, skip(*cpp).view);
+						table_remove(*cpp.objects, skip(cpp, src_tokens).view);
 					case "elif";
-						line := copy_line(*cpp);
-						if peek(cond_stack).branch_taken {
+						line := copy_line(cpp, src_tokens);
+						if peek(cpp.cond_stack).branch_taken {
 							print("NOT TAKING ");
 						}
 						print("#elif ");
@@ -595,32 +651,32 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 							print("% ", it.view);
 						}
 						print("\n");
-						if peek(cond_stack).branch_taken {
-							skip_until_el(*cpp);
+						if peek(cpp.cond_stack).branch_taken {
+							skip_until_el(cpp, src_tokens);
 						} else {
 							start := 0;
-							expr := eval(*cpp, line, *start);
+							expr := eval(cpp, line, *start);
 							print("EXPR: %", expr);
 							if expr != 0 {
-								peek_pointer(cond_stack).branch_taken = true;
+								peek_pointer(cpp.cond_stack).branch_taken = true;
 							} else {
-								skip_until_el(*cpp);
+								skip_until_el(cpp, src_tokens);
 							}
 						}
 					case "else";
 						i := 0;
-						skip_line(*cpp);
-						if peek(cond_stack).branch_taken {
-							skip_until_el(*cpp);
+						skip_line(cpp, src_tokens);
+						if peek(cpp.cond_stack).branch_taken {
+							skip_until_el(cpp, src_tokens);
 						}
 					case "endif";
-						pop_cond();
-						skip_line(*cpp);
+						pop_cond(cpp);
+						skip_line(cpp, src_tokens);
 					case "ifdef"; #through;
 					case "ifndef"; #through;
 					case "if";
 						expr: int;
-						line := copy_line(*cpp);
+						line := copy_line(cpp, src_tokens);
 						if directive.view == "ifdef" {
 							name := line[0];
 							expr = table_contains(*cpp.objects, name.view).(int);
@@ -649,9 +705,6 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 									if to_expand[at].type == .LeftParenthesis {
 										at += 1;
 									}
-									if to_expand[at].view == "__arm__" {
-										a := 5;
-									}
 									value := table_contains(*cpp.objects, to_expand[at].view).(int);
 									value |= table_contains(*cpp.functions, to_expand[at].view).(int);
 									//print("ID TO CHECK: %\n", to_expand[at]);
@@ -668,35 +721,35 @@ preprocess :: (t: *Tokeniser) -> [..]Token {
 									at += 1;
 								}
 							}
-							expanded := expand(*cpp, no_defineds);
+							expanded := expand(cpp, no_defineds);
 							start := 0;
-							expr = eval(*cpp, expanded, *start);
+							expr = eval(cpp, expanded, *start);
 							print("EVAL: %\n", expr);
 						}
-						push_cond(expr != 0);
+						push_cond(cpp, expr != 0);
 						if expr == 0 {
-							skip_until_el(*cpp);
+							skip_until_el(cpp, src_tokens);
 						}
 				}
 			case .Identifier;
-				name := current(*cpp);
+				name := current(cpp, src_tokens);
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
 					
-					expanded := expand(*cpp, copy_line(*cpp));
+					expanded := expand(cpp, copy_line(cpp, src_tokens));
 					for expanded {
-						insert(*cpp, it);
+						insert(cpp, it, *dst_tokens);
 					}
 				} else {
-					paste(*cpp);
+					paste(cpp, src_tokens, *dst_tokens);
 				}
 			case;
-				paste(*cpp);
+				paste(cpp, src_tokens, *dst_tokens);
 		}
 	}
 
-	return cpp.tokens;
+	return dst_tokens;
 }
 
 

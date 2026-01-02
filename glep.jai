@@ -1868,7 +1868,7 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/conditional.c");
+	minimal := read_entire_file("tests/cpp/system_header.c");
 	minimal = #string STRING
 	#include <stdio.h>
 	STRING
@@ -1876,7 +1876,9 @@ main :: () {
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
 
-	tokens := preprocess(*tokeniser);
+	cpp: Preprocessor;
+	add_all_builtins(*cpp);
+	tokens := preprocess(*cpp, tokeniser.tokens);
 
 	output: string;
 	for tokens {
