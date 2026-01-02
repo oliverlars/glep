@@ -449,7 +449,16 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_builtin(cpp, "__SIZEOF_PTRDIFF_T__", "8", .Number);
 	add_builtin(cpp, "__SIZEOF_SHORT__", "2", .Number);
 	add_builtin(cpp, "__SIZEOF_SIZE_T__", "8", .Number);
-	add_builtin(cpp, "__C99_MACRO_WITH_VA_ARGS", "1", .Number);
+	add_builtin(cpp, "__INTMAX_TYPE__", "long", .Identifier);
+	add_builtin(cpp, "__UINTMAX_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__INT8_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__INT16_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__INT32_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__INT64_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__UINT8_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__UINT16_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__UINT32_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__UINT64_TYPE__", "unsigned", .Identifier);
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {

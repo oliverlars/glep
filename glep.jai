@@ -124,6 +124,7 @@ Node_Declarator :: struct {
 	qualifiers: [..]string;
 	declarator_type: Type;
 	init: *Node_Initializer;
+	bitfield: *Node_Expr;
 	inner: *Node_Declarator;
 }
 
@@ -683,7 +684,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for max(0, p.at-20)..p.at + 20 {
+		for max(0, p.at-20)..p.at+1 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -745,6 +746,7 @@ is_type_specifier :: (token: Token) -> bool {
 	case "signed";   #through;
 	case "unsigned"; #through;
 	case "_Float16"; #through;
+	case "__uint128_t"; #through;
 	case "_Bool"; #through;
 	case "bool";
 		return true;
@@ -1653,6 +1655,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		if current(p).type == .Equals {
 			skip(p);
 			declarator.init = parse_initializer(p);
+		} else if current(p).type == .Colon {
+			skip(p);
+			declarator.bitfield = parse_expr(p, precedence_of(.Comma) + 1);
 		}
 		if current(p).type != .Semicolon &&
 		   current(p).type != .LeftBrace {
@@ -1665,7 +1670,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			// This should probably always be true?
 			id := identifier_from_declarator(it); 
 			if id != "" {
-				print("Adding typedef\n");
+				print("Adding typedef: %\n", id);
 				table_add(*p.typedefs, id, decl);
 			}
 		}
@@ -1872,7 +1877,7 @@ main :: () {
 	minimal = #string STRING
 	#define __attribute__(x)
 	#define __asm(x)
-	#include <stdio.h>
+	#include <stdlib.h>
 	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
