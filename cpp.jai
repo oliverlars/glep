@@ -643,20 +643,20 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						table_remove(*cpp.objects, skip(cpp, src_tokens).view);
 					case "elif";
 						line := copy_line(cpp, src_tokens);
-						if peek(cpp.cond_stack).branch_taken {
-							print("NOT TAKING ");
-						}
-						print("#elif ");
-						for line {
-							print("% ", it.view);
-						}
-						print("\n");
+						// if peek(cpp.cond_stack).branch_taken {
+						// 	print("NOT TAKING ");
+						// }
+						// print("#elif ");
+						// for line {
+						// 	print("% ", it.view);
+						// }
+						// print("\n");
 						if peek(cpp.cond_stack).branch_taken {
 							skip_until_el(cpp, src_tokens);
 						} else {
 							start := 0;
 							expr := eval(cpp, line, *start);
-							print("EXPR: %", expr);
+							//print("EXPR: %", expr);
 							if expr != 0 {
 								peek_pointer(cpp.cond_stack).branch_taken = true;
 							} else {
@@ -687,14 +687,11 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
 							to_expand := line;
-							print("#if ");
-							for to_expand {
-								print("% ", it.view);
-								if it.view == "__has_include" {
-									a := 5;
-								}
-							}
-							print("\n");
+							// print("#if ");
+							// for to_expand {
+							// 	print("% ", it.view);
+							// }
+							// print("\n");
 							no_defineds: [..]Token;
 							at := 0;
 							//print("TO_EXPAND: %\n", to_expand);
@@ -724,7 +721,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							expanded := expand(cpp, no_defineds);
 							start := 0;
 							expr = eval(cpp, expanded, *start);
-							print("EVAL: %\n", expr);
+							//print("EVAL: %\n", expr);
 						}
 						push_cond(cpp, expr != 0);
 						if expr == 0 {

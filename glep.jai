@@ -683,7 +683,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for max(0, p.at-20)..p.at-1 {
+		for max(0, p.at-20)..p.at + 20 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -1870,6 +1870,8 @@ main :: () {
 
 	minimal := read_entire_file("tests/cpp/system_header.c");
 	minimal = #string STRING
+	#define __attribute__(x)
+	#define __asm(x)
 	#include <stdio.h>
 	STRING
 	tokeniser: Tokeniser;
