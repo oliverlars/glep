@@ -742,10 +742,41 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
-					
-					expanded := expand(cpp, copy_line(cpp, src_tokens));
-					for expanded {
-						insert(cpp, it, *dst_tokens);
+					to_expand: [..]Token;
+					if function {
+						array_add(*to_expand, skip(cpp, src_tokens));
+						array_add(*to_expand, skip(cpp, src_tokens));
+						paren_depth := 0;
+						while current(cpp, src_tokens).type != .RightParenthesis {
+							while true {
+								if current(cpp, src_tokens).type == .LeftParenthesis {
+									array_add(*to_expand, skip(cpp, src_tokens));
+									paren_depth += 1;
+								} else if current(cpp, src_tokens).type == .RightParenthesis {
+									if paren_depth == 0 break;
+									paren_depth -= 1;
+									array_add(*to_expand, skip(cpp, src_tokens));
+								} else if current(cpp, src_tokens).type == .Comma && paren_depth == 0 {
+									break;
+								} else {
+									array_add(*to_expand, skip(cpp, src_tokens));
+								}
+							}
+							if current(cpp, src_tokens).type == .Comma {
+								array_add(*to_expand, skip(cpp, src_tokens));
+							}
+						}
+						array_add(*to_expand, skip(cpp, src_tokens));
+						expanded := expand(cpp, to_expand);
+						for expanded {
+							insert(cpp, it, *dst_tokens);
+						}
+					} else {
+						skip(cpp, src_tokens);
+						expanded := expand(cpp, object.tokens);
+						for expanded {
+							insert(cpp, it, *dst_tokens);
+						}
 					}
 				} else {
 					paste(cpp, src_tokens, *dst_tokens);

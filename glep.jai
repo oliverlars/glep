@@ -684,7 +684,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for max(0, p.at-20)..p.at+1 {
+		for max(0, p.at)..p.at + 20 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -1394,6 +1394,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 		declarator = parse_declarator(p);
 		expect(p, .RightParenthesis);
 	} else if current(p).type == .Identifier {
+		print("ID: %\n", current(p).view);
 		declarator = New(Node_Identifier_Declarator);
 		declarator.(*Node_Identifier_Declarator).name = current(p).view;
 		skip(p);
@@ -1769,6 +1770,10 @@ print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array 
 		print_declarator(declarator.inner, true);
 		print("[%]", declarator.(*Node_Array_Declarator).count);
 	}
+	if declarator.bitfield {
+		print(": ");
+		print_expr(declarator.bitfield);
+	}
 	if declarator.init {
 		print(" = ");
 		print_init(declarator.init);
@@ -1877,7 +1882,24 @@ main :: () {
 	minimal = #string STRING
 	#define __attribute__(x)
 	#define __asm(x)
-	#include <stdlib.h>
+	//#include <stdio.h>
+	//#include <util.h>
+	//#include <fcntl.h>
+	//#include <sys/stat.h>
+	//#include <unistd.h>
+	//#include <sys/types.h>
+	//#include <dirent.h>
+	//#include <stdatomic.h>
+	//#include <spawn.h>
+	//#include <sys/wait.h>
+	//#include <pthread.h>
+	//#include <stdlib.h>
+	//#include <sys/mman.h>
+	//#include <mach/mach_time.h>
+	//#include <sys/types.h>
+	//#include <sys/sysctl.h>
+	//#include <os/os_sync_wait_on_address.h>
+	#include <os/lock.h>
 	STRING
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
