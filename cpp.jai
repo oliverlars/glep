@@ -132,7 +132,8 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 		}
 		return found, index;
 	}
-	for at: 0..body.count-1 {
+	at := 0;
+	while at < body.count {
 		it := body[at];
 		if it.type == .Hash {
 			found, index := find_arg(params, args, body[at + 1]);
@@ -151,7 +152,7 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			}
 			stringed.view = view;
 			array_add(*result, stringed);
-			at += 1;
+			at += 2;
 			continue;
 		} else if at + 1 < body.count && body[at + 1].type == .HashHash {
 			left_tokens: [..]Token;
@@ -170,37 +171,46 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 				array_add(*right_tokens, body[at + 2]);
 			}
 
-			for i: 0..left_tokens.count - 2 {
-				array_add(*result, left_tokens[i]);
+			if left_tokens.count >= 2 { 
+				for i: 0..left_tokens.count - 2 {
+					array_add(*result, left_tokens[i]);
+				}
 			}
 			
 			glued := glue_tokens(left_tokens[left_tokens.count - 1], right_tokens[0]);
 			array_add(*result, glued);
 			
-			for i: 1..right_tokens.count - 1 {
-				array_add(*result, right_tokens[i]);
+			if right_tokens.count >= 2 {
+				for i: 1..right_tokens.count - 1 {
+					array_add(*result, right_tokens[i]);
+				}
 			}
 
 			at += 3;
 			continue;
-		} else {
-			matched_param, param_index := find_arg(params, args, it);
-			if matched_param {
-				expanded_arg := expand(cpp, args[param_index]);
-				for arg: expanded_arg {
-					array_add(*result, arg);
-				}
-			}
-			if matched_param continue;
 		}
+
+		matched_param, param_index := find_arg(params, args, it);
+		if matched_param {
+			expanded_arg := expand(cpp, args[param_index]);
+			for arg: expanded_arg {
+				array_add(*result, arg);
+			}
+			at += 1;
+			continue;
+		}
+
 		if it.view == "__VA_ARGS__" {
 			expanded_va := expand(cpp, va_args);
-			for expanded_va {
-				array_add(*result, it);
+			for va: expanded_va {
+				array_add(*result, va);
 			}
-		} else {
-			array_add(*result, it);
+			at += 1;
+			continue;
 		}
+
+		array_add(*result, it);
+		at += 1;
 	}
 	return result;
 }
@@ -269,12 +279,12 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 
 
 				body := subst(cpp, function.tokens, function.params, args, va_args);
-				//print("BODY: ");
+				print("BODY: ");
 				for * body {
 					it.hideset = hideset_union(it.hideset, hideset);
-					//print("%", it.view);
+					print("% ", it.view);
 				}
-				//print("\n");
+				print("\n");
 				
 				expanded := expand(cpp, body);
 				//print("EXPANDED: ");
@@ -742,31 +752,32 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
 				if object || function {
-					to_expand: [..]Token;
 					if function {
+						to_expand: [..]Token;
 						array_add(*to_expand, skip(cpp, src_tokens));
 						array_add(*to_expand, skip(cpp, src_tokens));
 						paren_depth := 0;
-						while current(cpp, src_tokens).type != .RightParenthesis {
-							while true {
-								if current(cpp, src_tokens).type == .LeftParenthesis {
-									array_add(*to_expand, skip(cpp, src_tokens));
-									paren_depth += 1;
-								} else if current(cpp, src_tokens).type == .RightParenthesis {
-									if paren_depth == 0 break;
-									paren_depth -= 1;
-									array_add(*to_expand, skip(cpp, src_tokens));
-								} else if current(cpp, src_tokens).type == .Comma && paren_depth == 0 {
-									break;
-								} else {
-									array_add(*to_expand, skip(cpp, src_tokens));
-								}
-							}
-							if current(cpp, src_tokens).type == .Comma {
+						while current(cpp, src_tokens).type != .RightParenthesis || paren_depth > 0 {
+							if current(cpp, src_tokens).type == .LeftParenthesis {
+								array_add(*to_expand, skip(cpp, src_tokens));
+								paren_depth += 1;
+							} else if current(cpp, src_tokens).type == .RightParenthesis {
+								paren_depth -= 1;
+								array_add(*to_expand, skip(cpp, src_tokens));
+							} else if current(cpp, src_tokens).type == .Newline {
+								// Dunno why i need to do this
+								skip(cpp, src_tokens);
+							} else {
 								array_add(*to_expand, skip(cpp, src_tokens));
 							}
 						}
+						assert(current(cpp, src_tokens).type == .RightParenthesis);
 						array_add(*to_expand, skip(cpp, src_tokens));
+						print("TO EXPAND: ");
+						for to_expand {
+							print("% ", it.view);
+						}
+						print("\n");
 						expanded := expand(cpp, to_expand);
 						for expanded {
 							insert(cpp, it, *dst_tokens);

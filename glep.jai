@@ -531,7 +531,7 @@ tokenise :: (t: *Tokeniser) {
 				}
 			case "\\";
 				t.at += 1;
-				if t.source[t.at] == "\n" {
+				if is_newline(t.source[t.at]) {
 					t.at += 1;
 				}
 				continue;
@@ -1880,9 +1880,9 @@ main :: () {
 
 	minimal := read_entire_file("tests/cpp/system_header.c");
 	minimal = #string STRING
-	#define __attribute__(x)
 	#define __asm(x)
-	//#include <stdio.h>
+	#define __attribute__(x)
+	#include <stdio.h>
 	//#include <util.h>
 	//#include <fcntl.h>
 	//#include <sys/stat.h>
@@ -1899,8 +1899,10 @@ main :: () {
 	//#include <sys/types.h>
 	//#include <sys/sysctl.h>
 	//#include <os/os_sync_wait_on_address.h>
-	#include <os/lock.h>
+	//#include <os/lock.h>
+
 	STRING
+
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
@@ -1909,11 +1911,11 @@ main :: () {
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 
-	output: string;
-	for tokens {
-		output = join(output, tprint("% ", it.view));
-	}
-	write_entire_file("processed.c", output);
+	// output: string;
+	// for tokens {
+	// 	output = join(output, tprint("% ", it.view));
+	// }
+	// write_entire_file("processed.c", output);
 
 	tokens_no_newlines: [..]Token;
 	for tokens {
