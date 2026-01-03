@@ -684,7 +684,7 @@ skip :: (p: *Parser) {
 expect :: (p: *Parser, type: Token_Type) {
 	if current(p).type != type {
 		print("Expected: %\n", type);
-		for max(0, p.at)..p.at + 20 {
+		for max(0, p.at - 20)..p.at + 20 {
 			print("% ", p.tokens[it].view);
 		}
 		assert(false);
@@ -829,6 +829,9 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 				expect(p, .RightBrace);
 			}
 			info._enum = _enum;
+		} else if is_type_name(p, current(p)) {
+			array_add(*info.specifiers, current(p).view);
+			skip(p);
 		} else {
 			array_add(*info.qualifiers, current(p).view);
 			skip(p);
@@ -840,11 +843,22 @@ is_declaration_start :: (p: *Parser) -> bool {
 	return is_storage_specifier(current(p)) ||
 		   is_type_qualifier(current(p)) ||
 		   is_type_specifier(current(p)) ||
-		   is_type_name(p, current(p)) ||
 		   is_function_specifier(current(p)) ||
 		   current(p).view == "struct" ||
 		   current(p).view == "enum" ||
-		   current(p).view == "union";
+		   current(p).view == "union" ||
+		   is_type_name(p, current(p));
+}
+
+is_declaration_start :: (p: *Parser, token: Token) -> bool {
+	return is_storage_specifier(token) ||
+		   is_type_qualifier(token) ||
+		   is_type_specifier(token) ||
+		   is_function_specifier(token) ||
+		   token.view == "struct" ||
+		   token.view == "enum" ||
+		   token.view == "union" ||
+		   is_type_name(p, token);
 }
 
 is_type_name :: (parser: *Parser, token: Token) -> bool {
@@ -1383,16 +1397,23 @@ print_expr :: (node: *Node_Expr, parent_precedence := 0) {
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
 	parse_declaration_specifiers(p, *decl.base_info);
-	array_add(*decl.declarators, parse_declarator(p));
+	declarator := parse_declarator(p);
+	if declarator {
+		array_add(*decl.declarators, declarator);
+	}
 	return decl;
 }
 
 parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 	declarator: *Node_Declarator;
 	if current(p).type == .LeftParenthesis {
-		skip(p);
-		declarator = parse_declarator(p);
-		expect(p, .RightParenthesis);
+		if !is_declaration_start(p, next(p)) {
+			skip(p);
+			declarator = parse_declarator(p);
+			expect(p, .RightParenthesis);
+		} else {
+			a := 5;
+		}
 	} else if current(p).type == .Identifier {
 		print("ID: %\n", current(p).view);
 		declarator = New(Node_Identifier_Declarator);
@@ -1652,14 +1673,17 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
-		array_add(*decl.declarators, declarator);
-		if current(p).type == .Equals {
-			skip(p);
-			declarator.init = parse_initializer(p);
-		} else if current(p).type == .Colon {
-			skip(p);
-			declarator.bitfield = parse_expr(p, precedence_of(.Comma) + 1);
+		if declarator {
+			array_add(*decl.declarators, declarator);
+			if current(p).type == .Equals {
+				skip(p);
+				declarator.init = parse_initializer(p);
+			} else if current(p).type == .Colon {
+				skip(p);
+				declarator.bitfield = parse_expr(p, precedence_of(.Comma) + 1);
+			}
 		}
+
 		if current(p).type != .Semicolon &&
 		   current(p).type != .LeftBrace {
 			expect(p, .Comma);
@@ -1759,7 +1783,9 @@ print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array 
 		for func.params {
 			if !it break;
 			print_type(it.base_info);
-			print_declarator(it.declarators[0], false);
+			if it.declarators.count {
+				print_declarator(it.declarators[0], false);
+			}
 			if it_index < func.params.count - 1 then print(", ");
 		}
 		print(")");
@@ -1882,7 +1908,7 @@ main :: () {
 	minimal = #string STRING
 	#define __asm(x)
 	#define __attribute__(x)
-	#include <stdio.h>
+	//#include <stdio.h>
 	//#include <util.h>
 	//#include <fcntl.h>
 	//#include <sys/stat.h>
@@ -1898,9 +1924,8 @@ main :: () {
 	//#include <mach/mach_time.h>
 	//#include <sys/types.h>
 	//#include <sys/sysctl.h>
-	//#include <os/os_sync_wait_on_address.h>
+	#include <os/os_sync_wait_on_address.h>
 	//#include <os/lock.h>
-
 	STRING
 
 	tokeniser: Tokeniser;
@@ -1911,11 +1936,11 @@ main :: () {
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 
-	// output: string;
-	// for tokens {
-	// 	output = join(output, tprint("% ", it.view));
-	// }
-	// write_entire_file("processed.c", output);
+	output: string;
+	for tokens {
+		output = join(output, tprint("% ", it.view));
+	}
+	write_entire_file("processed.c", output);
 
 	tokens_no_newlines: [..]Token;
 	for tokens {
