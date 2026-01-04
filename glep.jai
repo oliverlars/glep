@@ -1921,24 +1921,24 @@ main :: () {
 	minimal = #string STRING
 	#define __asm(x)
 	#define __attribute__(x)
-	//#include <stdio.h>
-	//#include <util.h>
-	//#include <fcntl.h>
-	//#include <sys/stat.h>
-	//#include <unistd.h>
-	//#include <sys/types.h>
-	//#include <dirent.h>
+	#include <stdio.h>
+	#include <util.h>
+	#include <fcntl.h>
+	#include <sys/stat.h>
+	#include <unistd.h>
+	#include <sys/types.h>
+	#include <dirent.h>
 	#include <stdatomic.h>
-	//#include <spawn.h>
-	//#include <sys/wait.h>
-	//#include <pthread.h>
-	//#include <stdlib.h>
-	//#include <sys/mman.h>
-	//#include <mach/mach_time.h>
-	//#include <sys/types.h>
-	//#include <sys/sysctl.h>
-	//#include <os/os_sync_wait_on_address.h>
-	//#include <os/lock.h>
+	#include <spawn.h>
+	#include <sys/wait.h>
+	#include <pthread.h>
+	#include <stdlib.h>
+	#include <sys/mman.h>
+	#include <mach/mach_time.h>
+	#include <sys/types.h>
+	#include <sys/sysctl.h>
+	#include <os/os_sync_wait_on_address.h>
+	#include <os/lock.h>
 	STRING
 
 	tokeniser: Tokeniser;

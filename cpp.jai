@@ -154,6 +154,21 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			array_add(*result, stringed);
 			at += 2;
 			continue;
+		} else if at + 2 < body.count && body[at].type == .Comma &&
+				  body[at + 1].type == .HashHash &&
+				  body[at + 2].view == "__VA_ARGS__" {
+			if va_args.count == 0 {
+				at += 3;
+				continue;
+			} else {
+				found_va, index_va := find_arg(params, args, body[at]);
+				array_add(*result, body[at]);
+				for va_arg: args[index_va] {
+					array_add(*result, va_arg);
+				}
+				at += 3;
+				continue;
+			}
 		} else if at + 1 < body.count && body[at + 1].type == .HashHash {
 			left_tokens: [..]Token;
 			found_left, index_left := find_arg(params, args, body[at]);
