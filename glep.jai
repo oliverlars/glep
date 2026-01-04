@@ -714,6 +714,7 @@ is_type_qualifier :: (token: Token) -> bool {
 	if token.view == {
 	case "const";    #through;
 	case "volatile"; #through;
+	case "_Atomic"; #through;
 	case "restrict";
 		return true;
 	case;
@@ -747,6 +748,7 @@ is_type_specifier :: (token: Token) -> bool {
 	case "unsigned"; #through;
 	case "_Float16"; #through;
 	case "__uint128_t"; #through;
+	case "_Atomic"; #through;
 	case "_Bool"; #through;
 	case "bool";
 		return true;
@@ -830,8 +832,19 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			}
 			info._enum = _enum;
 		} else if is_type_name(p, current(p)) {
-			array_add(*info.specifiers, current(p).view);
-			skip(p);
+			if current(p).view == "_Atomic" {
+				skip(p);
+				expect(p, .LeftParenthesis);
+				info: Node_Type_Info;
+				// HACK(Oliver): store this somewhere
+				parse_declaration_specifiers(p, *info);
+				declarator := parse_declarator(p);
+				expect(p, .RightParenthesis);
+				array_add(*info.specifiers, current(p).view);
+			} else {
+				array_add(*info.specifiers, current(p).view);
+				skip(p);
+			}
 		} else {
 			array_add(*info.qualifiers, current(p).view);
 			skip(p);
@@ -1915,7 +1928,7 @@ main :: () {
 	//#include <unistd.h>
 	//#include <sys/types.h>
 	//#include <dirent.h>
-	//#include <stdatomic.h>
+	#include <stdatomic.h>
 	//#include <spawn.h>
 	//#include <sys/wait.h>
 	//#include <pthread.h>
@@ -1924,7 +1937,7 @@ main :: () {
 	//#include <mach/mach_time.h>
 	//#include <sys/types.h>
 	//#include <sys/sysctl.h>
-	#include <os/os_sync_wait_on_address.h>
+	//#include <os/os_sync_wait_on_address.h>
 	//#include <os/lock.h>
 	STRING
 
