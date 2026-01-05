@@ -769,17 +769,40 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			skip(p);
 		} else if current(p).view == "struct" {
 			skip(p);
-			_struct := New(Node_Struct);
+			_struct: *Node_Struct;
 
 			if current(p).type == .Identifier {
 				name := current(p);
 				skip(p);
-				_struct.name = current(p);
-				table_add(*p.structs, _struct.name.view, _struct);
+
+				defined, defined_struct := table_find(*p.structs, name.view);
+				if current(p).type == .LeftBrace {
+					if defined {
+						_struct = defined_struct;
+					} else {
+						_struct = New(Node_Struct);
+						_struct.name = name;
+						table_add(*p.structs, name.view, _struct);
+					}
+					skip(p); // '{'
+					while current(p).type != .RightBrace {
+						decl := parse_decl(p);
+						expect(p, .Semicolon);
+						array_add(*_struct.members, decl);
+					}
+					expect(p, .RightBrace);
+				} else {
+					if defined {
+						_struct = defined_struct;
+					} else {
+						_struct = New(Node_Struct);
+						_struct.name = name;
+						table_add(*p.structs, name.view, _struct);
+					}
+				}
+			} else if current(p).type == .LeftBrace {
 				skip(p);
-			}
-			if current(p).type == .LeftBrace {
-				skip(p);
+				_struct = New(Node_Struct);
 				while current(p).type != .RightBrace {
 					decl := parse_decl(p);
 					expect(p, .Semicolon);
@@ -1718,6 +1741,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	}
 
 	if current(p).type == .LeftBrace {
+		assert(decl.declarators.count == 1);
+		name := identifier_from_declarator(decl.declarators[0]);
+		table_add(*p.ordinary, name, decl);
 		decl.body = parse_statement(p);
 	}
 	
