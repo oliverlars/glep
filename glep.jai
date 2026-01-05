@@ -750,6 +750,7 @@ is_type_specifier :: (token: Token) -> bool {
 	case "__uint128_t"; #through;
 	case "_Atomic"; #through;
 	case "_Bool"; #through;
+	case "__builtin_va_list"; #through;
 	case "bool";
 		return true;
 	case;
@@ -901,10 +902,8 @@ is_declaration_start :: (p: *Parser, token: Token) -> bool {
 }
 
 is_type_name :: (parser: *Parser, token: Token) -> bool {
-	is_in_tags := table_contains(*parser.enums, token.view);
-	is_in_tags |= table_contains(*parser.structs, token.view);
 	return is_type_qualifier(token) ||
-		   is_type_specifier(token) || is_in_tags ||
+		   is_type_specifier(token) ||
 		   table_contains(*parser.typedefs, token.view);
 }
 
@@ -1223,9 +1222,13 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			result = access;
 			expect(p, .RightBracket);
 		} else if current(p).type == .LeftParenthesis {
+			name := current(p);
 			skip(p);
 			call := New(Node_Call);
 			call.id = result;
+			if name.view == "stat" {
+				a := 5;
+			}
 			while current(p).type != .RightParenthesis {
 				array_add(*call.params, parse_expr(p, precedence_of(.Comma) + 1));
 				if current(p).type != .RightParenthesis {
@@ -1601,7 +1604,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		if current(p).type == .Identifier {
 			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
 				label := New(Node_Label);
-				if current(p).view == "case" {
+				if current(p).view == "case" || current(p).view == "default" {
 					skip(p);
 					label.is_case = true;
 				}
@@ -1649,9 +1652,15 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				skip(p);
 				_do := New(Node_Do);
 				_do.body = parse_statement(p);
+				if current(p).view != "while" {
+					assert(false);
+				} else {
+					skip(p);
+				}
 				expect(p, .LeftParenthesis);
 				_do.cond = parse_expr(p);
 				expect(p, .RightParenthesis);
+				expect(p, .Semicolon);
 				statement = _do;
 			} else if current(p).view == "switch" {
 				skip(p);
