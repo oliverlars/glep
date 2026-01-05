@@ -329,7 +329,7 @@ Node_Label :: struct {
 	#as using node: Node_Statement;
 	statement: *Node_Statement;
 	is_case: bool;
-	token: Token;
+	expr: *Node_Expr;
 	statement_type = #this;
 }
 
@@ -1604,12 +1604,14 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		if current(p).type == .Identifier {
 			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
 				label := New(Node_Label);
-				if current(p).view == "case" || current(p).view == "default" {
+				if current(p).view == "case" {
 					skip(p);
 					label.is_case = true;
+					label.expr = parse_expr(p);
+					skip(p);
+				} else if current(p).view == "default" {
+					label.is_case = true;
 				}
-				label.token = current(p);
-				skip(p);
 				expect(p, .Colon);
 				label.statement = parse_statement(p);
 				statement = label;
@@ -1927,7 +1929,7 @@ print_statement :: (stmt: *Node_Statement, depth := 0) {
 			if stmt.(*Node_Label).is_case {
 				print("case ");
 			}
-			print(stmt.(*Node_Label).token.view);
+			print_expr(stmt.(*Node_Label).expr);
 			print(": ");
 			print_statement(stmt.(*Node_Label).statement, depth);
 			print("\n");
