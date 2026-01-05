@@ -1608,8 +1608,8 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					skip(p);
 					label.is_case = true;
 					label.expr = parse_expr(p);
-					skip(p);
 				} else if current(p).view == "default" {
+					skip(p);
 					label.is_case = true;
 				}
 				expect(p, .Colon);
