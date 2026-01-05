@@ -16,6 +16,7 @@ Preprocessor :: struct {
 	cond_stack: [..]Cond_State;
 	objects: Table(string, Object);
 	functions: Table(string, Function);
+	expand_count: int;
 }
 
 Cond_State :: struct {
@@ -773,13 +774,24 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 				name := current(cpp, src_tokens);
 				object := table_find_pointer(*cpp.objects, name.view);
 				function := table_find_pointer(*cpp.functions, name.view);
-				if object || function {
-					if function {
+				is_function := (function && next(cpp, src_tokens).type == .LeftParenthesis); 
+				if object || is_function {
+					if is_function {
 						to_expand: [..]Token;
 						array_add(*to_expand, skip(cpp, src_tokens));
 						array_add(*to_expand, skip(cpp, src_tokens));
 						paren_depth := 0;
-						while current(cpp, src_tokens).type != .RightParenthesis || paren_depth > 0 {
+						print("\n========FUNC EXPAND START % ======\n", cpp.expand_count);
+						if cpp.expand_count == 795 {
+							a := 5;
+						}
+						cpp.expand_count += 1;
+						while paren_depth > 0 || current(cpp, src_tokens).type != .RightParenthesis {
+							if current(cpp, src_tokens).type != .Newline {
+								print("% ", current(cpp, src_tokens).view);
+							} else {
+								print("\n");
+							}
 							if current(cpp, src_tokens).type == .LeftParenthesis {
 								array_add(*to_expand, skip(cpp, src_tokens));
 								paren_depth += 1;
@@ -793,13 +805,14 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								array_add(*to_expand, skip(cpp, src_tokens));
 							}
 						}
+						print("\n========FUNC EXPAND END======\n");
 						assert(current(cpp, src_tokens).type == .RightParenthesis);
 						array_add(*to_expand, skip(cpp, src_tokens));
-						print("TO EXPAND: ");
-						for to_expand {
-							print("% ", it.view);
-						}
-						print("\n");
+						// print("TO EXPAND: ");
+						// for to_expand {
+						// 	print("% ", it.view);
+						// }
+						// print("\n");
 						expanded := expand(cpp, to_expand);
 						for expanded {
 							insert(cpp, it, *dst_tokens);

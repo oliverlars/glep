@@ -83,7 +83,7 @@ Parser :: struct {
 	tokens: [..]Token;
 	at: int;
 
-	variables: Table(string, *Node);
+	ordinary: Table(string, *Node);
 	structs: Table(string, *Node_Struct);
 	enums: Table(string, *Node_Enum);
 	typedefs: Table(string, *Node_Decl);
@@ -770,7 +770,10 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		} else if current(p).view == "struct" {
 			skip(p);
 			_struct := New(Node_Struct);
+
 			if current(p).type == .Identifier {
+				name := current(p);
+				skip(p);
 				_struct.name = current(p);
 				table_add(*p.structs, _struct.name.view, _struct);
 				skip(p);
@@ -1917,48 +1920,53 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("tests/cpp/system_header.c");
-	minimal = #string STRING
-	#define __asm(x)
-	#define __attribute__(x)
-	#include <stdio.h>
-	#include <util.h>
-	#include <fcntl.h>
-	#include <sys/stat.h>
-	#include <unistd.h>
-	#include <sys/types.h>
-	#include <dirent.h>
-	#include <stdatomic.h>
-	#include <spawn.h>
-	#include <sys/wait.h>
-	#include <pthread.h>
-	#include <stdlib.h>
-	#include <sys/mman.h>
-	#include <mach/mach_time.h>
-	#include <sys/types.h>
-	#include <sys/sysctl.h>
-	#include <os/os_sync_wait_on_address.h>
-	#include <os/lock.h>
-	STRING
+	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
+	print("%", minimal);
+	// minimal = #string STRING
+	// #define __asm(x)
+	// #define __attribute__(x)
+	// #include <stdio.h>
+	// #include <util.h>
+	// #include <fcntl.h>
+	// #include <sys/stat.h>
+	// #include <unistd.h>
+	// #include <sys/types.h>
+	// #include <dirent.h>
+	// #include <stdatomic.h>
+	// #include <spawn.h>
+	// #include <sys/wait.h>
+	// #include <pthread.h>
+	// #include <stdlib.h>
+	// #include <sys/mman.h>
+	// #include <mach/mach_time.h>
+	// #include <sys/types.h>
+	// #include <sys/sysctl.h>
+	// #include <os/os_sync_wait_on_address.h>
+	// #include <os/lock.h>
+	// STRING
 
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
 
 	cpp: Preprocessor;
+	array_add(*cpp.path_stack, "/Users/olivercruickshank/Carnage/friday.c");
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 
-	output: string;
-	for tokens {
-		output = join(output, tprint("% ", it.view));
-	}
-	write_entire_file("processed.c", output);
+	// output: string;
+	// for tokens {
+	// 	output = join(output, tprint("% ", it.view));
+	// }
+	// write_entire_file("processed.c", output);
 
 	tokens_no_newlines: [..]Token;
+	total_newlines := 0;
 	for tokens {
 		if it.type != .Newline {
 			array_add(*tokens_no_newlines, it);
+		} else {
+			total_newlines += 1;
 		}
 	}
 
@@ -1980,5 +1988,5 @@ main :: () {
 		print("\n");
 	}
 
-	print("it took HOW long? %ms\n", ms);
+	print("it took HOW long to parse % lines? %ms\n", total_newlines, ms);
 }
