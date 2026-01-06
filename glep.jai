@@ -636,6 +636,10 @@ tokenise :: (t: *Tokeniser) {
 					token.type = .String;
 					t.at += 1;
 					while t.source[t.at] != "\"" {
+						if t.at + 1 < t.source.count && t.source[t.at] == "\\" &&
+						   t.source[t.at + 1] == "\"" {
+							t.at += 1;
+						}
 						t.at += 1;
 					}
 					t.at += 1;
@@ -1617,8 +1621,12 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = label;
 			} else if current(p).view == "continue" {
 				statement = New(Node_Continue);
+				skip(p);
+				expect(p, .Semicolon);
 			} else if current(p).view == "break" {
 				statement = New(Node_Break);
+				skip(p);
+				expect(p, .Semicolon);
 			}  else if current(p).view == "goto" {
 				goto := New(Node_Goto);
 				skip(p);
