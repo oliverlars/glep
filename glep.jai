@@ -636,6 +636,8 @@ tokenise :: (t: *Tokeniser) {
 					token.type = .String;
 					t.at += 1;
 					while t.source[t.at] != "\"" {
+						// HACK(Oliver): Temporary fix, properly handle escape
+						// sequences
 						if t.at + 1 < t.source.count && t.source[t.at] == "\\" &&
 						   t.source[t.at + 1] == "\"" {
 							t.at += 1;
@@ -1278,8 +1280,15 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result.(*Node_Number).value = value;
 	} else if current(p).type == .String {
 		result = New(Node_String);
-		result.(*Node_String).token = current(p);
+		concat := current(p).view;
 		skip(p);
+		while current(p).type == .String {
+			concat = join(concat, current(p).view);
+			skip(p);
+		}
+		token: Token;
+		token.view = concat;
+		token.type = .String;
 	} else if current(p).type == .LeftParenthesis {
 		expect(p, .LeftParenthesis);
 		result = parse_expr(p);
