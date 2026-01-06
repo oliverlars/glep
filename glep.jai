@@ -1329,124 +1329,124 @@ eval_expr :: (node: *Node_Expr) -> int {
 	return 0;
 }
 
-print_designation :: (node: *Node_Designation) {
+print_designation :: (builder: *String_Builder, node: *Node_Designation) {
 	if !node return;
 	for node.designators {
 		if it.designator_type == {
 			case Node_Field_Designator;
-				print(".");
-				print(it.(*Node_Field_Designator).name.view);
+				append(builder, ".");
+				append(builder, it.(*Node_Field_Designator).name.view);
 			case Node_Index_Designator;
-				print("[");
-				print_expr(it.(*Node_Index_Designator).offset);
-				print("]");
+				append(builder, "[");
+				print_expr(builder, it.(*Node_Index_Designator).offset);
+				append(builder, "]");
 		}
 	}
 
 	if node.designators.count > 0 {
-		print(" = ");
+		append(builder, " = ");
 	}
-	print_init(node.expr);
+	print_init(builder, node.expr);
 }
 
-print_init :: (node: *Node_Initializer) {
+print_init :: (builder: *String_Builder, node: *Node_Initializer) {
 	if !node return;
 	if node.initializer_type == {
 		case Node_Designated_Initializer;
-			print("{");
+			append(builder, "{");
 			for node.(*Node_Designated_Initializer).designations {
-				print_designation(it);
+				print_designation(builder, it);
 
-				if it_index < node.(*Node_Designated_Initializer).designations.count - 1 then print(", ");
+				if it_index < node.(*Node_Designated_Initializer).designations.count - 1 then append(builder, ", ");
 			}
-			print("}");
+			append(builder, "}");
 		case Node_Scalar_Initializer;
-			print_expr(node.(*Node_Scalar_Initializer).expr);
+			print_expr(builder, node.(*Node_Scalar_Initializer).expr);
 	}
 }
 
-print_expr :: (node: *Node_Expr, parent_precedence := 0) {
+print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 0) {
 	if !node return;
 	if node.expr_type == {
 	case Node_Assign;
 		precedence := precedence_of(node.(*Node_Assign).op);
 		if precedence <= parent_precedence {
-			print("(");
+			append(builder, "(");
 		}
-		left := print_expr(node.(*Node_Assign).left, precedence);
-		print(" % ", node.(*Node_Assign).op.view);
-		right := print_expr(node.(*Node_Assign).right, precedence);
+		left := print_expr(builder, node.(*Node_Assign).left, precedence);
+		append(builder, tprint(" % ", node.(*Node_Assign).op.view));
+		right := print_expr(builder, node.(*Node_Assign).right, precedence);
 		if precedence <= parent_precedence {
-			print(")");
+			append(builder, ")");
 		}
 	case Node_Cast;
-		print("(");
-		print_type(node.(*Node_Cast).base_info);
-		print_declarator(node.(*Node_Cast).declarator);
-		print(")");
-		print_expr(node.(*Node_Cast).expr);
+		append(builder, "(");
+		print_type(builder, node.(*Node_Cast).base_info);
+		print_declarator(builder,node.(*Node_Cast).declarator);
+		append(builder, ")");
+		print_expr(builder, node.(*Node_Cast).expr);
 	case Node_Compound;
-		print("(");
-		print_type(node.(*Node_Compound).base_info);
-		print_declarator(node.(*Node_Compound).declarator);
-		print(")");
-		print_init(node.(*Node_Compound).init);
+		append(builder, "(");
+		print_type(builder, node.(*Node_Compound).base_info);
+		print_declarator(builder, node.(*Node_Compound).declarator);
+		append(builder, ")");
+		print_init(builder, node.(*Node_Compound).init);
 	case Node_Binary;
 		precedence := precedence_of(node.(*Node_Binary).op);
 		if precedence <= parent_precedence {
-			print("(");
+			append(builder, "(");
 		}
-		left := print_expr(node.(*Node_Binary).left, precedence);
-		print(" % ", node.(*Node_Binary).op.view);
-		right := print_expr(node.(*Node_Binary).right, precedence);
+		left := print_expr(builder, node.(*Node_Binary).left, precedence);
+		append(builder, tprint(" % ", node.(*Node_Binary).op.view));
+		right := print_expr(builder, node.(*Node_Binary).right, precedence);
 		if precedence <= parent_precedence {
-			print(")");
+			append(builder, ")");
 		}
 	case Node_Unary;
 		if !node.(*Node_Unary).postfix {
-			print("%", node.(*Node_Unary).op.view);
+			append(builder, tprint("%", node.(*Node_Unary).op.view));
 		}
 		precedence := precedence_of(node.(*Node_Unary).op);
 		if precedence <= parent_precedence {
-			print("(");
+			append(builder, "(");
 		}
-		print_expr(node.(*Node_Unary).expr);
+		print_expr(builder, node.(*Node_Unary).expr);
 		if node.(*Node_Unary).postfix {
-			print("%", node.(*Node_Unary).op.view);
+			append(builder, tprint("%", node.(*Node_Unary).op.view));
 		}
 		if precedence <= parent_precedence {
-			print(")");
+			append(builder, ")");
 		}
 	case Node_Ternary;
-		print_expr(node.(*Node_Ternary).cond, precedence_of(.Question));
-		print(" ? ");
-		print_expr(node.(*Node_Ternary).on_true);
-		print(" : ");
-		print_expr(node.(*Node_Ternary).on_false, precedence_of(.Question));
+		print_expr(builder, node.(*Node_Ternary).cond, precedence_of(.Question));
+		append(builder, " ? ");
+		print_expr(builder, node.(*Node_Ternary).on_true);
+		append(builder, " : ");
+		print_expr(builder, node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
-		//print("%", node.(*Node_Number).value);
-		print(node.(*Node_Number).token.view);
+		//append(builder, "%", node.(*Node_Number).value);
+		append(builder, node.(*Node_Number).token.view);
 	case Node_String;
-		print("\"%\"", node.(*Node_String).token.view);
+		append(builder, tprint("\"%\"", node.(*Node_String).token.view));
 	case Node_Identifier;
-		print("%", node.(*Node_Identifier).id.view);
+		append(builder, tprint("%", node.(*Node_Identifier).id.view));
 	case Node_Call;
-		print_expr(node.(*Node_Call).id);
-		print("(");
+		print_expr(builder, node.(*Node_Call).id);
+		append(builder, "(");
 		for node.(*Node_Call).params {
-			print_expr(it);
-			if it_index < node.(*Node_Call).params.count - 1 then print(", ");
+			print_expr(builder, it);
+			if it_index < node.(*Node_Call).params.count - 1 then append(builder, ", ");
 		}
-		print(")");
+		append(builder, ")");
 	case Node_Array_Access;
-		print_expr(node.(*Node_Array_Access).left);
-		print("[");
-		print_expr(node.(*Node_Array_Access).offset);
-		print("]");
+		print_expr(builder, node.(*Node_Array_Access).left);
+		append(builder, "[");
+		print_expr(builder, node.(*Node_Array_Access).offset);
+		append(builder, "]");
 	case Node_Member_Access;
-		print_expr(node.(*Node_Member_Access).left);
-		print("%", node.(*Node_Member_Access).op.view);
-		print("%", node.(*Node_Member_Access).right.view);
+		print_expr(builder, node.(*Node_Member_Access).left);
+		append(builder, tprint("%", node.(*Node_Member_Access).op.view));
+		append(builder, tprint("%", node.(*Node_Member_Access).right.view));
 	}
 }
 
@@ -1471,7 +1471,6 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			a := 5;
 		}
 	} else if current(p).type == .Identifier {
-		print("ID: %\n", current(p).view);
 		declarator = New(Node_Identifier_Declarator);
 		declarator.(*Node_Identifier_Declarator).name = current(p).view;
 		skip(p);
@@ -1763,7 +1762,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			// This should probably always be true?
 			id := identifier_from_declarator(it); 
 			if id != "" {
-				print("Adding typedef: %\n", id);
+				//print("Adding typedef: %\n", id);
 				table_add(*p.typedefs, id, decl);
 			}
 		}
@@ -1779,199 +1778,199 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	return decl;
 }
 
-indent :: (depth: int) {
-	for 0..depth*4 print(" ");
+indent :: (builder: *String_Builder, depth: int) {
+	for 0..depth*4 append(builder, " ");
 }
 
 
-print_type :: (info: Node_Type_Info) {	
-	print("%", info.storage_class);
+print_type :: (builder: *String_Builder, info: Node_Type_Info) {	
+	append(builder, tprint("%", info.storage_class));
 	if info.storage_class {
-		print(" ");
+		append(builder, " ");
 	}
 	
 	if info._struct {
 		if info._struct.is_union {
-			print("union ");
+			append(builder, "union ");
 		}else {
-			print("struct ");
+			append(builder, "struct ");
 		}
-		print(info._struct.name.view);
+		append(builder, info._struct.name.view);
 		if !info.reference {
-			print(" {\n");
+			append(builder, " {\n");
 			for info._struct.members {
-				print("    ");
-				print_decl(it);
-				print(";\n");
+				append(builder, "    ");
+				print_decl(builder, it);
+				append(builder, ";\n");
 			}
-			print("} ");
+			append(builder, "} ");
 		} else {
-			print(" ");
+			append(builder, " ");
 		}
 	}
 
 	if info._enum {
-		print("enum ");
-		print(info._enum.name.view);
-		print(" {\n");
+		append(builder, "enum ");
+		append(builder, info._enum.name.view);
+		append(builder, " {\n");
 		for info._enum.members {
-			print("    ");
-			print(it.name.view);
-			print(" ");
+			append(builder, "    ");
+			append(builder, it.name.view);
+			append(builder, " ");
 			if it.expr {
-				print("= ");
-				print_expr(it.expr);
+				append(builder, "= ");
+				print_expr(builder, it.expr);
 			}
 
-			print(",\n");
+			append(builder, ",\n");
 		}
-		print("} ");
+		append(builder, "} ");
 	}
 
 	for info.qualifiers {
-		print("% ", it);
+		append(builder, tprint("% ", it));
 	}
 	for info.specifiers {
-		print("% ", it);
+		append(builder, tprint("% ", it));
 	}
 }
 
-print_declarator :: (declarator: *Node_Declarator, parent_was_function_or_array := false) {
+print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, parent_was_function_or_array := false) {
 	if !declarator then return;
 	if declarator.declarator_type == {
 	case Node_Pointer_Declarator;
 		if parent_was_function_or_array {
-			print("(");
+			append(builder, "(");
 		}
-		print("*");
+		append(builder, "*");
 		for declarator.qualifiers {
-			print("% ", it);
+			append(builder, tprint("% ", it));
 		}
-		print_declarator(declarator.inner, false);
+		print_declarator(builder, declarator.inner, false);
 		if parent_was_function_or_array {
-			print(")");
+			append(builder, ")");
 		}
 	case Node_Function_Declarator;
-		print_declarator(declarator.inner, true);
+		print_declarator(builder, declarator.inner, true);
 		func := declarator.(*Node_Function_Declarator);
-		print("(");
+		append(builder, "(");
 		for func.params {
 			if !it break;
-			print_type(it.base_info);
+			print_type(builder, it.base_info);
 			if it.declarators.count {
-				print_declarator(it.declarators[0], false);
+				print_declarator(builder, it.declarators[0], false);
 			}
-			if it_index < func.params.count - 1 then print(", ");
+			if it_index < func.params.count - 1 then append(builder, ", ");
 		}
-		print(")");
+		append(builder, ")");
 	case Node_Identifier_Declarator;
-		print_declarator(declarator.inner, false);
-		print("%", declarator.(*Node_Identifier_Declarator).name);
+		print_declarator(builder, declarator.inner, false);
+		append(builder, tprint("%", declarator.(*Node_Identifier_Declarator).name));
 	case Node_Array_Declarator;
-		print_declarator(declarator.inner, true);
-		print("[%]", declarator.(*Node_Array_Declarator).count);
+		print_declarator(builder, declarator.inner, true);
+		append(builder, "[%]", declarator.(*Node_Array_Declarator).count);
 	}
 	if declarator.bitfield {
-		print(": ");
-		print_expr(declarator.bitfield);
+		append(builder, ": ");
+		print_expr(builder, declarator.bitfield);
 	}
 	if declarator.init {
-		print(" = ");
-		print_init(declarator.init);
+		append(builder, " = ");
+		print_init(builder, declarator.init);
 	}
 }
 
 
-print_decl :: (decl: *Node_Decl) {
-	print_type(decl.base_info);
+print_decl :: (builder: *String_Builder, decl: *Node_Decl) {
+	print_type(builder, decl.base_info);
 	for decl.declarators {
-		print_declarator(it);
-		if it_index < decl.declarators.count - 1 then print(", ");
+		print_declarator(builder, it);
+		if it_index < decl.declarators.count - 1 then append(builder, ", ");
 	}
 
 	if decl.body {
-		print_statement(decl.body);
+		print_statement(builder, decl.body);
 	}
 }
 
-print_statement :: (stmt: *Node_Statement, depth := 0) {
-
+print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0) {
+	if !stmt return;
 	if stmt.statement_type == {
 		case Node_Break;
-			print("break");
+			append(builder, "break");
 		case Node_Continue;
-			print("continue");
+			append(builder, "continue");
 		case Node_Goto;
-			print("goto ");
-			print(stmt.(*Node_Goto).to.view);
+			append(builder, "goto ");
+			append(builder, stmt.(*Node_Goto).to.view);
 		case Node_Return;
-			print("return ");
-			print_expr(stmt.(*Node_Return).expr);
-			print(";\n");
+			append(builder, "return ");
+			print_expr(builder, stmt.(*Node_Return).expr);
+			append(builder, ";\n");
 		case Node_Block;
-			print("{\n");
+			append(builder, "{\n");
 			for stmt.(*Node_Block).statements {
-				indent(depth + 1);
-				print_statement(it, depth + 1);
+				indent(builder, depth + 1);
+				print_statement(builder, it, depth + 1);
 			}
-			indent(depth);
-			print("}");
+			indent(builder, depth);
+			append(builder, "}");
 		case Node_If;
-			print("if ");
-			print("(");
-			print_expr(stmt.(*Node_If).cond);
-			print(") ");
-			print_statement(stmt.(*Node_If).on_true, depth);
+			append(builder, "if ");
+			append(builder, "(");
+			print_expr(builder, stmt.(*Node_If).cond);
+			append(builder, ") ");
+			print_statement(builder, stmt.(*Node_If).on_true, depth);
 			if stmt.(*Node_If).on_false {
-				print(" else ");
-				print_statement(stmt.(*Node_If).on_false, depth);
+				append(builder, " else ");
+				print_statement(builder, stmt.(*Node_If).on_false, depth);
 			}
-			print("\n");
+			append(builder, "\n");
 		case Node_While;
-			print("while ");
-			print("(");
-			print_expr(stmt.(*Node_While).cond);
-			print(")");
-			print_statement(stmt.(*Node_While).body, depth);
-			print("\n");
+			append(builder, "while ");
+			append(builder, "(");
+			print_expr(builder, stmt.(*Node_While).cond);
+			append(builder, ")");
+			print_statement(builder, stmt.(*Node_While).body, depth);
+			append(builder, "\n");
 		case Node_Do;
-			print("do ");
-			print_statement(stmt.(*Node_Do).body, depth);
-			print("(");
-			print_expr(stmt.(*Node_Do).cond);
-			print(")");
+			append(builder, "do ");
+			print_statement(builder, stmt.(*Node_Do).body, depth);
+			append(builder, "(");
+			print_expr(builder, stmt.(*Node_Do).cond);
+			append(builder, ")");
 		case Node_Switch;
-			print("switch ");
-			print("(");
-			print_expr(stmt.(*Node_Switch).expr);
-			print(")");
-			print_statement(stmt.(*Node_Do).body, depth);
-			print("\n");
+			append(builder, "switch ");
+			append(builder, "(");
+			print_expr(builder, stmt.(*Node_Switch).expr);
+			append(builder, ")");
+			print_statement(builder, stmt.(*Node_Do).body, depth);
+			append(builder, "\n");
 		case Node_Label;
 			if stmt.(*Node_Label).is_case {
-				print("case ");
+				append(builder, "case ");
 			}
-			print_expr(stmt.(*Node_Label).expr);
-			print(": ");
-			print_statement(stmt.(*Node_Label).statement, depth);
-			print("\n");
+			print_expr(builder, stmt.(*Node_Label).expr);
+			append(builder, ": ");
+			print_statement(builder, stmt.(*Node_Label).statement, depth);
+			append(builder, "\n");
 		case Node_For;
-			print("for ");
-			print("(");
-			print_decl(stmt.(*Node_For).init);
-			print("; ");
-			print_expr(stmt.(*Node_For).cond);
-			print("; ");
-			print_expr(stmt.(*Node_For).expr);
-			print(") ");
-			print_statement(stmt.(*Node_For).body, depth);
-			print("\n");
+			append(builder, "for ");
+			append(builder, "(");
+			print_decl(builder, stmt.(*Node_For).init);
+			append(builder, "; ");
+			print_expr(builder, stmt.(*Node_For).cond);
+			append(builder, "; ");
+			print_expr(builder, stmt.(*Node_For).expr);
+			append(builder, ") ");
+			print_statement(builder, stmt.(*Node_For).body, depth);
+			append(builder, "\n");
 		case Node_Decl_Statement;
-			print_decl(stmt.(*Node_Decl_Statement).decl);
-			print(";\n");
+			print_decl(builder, stmt.(*Node_Decl_Statement).decl);
+			append(builder, ";\n");
 		case Node_Expr_Statement;
-			print_expr(stmt.(*Node_Expr_Statement).expr);
-			print(";\n");
+			print_expr(builder, stmt.(*Node_Expr_Statement).expr);
+			append(builder, ";\n");
 	}
 }
 
@@ -2039,12 +2038,13 @@ main :: () {
 	dt := t1 - t0;
 	ms := 1000*to_float64_seconds(dt);
 
+	builder: String_Builder;
 	for tu.declarations {
-		print_decl(it);
+		print_decl(*builder, it);
 		if !it.body {
-			print(";");
+			append(*builder, ";");
 		}
-		print("\n");
+		append(*builder, "\n");
 	}
 
 	print("it took HOW long to parse % lines? %ms\n", total_newlines, ms);
