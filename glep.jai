@@ -99,6 +99,7 @@ Node_Type_Info :: struct {
 	storage_class: string;
 	_struct: *Node_Struct;
 	_enum: *Node_Enum;
+	reference: bool;
 }
 
 
@@ -620,15 +621,13 @@ tokenise :: (t: *Tokeniser) {
 								t.at += 1;
 							}
 						}
-						if t.source[t.at] == "e" || t.source[t.at] == "E" ||
+						while t.source[t.at] == "e" ||
+						   t.source[t.at] == "E" ||
 						   t.source[t.at] == "l" ||
 						   t.source[t.at] == "L" ||
 						   t.source[t.at] == "U" ||
 						   t.source[t.at] == "u" {
 							t.at += 1;
-							while is_num(t.source[t.at]) {
-								t.at += 1;
-							}
 						}
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
@@ -777,7 +776,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		} else if current(p).view == "struct" {
 			skip(p);
 			_struct: *Node_Struct;
-
+			
 			if current(p).type == .Identifier {
 				name := current(p);
 				skip(p);
@@ -807,6 +806,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 						table_add(*p.structs, name.view, _struct);
 					}
 				}
+				info.reference = defined;
 			} else if current(p).type == .LeftBrace {
 				skip(p);
 				_struct = New(Node_Struct);
@@ -1289,6 +1289,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		token: Token;
 		token.view = concat;
 		token.type = .String;
+		result.(*Node_String).token = token;
 	} else if current(p).type == .LeftParenthesis {
 		expect(p, .LeftParenthesis);
 		result = parse_expr(p);
@@ -1791,18 +1792,22 @@ print_type :: (info: Node_Type_Info) {
 	
 	if info._struct {
 		if info._struct.is_union {
-			print("enum ");
+			print("union ");
 		}else {
 			print("struct ");
 		}
 		print(info._struct.name.view);
-		print(" {\n");
-		for info._struct.members {
-			print("    ");
-			print_decl(it);
-			print(";\n");
+		if !info.reference {
+			print(" {\n");
+			for info._struct.members {
+				print("    ");
+				print_decl(it);
+				print(";\n");
+			}
+			print("} ");
+		} else {
+			print(" ");
 		}
-		print("} ");
 	}
 
 	if info._enum {
