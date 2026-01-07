@@ -100,9 +100,9 @@ Node_Type_Info :: struct {
 	_struct: *Node_Struct;
 	_enum: *Node_Enum;
 	reference: bool;
+	atomic: *Node_Type_Info;
+	declarators: [..]*Node_Declarator;
 }
-
-
 
 Node_Struct :: struct {
 	name: Token;
@@ -155,8 +155,7 @@ Node_Identifier_Declarator :: struct {
 Node_Decl :: struct {
 	#as using node: Node;
 	type = Node_Decl;
-	declarators: [..]*Node_Declarator;
-	base_info: Node_Type_Info;
+	using base: Node_Type_Info;
 	body: *Node_Statement;
 }
 
@@ -184,8 +183,19 @@ Node_Unary :: struct {
 
 Node_Cast :: struct {
 	#as using node: Node_Expr;
-	declarator: *Node_Declarator;
-	base_info: Node_Type_Info;
+	base: Node_Type_Info;
+	expr: *Node_Expr;
+	expr_type = #this;
+}
+
+Node_Sizeof_Type :: struct {
+	#as using node: Node_Expr;
+	base: Node_Type_Info;
+	expr_type = #this;
+}
+
+Node_Sizeof_Expr :: struct {
+	#as using node: Node_Expr;
 	expr: *Node_Expr;
 	expr_type = #this;
 }
@@ -250,6 +260,12 @@ Node_Number :: struct {
 }
 
 Node_String :: struct {
+	#as using node: Node_Expr;
+	expr_type = #this;
+	token: Token;
+}
+
+Node_Char :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	token: Token;
@@ -459,6 +475,10 @@ tokenise :: (t: *Tokeniser) {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .AmpersandAmpersand;
+				} else if t.source[t.at] == #char "=" {
+					t.at += 1;
+					token.view.count += 1;
+					token.type = .AmpersandEqual;
 				}
 			case "~"; t.at += 1; token.type = .Tilde;
 			case "^";
@@ -574,6 +594,7 @@ tokenise :: (t: *Tokeniser) {
 				} else if t.source[t.at] == #char "<" {
 					t.at += 1;
 					token.type = .LessLess;
+					token.view.count += 1;
 					if t.source[t.at] == #char "=" {
 						t.at += 1;
 						token.view.count += 1;
@@ -868,12 +889,11 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			if current(p).view == "_Atomic" {
 				skip(p);
 				expect(p, .LeftParenthesis);
-				info: Node_Type_Info;
-				// HACK(Oliver): store this somewhere
-				parse_declaration_specifiers(p, *info);
-				declarator := parse_declarator(p);
+				atomic_info := New(Node_Type_Info);
+				parse_declaration_specifiers(p, atomic_info);
+				array_add(*atomic_info.declarators, parse_declarator(p));
 				expect(p, .RightParenthesis);
-				array_add(*info.specifiers, current(p).view);
+				info.atomic = atomic_info;
 			} else {
 				array_add(*info.specifiers, current(p).view);
 				skip(p);
@@ -1067,10 +1087,6 @@ is_prefix_op :: (token: Token) -> bool {
 		case .Ampersand;
 			return true;
 	}
-
-	if token.view == "sizeof" {
-		return true;
-	}
 	
 	return false;
 }
@@ -1119,7 +1135,30 @@ is_binary_op :: (token: Token) -> bool {
 
 parse_unary :: (p: *Parser) -> *Node_Expr {
 	result: *Node_Expr;
-	if is_prefix_op(current(p)) {
+	if current(p).view == "sizeof" {
+		skip(p);
+		if current(p).type == .LeftParenthesis {
+			if is_type_name(p, next(p)) {
+				skip(p);
+				base_info: Node_Type_Info;
+				parse_declaration_specifiers(p, *base_info);
+				declarator := parse_declarator(p);
+				sizeof := New(Node_Sizeof_Type);
+				array_add(*base_info.declarators, declarator);
+				sizeof.base = base_info;
+				expect(p, .RightParenthesis);
+				result = sizeof;
+			} else {
+				sizeof := New(Node_Sizeof_Expr);
+				sizeof.expr = parse_expr(p);
+				result = sizeof;
+			}
+		} else {
+			sizeof := New(Node_Sizeof_Expr);
+			sizeof.expr = parse_expr(p);
+			result = sizeof;
+		}
+	} else if is_prefix_op(current(p)) {
 		op := current(p);
 		skip(p);
 		rhs := parse_unary(p);
@@ -1141,8 +1180,8 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 			result = compound;
 		} else {
 			_cast := New(Node_Cast);
-			_cast.base_info = base_info;
-			_cast.declarator = declarator;
+			_cast.base = base_info;
+			array_add(*_cast.base.declarators, declarator);
 			_cast.expr = parse_unary(p);
 			result = _cast;
 		}
@@ -1270,14 +1309,13 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		skip(p);
 		result.(*Node_Number).value = value;
 	} else if current(p).type == .Char {
-		result = New(Node_Number);
+		result = New(Node_Char);
 		result.(*Node_Number).token = current(p);
-		value: int;
-		for current(p).view {
-			value = value * 10 + it;
-		}
+		// value: int;
+		// for current(p).view {
+		// 	value = value * 10 + it;
+		// }
 		skip(p);
-		result.(*Node_Number).value = value;
 	} else if current(p).type == .String {
 		result = New(Node_String);
 		concat := current(p).view;
@@ -1381,14 +1419,20 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		}
 	case Node_Cast;
 		append(builder, "(");
-		print_type(builder, node.(*Node_Cast).base_info);
-		print_declarator(builder,node.(*Node_Cast).declarator);
+		print_type(builder, node.(*Node_Cast).base);
 		append(builder, ")");
 		print_expr(builder, node.(*Node_Cast).expr);
+	case Node_Sizeof_Type;
+		append(builder, "sizeof");
+		append(builder, "(");
+		print_type(builder, node.(*Node_Sizeof_Type).base);
+		append(builder, ")");
+	case Node_Sizeof_Expr;
+		append(builder, "sizeof ");
+		print_expr(builder, node.(*Node_Sizeof_Expr).expr);
 	case Node_Compound;
 		append(builder, "(");
 		print_type(builder, node.(*Node_Compound).base_info);
-		print_declarator(builder, node.(*Node_Compound).declarator);
 		append(builder, ")");
 		print_init(builder, node.(*Node_Compound).init);
 	case Node_Binary;
@@ -1428,6 +1472,8 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, node.(*Node_Number).token.view);
 	case Node_String;
 		append(builder, sprint("\"%\"", node.(*Node_String).token.view));
+	case Node_Char;
+		append(builder, sprint("'%'", node.(*Node_String).token.view));
 	case Node_Identifier;
 		append(builder, sprint("%", node.(*Node_Identifier).id.view));
 	case Node_Call;
@@ -1452,7 +1498,7 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := New(Node_Decl);
-	parse_declaration_specifiers(p, *decl.base_info);
+	parse_declaration_specifiers(p, *decl.base);
 	declarator := parse_declarator(p);
 	if declarator {
 		array_add(*decl.declarators, declarator);
@@ -1736,7 +1782,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	parse_declaration_specifiers(p, *type);
 
 	decl := New(Node_Decl);
-	decl.base_info = type;
+	decl.base = type;
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
@@ -1757,7 +1803,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		}
 	}
 
-	if is_typedef(decl.base_info) {
+	if is_typedef(decl.base) {
 		for decl.declarators {
 			// This should probably always be true?
 			id := identifier_from_declarator(it); 
@@ -1830,8 +1876,24 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 	for info.qualifiers {
 		append(builder, sprint("% ", it));
 	}
+	
+	if info.atomic {
+		append(builder, "_Atomic(");
+
+		print_type(builder, info.atomic);
+
+		append(builder, ") ");
+	}
+
 	for info.specifiers {
 		append(builder, sprint("% ", it));
+	}
+
+	for info.declarators {
+		print_declarator(builder, it);
+	}
+	if info.atomic {
+		append(builder, ")");
 	}
 }
 
@@ -1856,7 +1918,7 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		append(builder, "(");
 		for func.params {
 			if !it break;
-			print_type(builder, it.base_info);
+			print_type(builder, it.base);
 			if it.declarators.count {
 				print_declarator(builder, it.declarators[0], false);
 			}
@@ -1882,7 +1944,7 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 
 
 print_decl :: (builder: *String_Builder, decl: *Node_Decl) {
-	print_type(builder, decl.base_info);
+	print_type(builder, decl.base);
 	for decl.declarators {
 		print_declarator(builder, it);
 		if it_index < decl.declarators.count - 1 then append(builder, ", ");
@@ -1897,9 +1959,9 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 	if !stmt return;
 	if stmt.statement_type == {
 		case Node_Break;
-			append(builder, "break");
+			append(builder, "break;");
 		case Node_Continue;
-			append(builder, "continue");
+			append(builder, "continue;");
 		case Node_Goto;
 			append(builder, "goto ");
 			append(builder, stmt.(*Node_Goto).to.view);
@@ -1936,6 +1998,7 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 		case Node_Do;
 			append(builder, "do ");
 			print_statement(builder, stmt.(*Node_Do).body, depth);
+			append(builder, "while");
 			append(builder, "(");
 			print_expr(builder, stmt.(*Node_Do).cond);
 			append(builder, ")");
@@ -1947,8 +2010,10 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			print_statement(builder, stmt.(*Node_Do).body, depth);
 			append(builder, "\n");
 		case Node_Label;
-			if stmt.(*Node_Label).is_case {
+			if stmt.(*Node_Label).is_case && stmt.(*Node_Label).expr {
 				append(builder, "case ");
+			} else if !stmt.(*Node_Label).expr {
+				append(builder, "default ");
 			}
 			print_expr(builder, stmt.(*Node_Label).expr);
 			append(builder, ": ");
