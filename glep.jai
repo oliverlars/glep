@@ -1876,7 +1876,7 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 	for info.qualifiers {
 		append(builder, sprint("% ", it));
 	}
-	
+
 	if info.atomic {
 		append(builder, "_Atomic(");
 
@@ -1891,9 +1891,6 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 
 	for info.declarators {
 		print_declarator(builder, it);
-	}
-	if info.atomic {
-		append(builder, ")");
 	}
 }
 
@@ -1919,9 +1916,6 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		for func.params {
 			if !it break;
 			print_type(builder, it.base);
-			if it.declarators.count {
-				print_declarator(builder, it.declarators[0], false);
-			}
 			if it_index < func.params.count - 1 then append(builder, ", ");
 		}
 		append(builder, ")");
@@ -1945,11 +1939,6 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 
 print_decl :: (builder: *String_Builder, decl: *Node_Decl) {
 	print_type(builder, decl.base);
-	for decl.declarators {
-		print_declarator(builder, it);
-		if it_index < decl.declarators.count - 1 then append(builder, ", ");
-	}
-
 	if decl.body {
 		print_statement(builder, decl.body);
 	}
