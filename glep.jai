@@ -133,6 +133,7 @@ Node_Function_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = #this;
 	params: [..]*Node_Decl;
+	variadic: bool;
 }
 
 Node_Array_Declarator :: struct {
@@ -1528,6 +1529,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			func := New(Node_Function_Declarator);
 			while current(p).type != .RightParenthesis {
 				if current(p).type == .Ellipsis {
+					func.variadic = true;
 					skip(p);
 				} else {
 					array_add(*func.(*Node_Function_Declarator).params, parse_param_decl(p));
@@ -1918,6 +1920,9 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 			print_type(builder, it.base);
 			if it_index < func.params.count - 1 then append(builder, ", ");
 		}
+		if func.variadic {
+			append(builder, ", ...");
+		}
 		append(builder, ")");
 	case Node_Identifier_Declarator;
 		print_declarator(builder, declarator.inner, false);
@@ -2033,6 +2038,7 @@ main :: () {
 
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
+	//minimal := read_entire_file("friday.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);

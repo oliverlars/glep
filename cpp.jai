@@ -61,6 +61,14 @@ add_builtin :: (cpp: *Preprocessor, builtin: string, view: string, type: Token_T
 	table_add(*cpp.objects, builtin, object);
 }
 
+add_builtin :: (cpp: *Preprocessor, builtin: string, tokens: ..Token) {
+	object: Object;
+	for tokens {
+		array_add(*object.tokens, it);
+	}
+	table_add(*cpp.objects, builtin, object);
+}
+
 trim_suffix :: (number: string) -> string {
 	result := number;
 	for < number {
@@ -456,42 +464,57 @@ eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int 
 }
 
 add_all_builtins :: (cpp: *Preprocessor) {
-	add_builtin(cpp, "TARGET_CPU_ARM64", "1", .Number);
-	add_builtin(cpp, "__STDC__", "1", .Number);
+
+	number :: (name: string) -> Token {
+		token: Token;
+		token.view = name;
+		token.type = .Number;
+		return token;
+	}
+
+	id :: (name: string) -> Token {
+		token: Token;
+		token.view = name;
+		token.type = .Identifier;
+		return token;
+	}
+
+	add_builtin(cpp, "TARGET_CPU_ARM64", number("1"));
+	add_builtin(cpp, "__STDC__", number("1"));
 	add_builtin(cpp, "__STDC_VERSION__", "201112L", .Number);
-	add_builtin(cpp, "__APPLE__", "1", .Number);
-	add_builtin(cpp, "__MACH__", "1", .Number);
-	add_builtin(cpp, "__aarch64__", "1", .Number);
-	add_builtin(cpp, "__arm64__", "1", .Number);
-	add_builtin(cpp, "__arm64", "1", .Number);
-	add_builtin(cpp, "__LP64__", "1", .Number);
-	add_builtin(cpp, "_LP64", "1", .Number);
-	add_builtin(cpp, "__SIZEOF_DOUBLE__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_POINTER__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_INT__", "4", .Number);
-	add_builtin(cpp, "__SIZEOF_LONG__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_LONG_DOUBLE__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_LONG_LONG__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_PTRDIFF_T__", "8", .Number);
-	add_builtin(cpp, "__SIZEOF_SHORT__", "2", .Number);
-	add_builtin(cpp, "__SIZEOF_SIZE_T__", "8", .Number);
+	add_builtin(cpp, "__APPLE__", number("1"));
+	add_builtin(cpp, "__MACH__", number("1"));
+	add_builtin(cpp, "__aarch64__", number("1"));
+	add_builtin(cpp, "__arm64__", number("1"));
+	add_builtin(cpp, "__arm64", number("1"));
+	add_builtin(cpp, "__LP64__", number("1"));
+	add_builtin(cpp, "_LP64", number("1"));
+	add_builtin(cpp, "__SIZEOF_DOUBLE__", number("8"));
+	add_builtin(cpp, "__SIZEOF_POINTER__", number("8"));
+	add_builtin(cpp, "__SIZEOF_INT__", number("4"));
+	add_builtin(cpp, "__SIZEOF_LONG__", number("8"));
+	add_builtin(cpp, "__SIZEOF_LONG_DOUBLE__", number("8"));
+	add_builtin(cpp, "__SIZEOF_LONG_LONG__", number("8"));
+	add_builtin(cpp, "__SIZEOF_PTRDIFF_T__", number("8"));
+	add_builtin(cpp, "__SIZEOF_SHORT__", number("2"));
+	add_builtin(cpp, "__SIZEOF_SIZE_T__", number("8"));
 
 	// HACK(Oliver): These are the wrong sizes...
-	add_builtin(cpp, "__INTMAX_TYPE__", "long", .Identifier);
-	add_builtin(cpp, "__UINTMAX_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__INT8_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__INT16_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__INT32_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__INT64_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__UINT8_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__UINT16_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__UINT32_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__UINT64_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__WCHAR_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__SIZE_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__PTRDIFF_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__INTPTR_TYPE__", "unsigned", .Identifier);
-	add_builtin(cpp, "__UINTPTR_TYPE__", "unsigned", .Identifier);
+	add_builtin(cpp, "__INTMAX_TYPE__", id("long"), id("long"));
+	add_builtin(cpp, "__UINTMAX_TYPE__", id("unsigned"), id("long"), id("long"));
+	add_builtin(cpp, "__INT8_TYPE__", id("signed"), id("char"));
+	add_builtin(cpp, "__INT16_TYPE__", id("short"));
+	add_builtin(cpp, "__INT32_TYPE__", id("int"));
+	add_builtin(cpp, "__INT64_TYPE__", id("long"), id("long"));
+	add_builtin(cpp, "__UINT8_TYPE__", id("unsigned"), id("char"));
+	add_builtin(cpp, "__UINT16_TYPE__", id("unsigned"), id("short"));
+	add_builtin(cpp, "__UINT32_TYPE__", id("unsigned"), id("int"));
+	add_builtin(cpp, "__UINT64_TYPE__", id("unsigned"), id("long"), id("long"));
+	add_builtin(cpp, "__WCHAR_TYPE__", id("int"));
+	add_builtin(cpp, "__SIZE_TYPE__", id("unsigned"), id("long"));
+	add_builtin(cpp, "__PTRDIFF_TYPE__", id("long"));
+	add_builtin(cpp, "__INTPTR_TYPE__", id("long"));
+	add_builtin(cpp, "__UINTPTR_TYPE__", id("unsigned"), id("long"));
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
