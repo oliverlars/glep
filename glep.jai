@@ -1374,7 +1374,7 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 			append(builder, "(");
 		}
 		left := print_expr(builder, node.(*Node_Assign).left, precedence);
-		append(builder, tprint(" % ", node.(*Node_Assign).op.view));
+		append(builder, sprint(" % ", node.(*Node_Assign).op.view));
 		right := print_expr(builder, node.(*Node_Assign).right, precedence);
 		if precedence <= parent_precedence {
 			append(builder, ")");
@@ -1397,14 +1397,14 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 			append(builder, "(");
 		}
 		left := print_expr(builder, node.(*Node_Binary).left, precedence);
-		append(builder, tprint(" % ", node.(*Node_Binary).op.view));
+		append(builder, sprint(" % ", node.(*Node_Binary).op.view));
 		right := print_expr(builder, node.(*Node_Binary).right, precedence);
 		if precedence <= parent_precedence {
 			append(builder, ")");
 		}
 	case Node_Unary;
 		if !node.(*Node_Unary).postfix {
-			append(builder, tprint("%", node.(*Node_Unary).op.view));
+			append(builder, sprint("%", node.(*Node_Unary).op.view));
 		}
 		precedence := precedence_of(node.(*Node_Unary).op);
 		if precedence <= parent_precedence {
@@ -1412,7 +1412,7 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		}
 		print_expr(builder, node.(*Node_Unary).expr);
 		if node.(*Node_Unary).postfix {
-			append(builder, tprint("%", node.(*Node_Unary).op.view));
+			append(builder, sprint("%", node.(*Node_Unary).op.view));
 		}
 		if precedence <= parent_precedence {
 			append(builder, ")");
@@ -1427,9 +1427,9 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		//append(builder, "%", node.(*Node_Number).value);
 		append(builder, node.(*Node_Number).token.view);
 	case Node_String;
-		append(builder, tprint("\"%\"", node.(*Node_String).token.view));
+		append(builder, sprint("\"%\"", node.(*Node_String).token.view));
 	case Node_Identifier;
-		append(builder, tprint("%", node.(*Node_Identifier).id.view));
+		append(builder, sprint("%", node.(*Node_Identifier).id.view));
 	case Node_Call;
 		print_expr(builder, node.(*Node_Call).id);
 		append(builder, "(");
@@ -1445,8 +1445,8 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, "]");
 	case Node_Member_Access;
 		print_expr(builder, node.(*Node_Member_Access).left);
-		append(builder, tprint("%", node.(*Node_Member_Access).op.view));
-		append(builder, tprint("%", node.(*Node_Member_Access).right.view));
+		append(builder, sprint("%", node.(*Node_Member_Access).op.view));
+		append(builder, sprint("%", node.(*Node_Member_Access).right.view));
 	}
 }
 
@@ -1784,7 +1784,7 @@ indent :: (builder: *String_Builder, depth: int) {
 
 
 print_type :: (builder: *String_Builder, info: Node_Type_Info) {	
-	append(builder, tprint("%", info.storage_class));
+	append(builder, sprint("%", info.storage_class));
 	if info.storage_class {
 		append(builder, " ");
 	}
@@ -1828,10 +1828,10 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 	}
 
 	for info.qualifiers {
-		append(builder, tprint("% ", it));
+		append(builder, sprint("% ", it));
 	}
 	for info.specifiers {
-		append(builder, tprint("% ", it));
+		append(builder, sprint("% ", it));
 	}
 }
 
@@ -1844,7 +1844,7 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		}
 		append(builder, "*");
 		for declarator.qualifiers {
-			append(builder, tprint("% ", it));
+			append(builder, sprint("% ", it));
 		}
 		print_declarator(builder, declarator.inner, false);
 		if parent_was_function_or_array {
@@ -1865,10 +1865,10 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		append(builder, ")");
 	case Node_Identifier_Declarator;
 		print_declarator(builder, declarator.inner, false);
-		append(builder, tprint("%", declarator.(*Node_Identifier_Declarator).name));
+		append(builder, sprint("%", declarator.(*Node_Identifier_Declarator).name));
 	case Node_Array_Declarator;
 		print_declarator(builder, declarator.inner, true);
-		append(builder, "[%]", declarator.(*Node_Array_Declarator).count);
+		append(builder, sprint("[%]", declarator.(*Node_Array_Declarator).count));
 	}
 	if declarator.bitfield {
 		append(builder, ": ");
@@ -1979,30 +1979,6 @@ main :: () {
 
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
-	print("%", minimal);
-	// minimal = #string STRING
-	// #define __asm(x)
-	// #define __attribute__(x)
-	// #include <stdio.h>
-	// #include <util.h>
-	// #include <fcntl.h>
-	// #include <sys/stat.h>
-	// #include <unistd.h>
-	// #include <sys/types.h>
-	// #include <dirent.h>
-	// #include <stdatomic.h>
-	// #include <spawn.h>
-	// #include <sys/wait.h>
-	// #include <pthread.h>
-	// #include <stdlib.h>
-	// #include <sys/mman.h>
-	// #include <mach/mach_time.h>
-	// #include <sys/types.h>
-	// #include <sys/sysctl.h>
-	// #include <os/os_sync_wait_on_address.h>
-	// #include <os/lock.h>
-	// STRING
-
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
@@ -2014,7 +1990,7 @@ main :: () {
 
 	// output: string;
 	// for tokens {
-	// 	output = join(output, tprint("% ", it.view));
+	// 	output = join(output, sprint("% ", it.view));
 	// }
 	// write_entire_file("processed.c", output);
 
@@ -2047,5 +2023,6 @@ main :: () {
 		append(*builder, "\n");
 	}
 
+	write_entire_file("friday.c", builder_to_string(*builder));
 	print("it took HOW long to parse % lines? %ms\n", total_newlines, ms);
 }

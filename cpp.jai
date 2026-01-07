@@ -295,12 +295,12 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 
 
 				body := subst(cpp, function.tokens, function.params, args, va_args);
-				print("BODY: ");
+				//print("BODY: ");
 				for * body {
 					it.hideset = hideset_union(it.hideset, hideset);
-					print("% ", it.view);
+					//print("% ", it.view);
 				}
-				print("\n");
+				//print("\n");
 				
 				expanded := expand(cpp, body);
 				//print("EXPANDED: ");
@@ -616,8 +616,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							current_path.words.count -= 1;
 							resolved_path := parse_path(tprint("%/%", path_to_string(current_path), include_path));
 							path := path_to_string(resolved_path);
-							print("RESOLVED: %\n", path);
-							print("Loading include %\n", peek(cpp.path_stack));
+							//print("RESOLVED: %\n", path);
+							//print("Loading include %\n", peek(cpp.path_stack));
 							file, found = read_entire_file(path);
 							if found {
 								array_add(*cpp.path_stack, path);
@@ -640,7 +640,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 									}
 								}
 								assert(found);
-								print("Loading include %\n", peek(cpp.path_stack));
+								//print("Loading include %\n", peek(cpp.path_stack));
 								include_tokeniser := tokenise(file);
 								at := cpp.at;
 								cpp.at = 0;
@@ -669,7 +669,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								}
 							}
 							assert(found);
-							print("Loading include %\n", peek(cpp.path_stack));
+							//print("Loading include %\n", peek(cpp.path_stack));
 							include_tokeniser := tokenise(file);
 							at := cpp.at;
 							cpp.at = 0;
@@ -781,17 +781,14 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						array_add(*to_expand, skip(cpp, src_tokens));
 						array_add(*to_expand, skip(cpp, src_tokens));
 						paren_depth := 0;
-						print("\n========FUNC EXPAND START % ======\n", cpp.expand_count);
-						if cpp.expand_count == 795 {
-							a := 5;
-						}
+						//print("\n========FUNC EXPAND START % ======\n", cpp.expand_count);
 						cpp.expand_count += 1;
 						while paren_depth > 0 || current(cpp, src_tokens).type != .RightParenthesis {
-							if current(cpp, src_tokens).type != .Newline {
-								print("% ", current(cpp, src_tokens).view);
-							} else {
-								print("\n");
-							}
+							// if current(cpp, src_tokens).type != .Newline {
+							// 	print("% ", current(cpp, src_tokens).view);
+							// } else {
+							// 	print("\n");
+							// }
 							if current(cpp, src_tokens).type == .LeftParenthesis {
 								array_add(*to_expand, skip(cpp, src_tokens));
 								paren_depth += 1;
@@ -805,7 +802,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								array_add(*to_expand, skip(cpp, src_tokens));
 							}
 						}
-						print("\n========FUNC EXPAND END======\n");
+						//print("\n========FUNC EXPAND END======\n");
 						assert(current(cpp, src_tokens).type == .RightParenthesis);
 						array_add(*to_expand, skip(cpp, src_tokens));
 						// print("TO EXPAND: ");
