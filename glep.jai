@@ -422,23 +422,24 @@ tokenise :: (file: string) -> Tokeniser {
 }
 
 tokenise :: (t: *Tokeniser) {
-	is_ws    :: (c: int) -> bool { return c == #char " " || c == #char "\t"; }
-	is_newline :: (c: int) -> bool { return c == #char "\n" || c == #char "\r"; }
-	is_ident :: (c: int) -> bool { return c == #char "_" || ((c >= #char "a") && (c <= #char "z")) || ((c >= #char "A") && (c <= #char "Z")); }
-	is_num   :: (c: int) -> bool { return c >= #char "0" && c <= #char "9"; }
-	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t.source[t.at]) { t.at += 1; } }
+	is_ws    :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char " " || t.source[t.at] == #char "\t"; }
+	is_newline :: (t: *Tokeniser) -> bool { if t.at >= t.source.count return false; return t.source[t.at] == #char "\n" || t.source[t.at] == #char "\r"; }
+	is_ident :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char "_" || ((t.source[t.at] >= #char "a") && (t.source[t.at] <= #char "z")) || ((t.source[t.at] >= #char "A") && (t.source[t.at] <= #char "Z")); }
+	is_num   :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] >= #char "0" && t.source[t.at] <= #char "9"; }
+	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t) { t.at += 1; } }
+	is_char :: (t: *Tokeniser, char: int)  -> bool { if t.at >= t.source.count return false; return t.source[t.at] == char; }
 	while t.at < t.source.count {
 		token: Token;
 		token.view.data = t.source.data + t.at;
 		token.view.count = 1;
-		if is_ws(t.source[t.at]) {
+		if is_ws(t) {
 			gobble_ws(t);
 			continue;
 		} else {
 			if t.source[t.at] == {
 			case "=";
 				t.at += 1; token.type = .Equals;
-				if t.source[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .EqualEqual;
@@ -456,7 +457,7 @@ tokenise :: (t: *Tokeniser) {
 			case "#";
 				token.type = .Hash;
 				t.at += 1;
-				if t.source[t.at] == "#" {
+				if is_char(t , #char "#") {
 					token.type = .HashHash;
 					t.at += 1;
 					token.view.count += 1;
@@ -465,18 +466,18 @@ tokenise :: (t: *Tokeniser) {
 			case "\r"; t.at += 1; token.type = .Newline;
 			case "*";
 				t.at += 1; token.type = .Asterisk;
-				if t.source[t.at] == "=" {
+				if is_char(t, #char "=") {
 					token.type = .AsteriskEqual;
 					t.at += 1;
 					token.view.count += 1;
 				}
 			case "&";
 				t.at += 1; token.type = .Ampersand;
-				if t.source[t.at] == #char "&" {
+				if is_char(t, #char "&") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .AmpersandAmpersand;
-				} else if t.source[t.at] == #char "=" {
+				} else if is_char(t, #char "=") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .AmpersandEqual;
@@ -484,63 +485,63 @@ tokenise :: (t: *Tokeniser) {
 			case "~"; t.at += 1; token.type = .Tilde;
 			case "^";
 				t.at += 1; token.type = .Caret;
-				if t.source[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .CaretEqual;
 				}
 			case "%";
 				t.at += 1; token.type = .Percent;
-				if t.source[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .PercentEqual;
 				}
 			case "!";
 				t.at += 1; token.type = .Bang;
-				if t.source[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					t.at += 1;
 					token.view.count += 1;
 					token.type = .BangEqual;
 				}
 			case "+";
 				t.at += 1; token.type = .Plus;
-				if t.source[t.at] == "+" {
+				if is_char(t, #char "+") {
 					token.type = .PlusPlus;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == "=" {
+				} else if is_char(t, #char "=") {
 					token.type = .PlusEqual;
 					t.at += 1;
 					token.view.count += 1;
 				}
 			case "-"; 
 				t.at += 1; token.type = .Minus;
-				if t.source[t.at] == "-" {
+				if is_char(t, #char "-") {
 					token.type = .MinusMinus;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == "=" {
+				} else if is_char(t, #char "=") {
 					token.type = .MinusEqual;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == ">" {
+				} else if is_char(t, #char ">") {
 					token.type = .Arrow;
 					t.at += 1;
 					token.view.count += 1;
 				}
 			case "/";
 				t.at += 1; token.type = .ForwardSlash;
-				if t.source[t.at] == "=" {
+				if is_char(t, #char "="){
 					token.type = .ForwardSlashEqual;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == "/" {
-					while t.at < t.source.count && !is_newline(t.source[t.at]) {
+				} else if is_char(t, #char "/") {
+					while t.at < t.source.count && !is_newline(t) {
 						t.at += 1;
 					}
 					continue;
-				} else if t.source[t.at] == "*" {
+				} else if is_char(t, #char "*") {
 					t.at += 1;
 					while t.at + 1 < t.source.count {
 						if t.source[t.at] == "*" && t.source[t.at + 1] == "/" {
@@ -553,7 +554,7 @@ tokenise :: (t: *Tokeniser) {
 				}
 			case "\\";
 				t.at += 1;
-				if is_newline(t.source[t.at]) {
+				if is_newline(t) {
 					t.at += 1;
 				}
 				continue;
@@ -568,35 +569,35 @@ tokenise :: (t: *Tokeniser) {
 						token.view.count += 2;
 					}
 				}
-				if is_num(t.source.data[t.at]) {
+				if is_num(t) {
 					token.type = .Number;
-					while is_num(t.source[t.at]) {
+					while is_num(t){
 						t.at += 1;
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
 				}
 			case "|";
 				t.at += 1; token.type = .Pipe;
-				if t.source.data[t.at] == #char "|" {
+				if is_char(t, #char "|") {
 					token.type = .PipePipe;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source.data[t.at] == #char "=" {
+				} else if is_char(t, #char "=") {
 					token.type = .PipeEqual;
 					t.at += 1;
 					token.view.count += 1;
 				}
 			case "<";
 				t.at += 1; token.type = .Less;
-				if t.source.data[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					token.type = .LessEqual;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == #char "<" {
+				} else if is_char(t, #char "<") {
 					t.at += 1;
 					token.type = .LessLess;
 					token.view.count += 1;
-					if t.source[t.at] == #char "=" {
+					if is_char(t, #char "=") {
 						t.at += 1;
 						token.view.count += 1;
 						token.type = .LessLessEqual;
@@ -604,59 +605,59 @@ tokenise :: (t: *Tokeniser) {
 				}
 			case ">";
 				t.at += 1; token.type = .Greater;
-				if t.source.data[t.at] == #char "=" {
+				if is_char(t, #char "=") {
 					token.type = .GreaterEqual;
 					t.at += 1;
 					token.view.count += 1;
-				} else if t.source[t.at] == #char ">" {
+				} else if is_char(t, #char ">") {
 					t.at += 1;
 					token.type = .GreaterGreater;
-					if t.source[t.at] == #char "=" {
+					if is_char(t, #char "=") {
 						t.at += 1;
 						token.view.count += 1;
 						token.type = .GreaterGreaterEqual;
 					}
 				}
 			case;
-				if is_ident(t.source[t.at]) {
+				if is_ident(t) {
 					token.type = .Identifier;
-					while is_ident(t.source[t.at]) || t.source[t.at] == #char "_"  ||
-							is_num(t.source[t.at]) {
+					while is_ident(t) || is_char(t, #char "_")  ||
+							is_num(t) {
 						t.at += 1;
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
-				} else if is_num(t.source[t.at]) {
+				} else if is_num(t) {
 					token.type = .Number;
 					// Do this better...
-					if t.source[t.at] == "0" && t.source[t.at + 1] == "x" {
+					if is_char(t, #char "0") && t.source[t.at + 1] == #char "x" {
 						t.at += 2;
-						while is_num(t.source[t.at]) || is_ident(t.source[t.at]) {
+						while is_num(t) || is_ident(t) {
 							t.at += 1;
 						}
 					} else {
-						while is_num(t.source[t.at]) {
+						while is_num(t) {
 							t.at += 1;
 						}
-						if t.source[t.at] == "." {
+						if is_char(t, #char ".") {
 							t.at += 1;
-							while is_num(t.source[t.at]) {
+							while is_num(t) {
 								t.at += 1;
 							}
 						}
-						while t.source[t.at] == "e" ||
-						   t.source[t.at] == "E" ||
-						   t.source[t.at] == "l" ||
-						   t.source[t.at] == "L" ||
-						   t.source[t.at] == "U" ||
-						   t.source[t.at] == "u" {
+						while is_char(t, #char "e") ||
+						   is_char(t, #char "E") ||
+						   is_char(t, #char "l") ||
+						   is_char(t, #char "L") ||
+						   is_char(t, #char "U") ||
+						   is_char(t, #char "u") {
 							t.at += 1;
 						}
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
-				} else if t.source[t.at] == "\"" {
+				} else if is_char(t, #char "\"") {
 					token.type = .String;
 					t.at += 1;
-					while t.source[t.at] != "\"" {
+					while !is_char(t, #char "\"") {
 						// HACK(Oliver): Temporary fix, properly handle escape
 						// sequences
 						if t.at + 1 < t.source.count && t.source[t.at] == "\\" &&
@@ -686,14 +687,13 @@ tokenise :: (t: *Tokeniser) {
 					token.view.data += 1;
 				} else {
 					token.type = .Invalid;
-					while !is_ws(t.source[t.at]) {
+					while !is_ws(t) {
 						t.at += 1;
 					}
 					token.view.count = t.source.data + t.at - token.view.data - 2;
 				}
 			}
 		}
-
 		array_add(*t.tokens, token);
 	}
 }
@@ -777,6 +777,7 @@ is_type_specifier :: (token: Token) -> bool {
 	case "__uint128_t"; #through;
 	case "_Atomic"; #through;
 	case "_Bool"; #through;
+	case "__builtin_va_list"; #through;
 	case "bool";
 		return true;
 	case;
@@ -1617,6 +1618,7 @@ parse_declarator :: (p: *Parser) -> *Node_Declarator {
 
 identifier_from_declarator :: (declarator: *Node_Declarator) -> string {
 	find_identifier :: (declarator: *Node_Declarator) -> string {
+		if !declarator return "";
 		if declarator.declarator_type == Node_Identifier_Declarator {
 			return declarator.(*Node_Identifier_Declarator).name;
 		} else {
@@ -1840,7 +1842,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			// This should probably always be true?
 			id := identifier_from_declarator(it); 
 			if id != "" {
-				//print("Adding typedef: %\n", id);
+ 				//print("Adding typedef: %\n", id);
 				table_add(*p.typedefs, id, decl);
 			}
 		}
@@ -1861,7 +1863,15 @@ indent :: (builder: *String_Builder, depth: int) {
 }
 
 
-print_type :: (builder: *String_Builder, info: Node_Type_Info) {	
+print_type :: (builder: *String_Builder, info: Node_Type_Info) {
+	for info.declarators {
+		id := identifier_from_declarator(it);
+		if id {
+			if id == "__builtin_va_list" ||
+				id == "__builtin_va_copy" ||
+				id == "__darwin_va_list" return;
+		}
+	}
 	append(builder, sprint("%", info.storage_class));
 	if info.storage_class {
 		append(builder, " ");
@@ -2080,6 +2090,18 @@ main :: () {
 	array_add(*cpp.path_stack, "/Users/olivercruickshank/Carnage/friday.c");
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
+
+	for it, i: tokens {
+		if it.view == "__builtin_va_list" {
+			print("\n=== Found __builtin_va_list ===\n");
+			start := max(0, i - 20);
+			end := min(tokens.count - 1, i + 5);
+			for j: start..end {
+				print("% ", tokens[j].view);
+			}
+			print("\n");
+		}
+	}
 
 	// output: string;
 	// for tokens {

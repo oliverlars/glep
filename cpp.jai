@@ -52,18 +52,12 @@ insert :: (cpp: *Preprocessor, token: Token, dst_tokens: *[..]Token) {
 	array_add(dst_tokens, token);
 }
 
-add_builtin :: (cpp: *Preprocessor, builtin: string, view: string, type: Token_Type) {
+add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 	object: Object;
-	token: Token;
-	token.view = view;
-	token.type = type;
-	array_add(*object.tokens, token);
-	table_add(*cpp.objects, builtin, object);
-}
-
-add_builtin :: (cpp: *Preprocessor, builtin: string, tokens: ..Token) {
-	object: Object;
-	for tokens {
+	tokeniser: Tokeniser;
+	tokeniser.source = body;
+	tokenise(*tokeniser);
+	for tokeniser.tokens {
 		array_add(*object.tokens, it);
 	}
 	table_add(*cpp.objects, builtin, object);
@@ -482,44 +476,45 @@ add_all_builtins :: (cpp: *Preprocessor) {
 		return token;
 	}
 
-	add_builtin(cpp, "TARGET_CPU_ARM64", number("1"));
-	add_builtin(cpp, "__STDC__", number("1"));
-	add_builtin(cpp, "__STDC_VERSION__", "201112L", .Number);
-	add_builtin(cpp, "__APPLE__", number("1"));
-	add_builtin(cpp, "__MACH__", number("1"));
-	add_builtin(cpp, "__aarch64__", number("1"));
-	add_builtin(cpp, "__arm64__", number("1"));
-	add_builtin(cpp, "__arm64", number("1"));
-	add_builtin(cpp, "__LP64__", number("1"));
-	add_builtin(cpp, "_LP64", number("1"));
-	add_builtin(cpp, "__SIZEOF_DOUBLE__", number("8"));
-	add_builtin(cpp, "__SIZEOF_POINTER__", number("8"));
-	add_builtin(cpp, "__SIZEOF_INT__", number("4"));
-	add_builtin(cpp, "__SIZEOF_LONG__", number("8"));
-	add_builtin(cpp, "__SIZEOF_LONG_DOUBLE__", number("8"));
-	add_builtin(cpp, "__SIZEOF_LONG_LONG__", number("8"));
-	add_builtin(cpp, "__SIZEOF_PTRDIFF_T__", number("8"));
-	add_builtin(cpp, "__SIZEOF_SHORT__", number("2"));
-	add_builtin(cpp, "__SIZEOF_SIZE_T__", number("8"));
+	add_builtin_object(cpp, "TARGET_CPU_ARM64", "1");
+	add_builtin_object(cpp, "__STDC__", "1");
+	add_builtin_object(cpp, "__STDC_VERSION__", "201112L");
+	add_builtin_object(cpp, "__APPLE__", "1");
+	add_builtin_object(cpp, "__MACH__", "1");
+	add_builtin_object(cpp, "__aarch64__", "1");
+	add_builtin_object(cpp, "__arm64__", "1");
+	add_builtin_object(cpp, "__arm64", "1");
+	add_builtin_object(cpp, "__LP64__", "1");
+	add_builtin_object(cpp, "_LP64", "1");
+	add_builtin_object(cpp, "__SIZEOF_DOUBLE__", "8");
+	add_builtin_object(cpp, "__SIZEOF_POINTER__", "8");
+	add_builtin_object(cpp, "__SIZEOF_INT__", "4");
+	add_builtin_object(cpp, "__SIZEOF_LONG__", "8");
+	add_builtin_object(cpp, "__SIZEOF_LONG_DOUBLE__", "8");
+	add_builtin_object(cpp, "__SIZEOF_LONG_LONG__", "8");
+	add_builtin_object(cpp, "__SIZEOF_PTRDIFF_T__", "8");
+	add_builtin_object(cpp, "__SIZEOF_SHORT__", "2");
+	add_builtin_object(cpp, "__SIZEOF_SIZE_T__", "8");
 
 	// HACK(Oliver): These are the wrong sizes...
-	add_builtin(cpp, "__INTMAX_TYPE__", id("long"), id("long"));
-	add_builtin(cpp, "__UINTMAX_TYPE__", id("unsigned"), id("long"), id("long"));
-	add_builtin(cpp, "__INT8_TYPE__", id("signed"), id("char"));
-	add_builtin(cpp, "__INT16_TYPE__", id("short"));
-	add_builtin(cpp, "__INT32_TYPE__", id("int"));
-	add_builtin(cpp, "__INT64_TYPE__", id("long"), id("long"));
-	add_builtin(cpp, "__UINT8_TYPE__", id("unsigned"), id("char"));
-	add_builtin(cpp, "__UINT16_TYPE__", id("unsigned"), id("short"));
-	add_builtin(cpp, "__UINT32_TYPE__", id("unsigned"), id("int"));
-	add_builtin(cpp, "__UINT64_TYPE__", id("unsigned"), id("long"), id("long"));
-	add_builtin(cpp, "__WCHAR_TYPE__", id("int"));
-	add_builtin(cpp, "__SIZE_TYPE__", id("unsigned"), id("long"));
-	add_builtin(cpp, "__PTRDIFF_TYPE__", id("long"));
-	add_builtin(cpp, "__INTPTR_TYPE__", id("long"));
-	add_builtin(cpp, "__UINTPTR_TYPE__", id("unsigned"), id("long"));
-
-	add_builtin(cpp, "__builtin_va_list", id("__darwin_va_list"));
+	add_builtin_object(cpp, "__INTMAX_TYPE__", "long long");
+	add_builtin_object(cpp, "__UINTMAX_TYPE__", "unsigned long long");
+	add_builtin_object(cpp, "__INT8_TYPE__", "signed char");
+	add_builtin_object(cpp, "__INT16_TYPE__", "short");
+	add_builtin_object(cpp, "__INT32_TYPE__", "int");
+	add_builtin_object(cpp, "__INT64_TYPE__", "long long");
+	add_builtin_object(cpp, "__UINT8_TYPE__", "unsigned char");
+	add_builtin_object(cpp, "__UINT16_TYPE__", "unsigned short");
+	add_builtin_object(cpp, "__UINT32_TYPE__", "unsigned int");
+	add_builtin_object(cpp, "__UINT64_TYPE__", "unsigned long long");
+	add_builtin_object(cpp, "__WCHAR_TYPE__", "int");
+	add_builtin_object(cpp, "__SIZE_TYPE__", "unsigned long");
+	add_builtin_object(cpp, "__PTRDIFF_TYPE__", "long");
+	add_builtin_object(cpp, "__INTPTR_TYPE__", "long");
+	add_builtin_object(cpp, "__UINTPTR_TYPE__", "unsigned long");
+	add_builtin_object(cpp, "va_list", "__builtin_va_list");
+	add_builtin_object(cpp, "va_copy", "__builtin_va_copy");
+	add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
