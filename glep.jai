@@ -1453,7 +1453,9 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, "(");
 		print_type(builder, node.(*Node_Cast).base);
 		append(builder, ")");
+		append(builder, "(");
 		print_expr(builder, node.(*Node_Cast).expr);
+		append(builder, ")");
 	case Node_Sizeof_Type;
 		append(builder, "sizeof");
 		append(builder, "(");
