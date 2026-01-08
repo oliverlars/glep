@@ -795,7 +795,8 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 		if is_storage_specifier(current(p)) {
 			info.storage_class = current(p).view;
 			skip(p);
-		} else if current(p).view == "struct" {
+		} else if current(p).view == "struct" || current(p).view == "union" {
+			struct_or_union := current(p).view;
 			skip(p);
 			_struct: *Node_Struct;
 			
@@ -819,6 +820,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 						array_add(*_struct.members, decl);
 					}
 					expect(p, .RightBrace);
+					info.reference = false;
 				} else {
 					if defined {
 						_struct = defined_struct;
@@ -827,8 +829,8 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 						_struct.name = name;
 						table_add(*p.structs, name.view, _struct);
 					}
+					info.reference = true;
 				}
-				info.reference = defined;
 			} else if current(p).type == .LeftBrace {
 				skip(p);
 				_struct = New(Node_Struct);
@@ -838,39 +840,59 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 					array_add(*_struct.members, decl);
 				}
 				expect(p, .RightBrace);
+				info.reference = false;
+			}
+			if struct_or_union == "union" {
+				_struct.is_union = true;
 			}
 			info._struct = _struct;
-		} else if current(p).view == "union" {
-			skip(p);
-			_union := New(Node_Struct);
-			_union.is_union = true;
-			if current(p).type == .Identifier {
-				_union.name = current(p);
-				table_add(*p.structs, _union.name.view, _union);
-				skip(p);
-			}
-			if current(p).type == .LeftBrace {
-				skip(p);
-				while current(p).type != .RightBrace {
-					decl := parse_decl(p);
-					expect(p, .Semicolon);
-					array_add(*_union.members, decl);
-				}
-				expect(p, .RightBrace);
-			}
-			info._struct = _union;
 		} else if current(p).view == "enum" {
 			skip(p);
-			_enum := New(Node_Enum);
-			if current(p).type == .Identifier {
-				_enum.name = current(p);
-				table_add(*p.enums, _enum.name.view, _enum);
+			_enum: *Node_Enum;
+
+			if current(p).type  == .Identifier {
+				name := current(p);
 				skip(p);
-			}
-			if current(p).type == .LeftBrace {
+
+				defined, defined_enum := table_find(*p.enums, name.view);
+				if current(p).type == .LeftBrace {
+					if defined {
+						_enum = defined_enum;
+					} else {
+						_enum = New(Node_Enum);
+						_enum.name = name;
+						table_add(*p.enums, name.view, _enum);
+					}
+					skip(p);
+					while current(p).type != .RightBrace {
+						member := New(Node_Enum_Member);
+						member.name = current(p);
+						expect(p, .Identifier);
+						if current(p).type == .Equals {
+							skip(p);
+							member.expr = parse_expr(p, precedence_of(.Comma) + 1);
+						}
+						array_add(*_enum.members, member);
+						if current(p).type != .RightBrace {
+							expect(p, .Comma);
+						}
+					}
+					expect(p, .RightBrace);
+					info.reference = false;
+				} else {
+					if defined {
+						_enum = defined_enum;
+					} else {
+						_enum = New(Node_Enum);
+						_enum.name = name;
+						table_add(*p.enums, name.view, _enum);
+					}
+					info.reference = true;
+				}
+			} else if current(p).type == .LeftBrace {
 				skip(p);
+				_enum = New(Node_Enum);
 				while current(p).type != .RightBrace {
-					
 					member := New(Node_Enum_Member);
 					member.name = current(p);
 					expect(p, .Identifier);
@@ -884,6 +906,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 					}
 				}
 				expect(p, .RightBrace);
+				info.reference = false;
 			}
 			info._enum = _enum;
 		} else if is_type_name(p, current(p)) {
@@ -896,11 +919,19 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 				expect(p, .RightParenthesis);
 				info.atomic = atomic_info;
 			} else {
-				array_add(*info.specifiers, current(p).view);
+				_, info._struct = table_find(*p.structs, current(p).view);
+				_, info._enum   = table_find(*p.enums, current(p).view);
+				if info._enum || info._struct {
+					info.reference = true;
+				} else {
+					array_add(*info.specifiers, current(p).view);
+				}
 				skip(p);
 			}
 		} else {
 			array_add(*info.qualifiers, current(p).view);
+			_, info._struct = table_find(*p.structs, current(p).view);
+			_, info._enum   = table_find(*p.enums, current(p).view);
 			skip(p);
 		}
 	}
@@ -1840,7 +1871,7 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 	if info._struct {
 		if info._struct.is_union {
 			append(builder, "union ");
-		}else {
+		} else {
 			append(builder, "struct ");
 		}
 		append(builder, info._struct.name.view);
@@ -1855,24 +1886,26 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 		} else {
 			append(builder, " ");
 		}
-	}
-
-	if info._enum {
+	} else if info._enum {
 		append(builder, "enum ");
 		append(builder, info._enum.name.view);
-		append(builder, " {\n");
-		for info._enum.members {
-			append(builder, "    ");
-			append(builder, it.name.view);
-			append(builder, " ");
-			if it.expr {
-				append(builder, "= ");
-				print_expr(builder, it.expr);
-			}
+		if !info.reference {
+			append(builder, " {\n");
+			for info._enum.members {
+				append(builder, "    ");
+				append(builder, it.name.view);
+				append(builder, " ");
+				if it.expr {
+					append(builder, "= ");
+					print_expr(builder, it.expr);
+				}
 
-			append(builder, ",\n");
+				append(builder, ",\n");
+			}
+			append(builder, "} ");
+		} else {
+			append(builder, " ");
 		}
-		append(builder, "} ");
 	}
 
 	for info.qualifiers {
@@ -1893,6 +1926,7 @@ print_type :: (builder: *String_Builder, info: Node_Type_Info) {
 
 	for info.declarators {
 		print_declarator(builder, it);
+		if it_index < info.declarators.count - 1 append(builder, ", ");
 	}
 }
 
@@ -1995,7 +2029,7 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			append(builder, "while");
 			append(builder, "(");
 			print_expr(builder, stmt.(*Node_Do).cond);
-			append(builder, ")");
+			append(builder, ");");
 		case Node_Switch;
 			append(builder, "switch ");
 			append(builder, "(");
@@ -2039,6 +2073,21 @@ main :: () {
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	//minimal := read_entire_file("friday.c");
+	// minimal = #string STRING
+	// struct foo;
+
+	// struct foo {
+	// 	int A;
+	// 	int B;
+	// };
+
+	// enum bar;
+
+	// enum bar {
+	// 	A = 1,
+	// 	B = 2,
+	// };
+	// STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
