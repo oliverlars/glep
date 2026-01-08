@@ -2097,18 +2097,6 @@ main :: () {
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 
-	for it, i: tokens {
-		if it.view == "__builtin_va_list" {
-			print("\n=== Found __builtin_va_list ===\n");
-			start := max(0, i - 20);
-			end := min(tokens.count - 1, i + 5);
-			for j: start..end {
-				print("% ", tokens[j].view);
-			}
-			print("\n");
-		}
-	}
-
 	// output: string;
 	// for tokens {
 	// 	output = join(output, sprint("% ", it.view));
