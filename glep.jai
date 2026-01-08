@@ -1580,8 +1580,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 				skip(p);
 			}
 			if current(p).type == .Asterisk then skip(p);
-			
-			expr := parse_expr(p, 0);
+			expr := parse_expr(p);
 			array.count = eval_expr(expr);
 			array.inner = declarator;
 			declarator = array;
@@ -1974,7 +1973,11 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		append(builder, sprint("%", declarator.(*Node_Identifier_Declarator).name));
 	case Node_Array_Declarator;
 		print_declarator(builder, declarator.inner, true);
-		append(builder, sprint("[%]", declarator.(*Node_Array_Declarator).count));
+		if declarator.(*Node_Array_Declarator).count > 0 {
+			append(builder, sprint("[%]", declarator.(*Node_Array_Declarator).count));
+		} else {
+			append(builder, "[]");
+		}
 	}
 	if declarator.bitfield {
 		append(builder, ": ");
@@ -2084,6 +2087,7 @@ main :: () {
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
+	minimal = read_entire_file("smallpt.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
