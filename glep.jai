@@ -777,7 +777,6 @@ is_type_specifier :: (token: Token) -> bool {
 	case "__uint128_t"; #through;
 	case "_Atomic"; #through;
 	case "_Bool"; #through;
-	case "__builtin_va_list"; #through;
 	case "bool";
 		return true;
 	case;
@@ -2072,22 +2071,7 @@ main :: () {
 
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
-	//minimal := read_entire_file("friday.c");
-	// minimal = #string STRING
-	// struct foo;
-
-	// struct foo {
-	// 	int A;
-	// 	int B;
-	// };
-
-	// enum bar;
-
-	// enum bar {
-	// 	A = 1,
-	// 	B = 2,
-	// };
-	// STRING;
+	// minimal := read_entire_file("friday.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);

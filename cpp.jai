@@ -172,7 +172,7 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			} else {
 				found_va, index_va := find_arg(params, args, body[at]);
 				array_add(*result, body[at]);
-				for va_arg: args[index_va] {
+				for va_arg: va_args {
 					array_add(*result, va_arg);
 				}
 				at += 3;
@@ -191,6 +191,8 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			found_right, index_right := find_arg(params, args, body[at + 2]);
 			if found_right {
 				right_tokens = args[index_right];
+			} else if body[at + 2].view == "__VA_ARGS__" {
+				right_tokens = va_args;
 			} else {
 				array_add(*right_tokens, body[at + 2]);
 			}
@@ -244,6 +246,7 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 	at := 0;
 	while at < tokens.count {
 		token := tokens[at];
+		
 		if token.type == .Identifier {
 			function := table_find_pointer(*cpp.functions, token.view);
 			object := table_find_pointer(*cpp.objects, token.view);
@@ -294,7 +297,7 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 						}
 					}
 				}
-				
+
 				rparen_hs := tokens[at].hideset;
 				at += 1; // Right parenthesis
 
@@ -515,6 +518,8 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_builtin(cpp, "__PTRDIFF_TYPE__", id("long"));
 	add_builtin(cpp, "__INTPTR_TYPE__", id("long"));
 	add_builtin(cpp, "__UINTPTR_TYPE__", id("unsigned"), id("long"));
+
+	add_builtin(cpp, "__builtin_va_list", id("__darwin_va_list"));
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
