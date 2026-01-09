@@ -445,28 +445,35 @@ tokenise :: (t: *Tokeniser) {
 	is_number_literal :: (t: *Tokeniser) -> bool {
 		return is_num(t) || is_char(t, #char ".");
 	}
+	is_prefix :: (t: *Tokeniser, prefix: string) -> bool {
+		if t.at + prefix.count >= t.source.count return false;
+		to_compare: string;
+		to_compare.data = t.source.data + t.at;
+		to_compare.count = prefix.count;
+		return to_compare == prefix;
+	}
 	token_from_number_literal :: (t: *Tokeniser) -> Token {
 		assert(is_number_literal(t));
 		token: Token;
-		number_type: Number_Type;
-		if is_char(t, #char ".") {
-			number_type = .Float;
+		token.view.count = 1;
+		if is_prefix(t, "0x") || is_prefix(t, "0X") {
+			token.number_type = .Hexadecimal;	
+			t.at += 2;
+		} else if is_prefix(t, "0b") || is_prefix(t, "0B") {
+			token.number_type = .Binary;
+			t.at += 2;
+		} else if is_char(t, #char ".") {
+			token.number_type = .Float;
 		} else if is_char(t, #char "0") {
-			t.at += 1;
-			number_type = .Octal;
-			if is_char(t, #char "x") || is_char(t, #char "X") {
-				number_type = .Hexadecimal;
-				t.at += 1;
-			} else if is_char(t, #char "b") || is_char(t, #char "B") {
-				number_type = .Binary;
-				t.at += 1;
-			} else if is_char(t, #char ".") {
-				number_type = .Float;
+			if is_prefix(t, "0.") ||
+			   is_prefix(t, "0e") ||
+			   is_prefix(t, "0E") {
+				token.number_type = .Float;
+			} else {
+				token.number_type = .Octal;
 			}
 		} else if is_num(t) {
-			number_type = .Decimal;
-		} else {
-			assert(false);
+			token.number_type = .Decimal;
 		}
 		start := t.at;
 		token.view.data = t.source.data + start;
@@ -480,7 +487,7 @@ tokenise :: (t: *Tokeniser) {
 		is_oct_digit :: (t: *Tokeniser) -> bool {
 			return  t.source[t.at] >= #char "0" && t.source[t.at] <= #char "7";
 		}
-		if number_type == {
+		if token.number_type == {
 			case .Invalid;
 				assert(false);
 			case .Binary;
@@ -526,11 +533,11 @@ tokenise :: (t: *Tokeniser) {
 							t.at += 1;
 						}
 					} else if is_char(t, #char ".") {
-						number_type = .Float;
+						token.number_type = .Float;
 						t.at += 1;
 					} else if is_char(t, #char "e") ||
 							  is_char(t, #char "E") {
-						number_type = .Float;
+						token.number_type = .Float;
 						t.at += 1;
 					} else {
 						break;
@@ -539,7 +546,6 @@ tokenise :: (t: *Tokeniser) {
 			case;
 				assert(false);
 		}
-		token.number_type = number_type;
 		token.type = .Number;
 		assert(token.number_type != .Invalid);
 		token.view.count = t.at - start;
@@ -703,6 +709,7 @@ tokenise :: (t: *Tokeniser) {
 				}
 				continue;
 			case ".";
+				token.type = .Period;
 				if t.at + 3 < t.source.count {
 					t.at += 1;
 					if t.source.data[t.at] == #char "." &&
@@ -738,7 +745,6 @@ tokenise :: (t: *Tokeniser) {
 						}
 					}
 				} else {
-					token.type = .Period;
 					t.at += 1;
 				}
 			case "|";

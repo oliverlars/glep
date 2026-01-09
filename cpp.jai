@@ -399,11 +399,10 @@ eval_unary :: (cpp: *Preprocessor, tokens: [..]Token, at: *int) -> int {
 					unary = string_to_int(number.view, 16, u64).(int);
 				case .Float;
 					unary = string_to_float(number.view).(int);
+				case .Binary;
+					unary = string_to_int(number.view, 2).(int);
 			}
 			at.* += 1;
-			if at.* < tokens.count && tokens[at.*].type == .Identifier {
-				at.* += 1;
-			}
 		case; 
 			print("Unexpected unary operator: %\n", op.type);
 			assert(false);
