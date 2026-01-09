@@ -68,8 +68,10 @@ Token_Type :: enum {
 
 Token :: struct {
 	view: string;
-	// Lord have mercy
 	type: Token_Type;
+	// Dumb?
+	number_type: Number_Type;
+	// Lord have mercy
 	hideset: [..]string;
 }
 
@@ -253,11 +255,23 @@ Node_Identifier :: struct {
 	expr_type = #this;
 }
 
+Number_Type :: enum {
+	Invalid;
+	Hexadecimal;
+	Decimal;
+	Binary;
+	Octal;
+	Float;
+}
+
 Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
-	token: Token;
-	value: int;
+	is:     Number_Type;
+	as_s64: int;
+	as_u64: u64;
+	as_f32: float32;
+	as_f64: float64;
 }
 
 Node_String :: struct {
@@ -428,6 +442,109 @@ tokenise :: (t: *Tokeniser) {
 	is_num   :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] >= #char "0" && t.source[t.at] <= #char "9"; }
 	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t) { t.at += 1; } }
 	is_char :: (t: *Tokeniser, char: int)  -> bool { if t.at >= t.source.count return false; return t.source[t.at] == char; }
+	is_number_literal :: (t: *Tokeniser) -> bool {
+		return is_num(t) || is_char(t, #char ".");
+	}
+	token_from_number_literal :: (t: *Tokeniser) -> Token {
+		assert(is_number_literal(t));
+		token: Token;
+		number_type: Number_Type;
+		if is_char(t, #char ".") {
+			number_type = .Float;
+		} else if is_char(t, #char "0") {
+			t.at += 1;
+			number_type = .Octal;
+			if is_char(t, #char "x") || is_char(t, #char "X") {
+				number_type = .Hexadecimal;
+				t.at += 1;
+			} else if is_char(t, #char "b") || is_char(t, #char "B") {
+				number_type = .Binary;
+				t.at += 1;
+			} else if is_char(t, #char ".") {
+				number_type = .Float;
+			}
+		} else if is_num(t) {
+			number_type = .Decimal;
+		} else {
+			assert(false);
+		}
+		start := t.at;
+		token.view.data = t.source.data + start;
+		is_bin_digit :: (t: *Tokeniser) -> bool {
+			return is_char(t, #char "1") || is_char(t, #char "0");
+		}
+		is_hex_digit :: (t: *Tokeniser) -> bool {
+			return is_num(t) || (t.source[t.at] >= #char "a" && t.source[t.at] <= #char "f") ||
+			(t.source[t.at] >= #char "A" && t.source[t.at] <= #char "F");
+		}
+		is_oct_digit :: (t: *Tokeniser) -> bool {
+			return  t.source[t.at] >= #char "0" && t.source[t.at] <= #char "7";
+		}
+		if number_type == {
+			case .Invalid;
+				assert(false);
+			case .Binary;
+				while t.at < t.source.count {
+					if is_bin_digit(t) {
+						t.at += 1;
+						if is_char(t, #char "'") {
+							t.at += 1;
+						}
+					} else {
+						break;
+					}
+				}
+			case .Hexadecimal;
+				while t.at < t.source.count {
+					if is_hex_digit(t) {
+						t.at += 1;
+						if is_char(t, #char "'") {
+							t.at += 1;
+						}
+					} else {
+						break;
+					}
+				}
+			case .Octal;
+				while t.at < t.source.count {
+					if is_oct_digit(t) {
+						t.at += 1;
+						if is_char(t, #char "'") {
+							t.at += 1;
+						}
+					} else {
+						break;
+					}
+				}
+			case .Decimal; #through;
+			case .Float;
+				// HACK(Oliver): The apostrophe handling is kinda jank
+				while t.at < t.source.count {
+					if is_num(t) {
+						t.at += 1;
+						if is_char(t, #char "'") {
+							t.at += 1;
+						}
+					} else if is_char(t, #char ".") {
+						number_type = .Float;
+						t.at += 1;
+					} else if is_char(t, #char "e") ||
+							  is_char(t, #char "E") {
+						number_type = .Float;
+						t.at += 1;
+					} else {
+						break;
+					}
+				}
+			case;
+				assert(false);
+		}
+		token.number_type = number_type;
+		token.type = .Number;
+		assert(token.number_type != .Invalid);
+		token.view.count = t.at - start;
+		return token;
+	}
 	while t.at < t.source.count {
 		token: Token;
 		token.view.data = t.source.data + t.at;
@@ -435,6 +552,33 @@ tokenise :: (t: *Tokeniser) {
 		if is_ws(t) {
 			gobble_ws(t);
 			continue;
+		} else if is_num(t) {
+			token = token_from_number_literal(t);
+			// HACK(Oliver): Need to better error check the suffixes
+			is_suffix :: (t: *Tokeniser) -> bool {
+				if t.at >= t.source.count return false;
+				return is_char(t, #char "e") ||
+				is_char(t, #char "E") ||
+				is_char(t, #char "l") ||
+				is_char(t, #char "L") ||
+				is_char(t, #char "U") ||
+				is_char(t, #char "u") ||
+				is_char(t, #char "w") ||
+				is_char(t, #char "b") ||
+				is_char(t, #char "W") ||
+				is_char(t, #char "f") ||
+				is_char(t, #char "F") ||
+				is_char(t, #char "d") ||
+				is_char(t, #char "D") ||
+				is_char(t, #char "B");
+			} 
+
+			if is_suffix(t) {
+				while is_suffix(t) {
+					t.at += 1;
+				}
+				//print("NUMBER: %, SUFFIX: %\n", number.view, token.view);
+			}
 		} else {
 			if t.source[t.at] == {
 			case "=";
@@ -559,22 +703,43 @@ tokenise :: (t: *Tokeniser) {
 				}
 				continue;
 			case ".";
-				t.at += 1;
-				token.type = .Period;
-				if t.at + 2 < t.source.count {
+				if t.at + 3 < t.source.count {
+					t.at += 1;
 					if t.source.data[t.at] == #char "." &&
 						t.source.data[t.at + 1] == #char "." {
 						token.type = .Ellipsis;
 						t.at += 2;
 						token.view.count += 2;
 					}
-				}
-				if is_num(t) {
-					token.type = .Number;
-					while is_num(t){
-						t.at += 1;
+				} else if t.at + 1 < t.source.count && is_digit(t.source[t.at + 1]) {
+					token = token_from_number_literal(t);
+					// HACK(Oliver): Need to better error check the suffixes
+					is_suffix :: (t: *Tokeniser) -> bool {
+						if t.at >= t.source.count return false;
+						return is_char(t, #char "e") ||
+						is_char(t, #char "E") ||
+						is_char(t, #char "l") ||
+						is_char(t, #char "L") ||
+						is_char(t, #char "U") ||
+						is_char(t, #char "u") ||
+						is_char(t, #char "w") ||
+						is_char(t, #char "b") ||
+						is_char(t, #char "W") ||
+						is_char(t, #char "f") ||
+						is_char(t, #char "F") ||
+						is_char(t, #char "d") ||
+						is_char(t, #char "D") ||
+						is_char(t, #char "B");
+					} 
+
+					if is_suffix(t) {
+						while is_suffix(t) {
+							t.at += 1;
+						}
 					}
-					token.view.count = t.source.data + t.at - token.view.data;
+				} else {
+					token.type = .Period;
+					t.at += 1;
 				}
 			case "|";
 				t.at += 1; token.type = .Pipe;
@@ -624,34 +789,6 @@ tokenise :: (t: *Tokeniser) {
 					while is_ident(t) || is_char(t, #char "_")  ||
 							is_num(t) {
 						t.at += 1;
-					}
-					token.view.count = t.source.data + t.at - token.view.data;
-				} else if is_num(t) {
-					token.type = .Number;
-					// Do this better...
-					if is_char(t, #char "0") && t.source[t.at + 1] == #char "x" {
-						t.at += 2;
-						while is_num(t) || is_ident(t) {
-							t.at += 1;
-						}
-					} else {
-						while is_num(t) {
-							t.at += 1;
-						}
-						if is_char(t, #char ".") {
-							t.at += 1;
-							while is_num(t) {
-								t.at += 1;
-							}
-						}
-						while is_char(t, #char "e") ||
-						   is_char(t, #char "E") ||
-						   is_char(t, #char "l") ||
-						   is_char(t, #char "L") ||
-						   is_char(t, #char "U") ||
-						   is_char(t, #char "u") {
-							t.at += 1;
-						}
 					}
 					token.view.count = t.source.data + t.at - token.view.data;
 				} else if is_char(t, #char "\"") {
@@ -1303,9 +1440,6 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			skip(p);
 			call := New(Node_Call);
 			call.id = result;
-			if name.view == "stat" {
-				a := 5;
-			}
 			while current(p).type != .RightParenthesis {
 				array_add(*call.params, parse_expr(p, precedence_of(.Comma) + 1));
 				if current(p).type != .RightParenthesis {
@@ -1333,20 +1467,30 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	result: *Node_Expr;
 	if current(p).type == .Number {
 		result = New(Node_Number);
-		result.(*Node_Number).token = current(p);
-		value: int;
-		for current(p).view {
-			value = value * 10 + it - #char "0";
+		token := current(p);
+		result.(*Node_Number).is = token.number_type;
+		// HACK(Oliver): This could include apostrophes, remove them
+		if token.number_type == {
+			case .Invalid;
+				assert(false);
+			case .Binary;
+				result.(*Node_Number).as_u64 = string_to_int(token.view, 2, u64);
+			case .Octal;
+				result.(*Node_Number).as_u64 = string_to_int(token.view, 8, u64);
+			case .Decimal;
+				result.(*Node_Number).as_u64 = string_to_int(token.view, 10, u64);
+			case .Hexadecimal;
+				result.(*Node_Number).as_u64 = string_to_int(token.view, 16, u64);
+			case .Float;
+				result.(*Node_Number).as_f64 = string_to_float(token.view);
 		}
 		skip(p);
-		result.(*Node_Number).value = value;
 	} else if current(p).type == .Char {
 		result = New(Node_Char);
-		result.(*Node_Number).token = current(p);
-		// value: int;
-		// for current(p).view {
-		// 	value = value * 10 + it;
-		// }
+		value: int;
+		for current(p).view {
+			value = value * 10 + it;
+		}
 		skip(p);
 	} else if current(p).type == .String {
 		result = New(Node_String);
@@ -1392,7 +1536,12 @@ eval_expr :: (node: *Node_Expr) -> int {
 		case .Minus; return -right;
 		}
 	case Node_Number;
-		return node.(*Node_Number).value;
+		if node.(*Node_Number).is == {
+			case .Float;
+				return node.(*Node_Number).as_f64.(int);
+			case;
+				return node.(*Node_Number).as_u64.(int);
+		}
 	case;
 		return 0;
 	}
@@ -1503,7 +1652,12 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		print_expr(builder, node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
 		//append(builder, "%", node.(*Node_Number).value);
-		append(builder, node.(*Node_Number).token.view);
+		if node.(*Node_Number).is == {
+			case .Float;
+				append(builder, tprint("%", node.(*Node_Number).as_f64));
+			case;
+				append(builder, tprint("%", node.(*Node_Number).as_u64));
+		}
 	case Node_String;
 		append(builder, sprint("\"%\"", node.(*Node_String).token.view));
 	case Node_Char;
@@ -2087,7 +2241,10 @@ main :: () {
 
 	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	minimal = read_entire_file("smallpt.c");
+	//minimal = read_entire_file("smallpt.c");
+	// minimal = #string STRING
+	// int A_123 = 0.12323f;
+	// STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);

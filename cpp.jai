@@ -387,8 +387,23 @@ eval_unary :: (cpp: *Preprocessor, tokens: [..]Token, at: *int) -> int {
 			}
 			at.* += 1;
 		case .Number;
-			unary = to_integer(trim_suffix(tokens[at.*].view));
+			number := op;
+			if number.number_type == {
+				case .Invalid;
+					assert(false);
+				case .Octal;
+					unary = string_to_int(number.view, 8, u64).(int);
+				case .Decimal;
+					unary = string_to_int(number.view, 10, u64).(int);
+				case .Hexadecimal;
+					unary = string_to_int(number.view, 16, u64).(int);
+				case .Float;
+					unary = string_to_float(number.view).(int);
+			}
 			at.* += 1;
+			if at.* < tokens.count && tokens[at.*].type == .Identifier {
+				at.* += 1;
+			}
 		case; 
 			print("Unexpected unary operator: %\n", op.type);
 			assert(false);
@@ -461,21 +476,6 @@ eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int 
 }
 
 add_all_builtins :: (cpp: *Preprocessor) {
-
-	number :: (name: string) -> Token {
-		token: Token;
-		token.view = name;
-		token.type = .Number;
-		return token;
-	}
-
-	id :: (name: string) -> Token {
-		token: Token;
-		token.view = name;
-		token.type = .Identifier;
-		return token;
-	}
-
 	add_builtin_object(cpp, "TARGET_CPU_ARM64", "1");
 	add_builtin_object(cpp, "__STDC__", "1");
 	add_builtin_object(cpp, "__STDC_VERSION__", "201112L");
@@ -777,6 +777,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 									value_token: Token;
 									value_token.view = tprint("%", value);
 									value_token.type = .Number;
+									value_token.number_type = .Decimal;
 									array_add(*no_defineds, value_token);
 								} else {
 									array_add(*no_defineds, to_expand[at]);
