@@ -709,13 +709,11 @@ tokenise :: (t: *Tokeniser) {
 				}
 				continue;
 			case ".";
-				token.type = .Period;
-				if t.at + 3 < t.source.count {
-					t.at += 1;
-					if t.source.data[t.at] == #char "." &&
-						t.source.data[t.at + 1] == #char "." {
+				if is_prefix(t, "...") {
+					if t.source.data[t.at + 1] == #char "." &&
+						t.source.data[t.at + 2] == #char "." {
 						token.type = .Ellipsis;
-						t.at += 2;
+						t.at += 3;
 						token.view.count += 2;
 					}
 				} else if t.at + 1 < t.source.count && is_digit(t.source[t.at + 1]) {
@@ -745,6 +743,7 @@ tokenise :: (t: *Tokeniser) {
 						}
 					}
 				} else {
+					token.type = .Period;
 					t.at += 1;
 				}
 			case "|";
