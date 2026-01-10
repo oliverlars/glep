@@ -66,7 +66,7 @@ add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 trim_suffix :: (number: string) -> string {
 	result := number;
 	for < number {
-		if it == "l" || it == "L" || it == "u" || it == "U" {
+		if is_suffix(it) {
 			result.count -= 1;
 		}
 	}
@@ -245,6 +245,10 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 			function := table_find_pointer(*cpp.functions, token.view);
 			object := table_find_pointer(*cpp.objects, token.view);
 
+			if token.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
+				a := 5;
+			}
+
 			if function && !in_hideset(token.hideset, token.view) && 
 			at + 1 < tokens.count && tokens[at + 1].type == .LeftParenthesis {
 				at += 1; // Identifier
@@ -315,6 +319,9 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 				}
 				//print("\n");
 			} else if object && !in_hideset(token.hideset, token.view) {
+				if token.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
+					a := 5;
+				}
 				at += 1;
 				hideset := hideset_union(token.hideset, token.view);
 				
@@ -388,19 +395,20 @@ eval_unary :: (cpp: *Preprocessor, tokens: [..]Token, at: *int) -> int {
 			at.* += 1;
 		case .Number;
 			number := op;
+			trimmed_number := trim_suffix(number.view);
 			if number.number_type == {
 				case .Invalid;
 					assert(false);
 				case .Octal;
-					unary = string_to_int(number.view, 8, u64).(int);
+					unary = string_to_int(trimmed_number, 8, u64).(int);
 				case .Decimal;
-					unary = string_to_int(number.view, 10, u64).(int);
+					unary = string_to_int(trimmed_number, 10, u64).(int);
 				case .Hexadecimal;
-					unary = string_to_int(number.view, 16, u64).(int);
+					unary = string_to_int(trimmed_number, 16, u64).(int);
 				case .Float;
-					unary = string_to_float(number.view).(int);
+					unary = string_to_float(trimmed_number).(int);
 				case .Binary;
-					unary = string_to_int(number.view, 2).(int);
+					unary = string_to_int(trimmed_number, 2).(int);
 			}
 			at.* += 1;
 		case; 
@@ -584,6 +592,9 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						skip_line(cpp, src_tokens);
 					case "define";
 						name := skip(cpp, src_tokens);
+						if name.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
+							a := 5;
+						}
 						is_function_definition := false;
 						if current(cpp, src_tokens).type == .LeftParenthesis {
 							// They need to be next to eachother

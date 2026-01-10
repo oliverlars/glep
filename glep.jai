@@ -435,6 +435,23 @@ tokenise :: (file: string) -> Tokeniser {
 	return result;
 }
 
+is_suffix :: (char: int) -> bool {
+	return char == #char "e" ||
+	char == #char "E" ||
+	char == #char "l" ||
+	char == #char "L" ||
+	char == #char "U" ||
+	char == #char "u" ||
+	char == #char "w" ||
+	char == #char "b" ||
+	char == #char "W" ||
+	char == #char "f" ||
+	char == #char "F" ||
+	char == #char "d" ||
+	char == #char "D" ||
+	char == #char "B";
+} 
+
 tokenise :: (t: *Tokeniser) {
 	is_ws    :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char " " || t.source[t.at] == #char "\t"; }
 	is_newline :: (t: *Tokeniser) -> bool { if t.at >= t.source.count return false; return t.source[t.at] == #char "\n" || t.source[t.at] == #char "\r"; }
@@ -442,9 +459,6 @@ tokenise :: (t: *Tokeniser) {
 	is_num   :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] >= #char "0" && t.source[t.at] <= #char "9"; }
 	gobble_ws :: (t: *Tokeniser) { while t.at < t.source.count && is_ws(t) { t.at += 1; } }
 	is_char :: (t: *Tokeniser, char: int)  -> bool { if t.at >= t.source.count return false; return t.source[t.at] == char; }
-	is_number_literal :: (t: *Tokeniser) -> bool {
-		return is_num(t) || is_char(t, #char ".");
-	}
 	is_prefix :: (t: *Tokeniser, prefix: string) -> bool {
 		if t.at + prefix.count >= t.source.count return false;
 		to_compare: string;
@@ -453,7 +467,6 @@ tokenise :: (t: *Tokeniser) {
 		return to_compare == prefix;
 	}
 	token_from_number_literal :: (t: *Tokeniser) -> Token {
-		assert(is_number_literal(t));
 		token: Token;
 		token.view.count = 1;
 		if is_prefix(t, "0x") || is_prefix(t, "0X") {
@@ -546,6 +559,10 @@ tokenise :: (t: *Tokeniser) {
 			case;
 				assert(false);
 		}
+		// HACK(Oliver): Need to better error check the suffixes
+		while t.at < t.source.count && is_suffix(t.source[t.at]) {
+			t.at += 1;
+		}
 		token.type = .Number;
 		assert(token.number_type != .Invalid);
 		token.view.count = t.at - start;
@@ -560,31 +577,6 @@ tokenise :: (t: *Tokeniser) {
 			continue;
 		} else if is_num(t) {
 			token = token_from_number_literal(t);
-			// HACK(Oliver): Need to better error check the suffixes
-			is_suffix :: (t: *Tokeniser) -> bool {
-				if t.at >= t.source.count return false;
-				return is_char(t, #char "e") ||
-				is_char(t, #char "E") ||
-				is_char(t, #char "l") ||
-				is_char(t, #char "L") ||
-				is_char(t, #char "U") ||
-				is_char(t, #char "u") ||
-				is_char(t, #char "w") ||
-				is_char(t, #char "b") ||
-				is_char(t, #char "W") ||
-				is_char(t, #char "f") ||
-				is_char(t, #char "F") ||
-				is_char(t, #char "d") ||
-				is_char(t, #char "D") ||
-				is_char(t, #char "B");
-			} 
-
-			if is_suffix(t) {
-				while is_suffix(t) {
-					t.at += 1;
-				}
-				//print("NUMBER: %, SUFFIX: %\n", number.view, token.view);
-			}
 		} else {
 			if t.source[t.at] == {
 			case "=";
@@ -710,38 +702,11 @@ tokenise :: (t: *Tokeniser) {
 				continue;
 			case ".";
 				if is_prefix(t, "...") {
-					if t.source.data[t.at + 1] == #char "." &&
-						t.source.data[t.at + 2] == #char "." {
-						token.type = .Ellipsis;
-						t.at += 3;
-						token.view.count += 2;
-					}
+					token.type = .Ellipsis;
+					t.at += 3;
+					token.view.count = 3;
 				} else if t.at + 1 < t.source.count && is_digit(t.source[t.at + 1]) {
 					token = token_from_number_literal(t);
-					// HACK(Oliver): Need to better error check the suffixes
-					is_suffix :: (t: *Tokeniser) -> bool {
-						if t.at >= t.source.count return false;
-						return is_char(t, #char "e") ||
-						is_char(t, #char "E") ||
-						is_char(t, #char "l") ||
-						is_char(t, #char "L") ||
-						is_char(t, #char "U") ||
-						is_char(t, #char "u") ||
-						is_char(t, #char "w") ||
-						is_char(t, #char "b") ||
-						is_char(t, #char "W") ||
-						is_char(t, #char "f") ||
-						is_char(t, #char "F") ||
-						is_char(t, #char "d") ||
-						is_char(t, #char "D") ||
-						is_char(t, #char "B");
-					} 
-
-					if is_suffix(t) {
-						while is_suffix(t) {
-							t.at += 1;
-						}
-					}
 				} else {
 					token.type = .Period;
 					t.at += 1;
@@ -1496,6 +1461,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		for current(p).view {
 			value = value * 10 + it;
 		}
+		result.(*Node_Char).token = current(p);
 		skip(p);
 	} else if current(p).type == .String {
 		result = New(Node_String);
@@ -1656,17 +1622,18 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, " : ");
 		print_expr(builder, node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
-		//append(builder, "%", node.(*Node_Number).value);
 		if node.(*Node_Number).is == {
 			case .Float;
-				append(builder, tprint("%", node.(*Node_Number).as_f64));
+				f := node.(*Node_Number).as_f64;
+				// NOTE(Oliver): Not using remove zeroes results in some weirdness
+				append(builder, tprint("%", FormatFloat.{value=f, zero_removal=.NO}));
 			case;
 				append(builder, tprint("%", node.(*Node_Number).as_u64));
 		}
 	case Node_String;
 		append(builder, sprint("\"%\"", node.(*Node_String).token.view));
 	case Node_Char;
-		append(builder, sprint("'%'", node.(*Node_String).token.view));
+		append(builder, sprint("'%'", node.(*Node_Char).token.view));
 	case Node_Identifier;
 		append(builder, sprint("%", node.(*Node_Identifier).id.view));
 	case Node_Call;
@@ -2244,9 +2211,9 @@ main :: () {
 	t0 := current_time_monotonic();
 
 
-	minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
+	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	//minimal = read_entire_file("smallpt.c");
+	minimal := read_entire_file("smallpt.c");
 	// minimal = #string STRING
 	// int A_123 = 0.12323f;
 	// STRING;
@@ -2258,6 +2225,18 @@ main :: () {
 	array_add(*cpp.path_stack, "/Users/olivercruickshank/Carnage/friday.c");
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
+
+	for tokens {
+		if it.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
+			print("___POSIX_C_DEPRECATED_STARTING_200112: \n");
+			object := table_find_pointer(*cpp.objects, it.view);
+			if object {
+				for object.tokens {
+					print("% ", it);
+				}
+			}
+		}
+	}
 
 	// output: string;
 	// for tokens {
@@ -2294,6 +2273,6 @@ main :: () {
 		append(*builder, "\n");
 	}
 
-	write_entire_file("friday.c", builder_to_string(*builder));
+	write_entire_file("smallpt_generated.c", builder_to_string(*builder));
 	print("it took HOW long to parse % lines? %ms\n", total_newlines, ms);
 }
