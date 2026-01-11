@@ -63,16 +63,6 @@ add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 	table_add(*cpp.objects, builtin, object);
 }
 
-trim_suffix :: (number: string) -> string {
-	result := number;
-	for < number {
-		if is_suffix(it) {
-			result.count -= 1;
-		}
-	}
-	return result;
-}
-
 in_hideset :: (hideset: [..]string, name: string) -> bool {
 	for hideset {
 		if name == it {
@@ -395,20 +385,19 @@ eval_unary :: (cpp: *Preprocessor, tokens: [..]Token, at: *int) -> int {
 			at.* += 1;
 		case .Number;
 			number := op;
-			trimmed_number := trim_suffix(number.view);
 			if number.number_type == {
 				case .Invalid;
 					assert(false);
 				case .Octal;
-					unary = string_to_int(trimmed_number, 8, u64).(int);
+					unary = string_to_int(number.view, 8, u64).(int);
 				case .Decimal;
-					unary = string_to_int(trimmed_number, 10, u64).(int);
+					unary = string_to_int(number.view, 10, u64).(int);
 				case .Hexadecimal;
-					unary = string_to_int(trimmed_number, 16, u64).(int);
+					unary = string_to_int(number.view, 16, u64).(int);
 				case .Float;
-					unary = string_to_float(trimmed_number).(int);
+					unary = string_to_float(number.view).(int);
 				case .Binary;
-					unary = string_to_int(trimmed_number, 2).(int);
+					unary = string_to_int(number.view, 2).(int);
 			}
 			at.* += 1;
 		case; 

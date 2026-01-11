@@ -273,6 +273,7 @@ Node_Number :: struct {
 	as_u64: u64;
 	as_f32: float32;
 	as_f64: float64;
+	token_with_suffix: Token;
 }
 
 Node_String :: struct {
@@ -1440,7 +1441,10 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result = New(Node_Number);
 		token := current(p);
 		result.(*Node_Number).is = token.number_type;
+		result.(*Node_Number).token_with_suffix = token;
 		// HACK(Oliver): This could include apostrophes, remove them
+		// This will ignore any trailing letters, which is what we want but
+		// might seem confusing
 		if token.number_type == {
 			case .Invalid;
 				assert(false);
@@ -1983,6 +1987,16 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	if current(p).type == .LeftBrace {
 		decl.body = parse_statement(p);
 	}
+
+	decl_type_info := type_info_from_decl(decl);
+	for decl.declarators {
+		if it.init && it.init.initializer_type == Node_Scalar_Initializer {
+			expr_type_info := type_info_from_expr(it.init.(*Node_Scalar_Initializer).expr);
+			if !types_compatible(decl_type_info, expr_type_info) {
+				print("YOU CANT DO THAT!!!");
+			}
+		}
+	}
 	
 	return decl;
 }
@@ -2212,12 +2226,11 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 main :: () {
 	t0 := current_time_monotonic();
 
-
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	minimal := #string STRING
 	int main() {
-		return 1 + 2;
+		int a = 1 + 2;
 	}
 	STRING;
 	tokeniser: Tokeniser;
@@ -2261,6 +2274,8 @@ main :: () {
 	parser.tokens = tokens_no_newlines;
 
 	tu := parse_translation_unit(*parser);
+
+
 
 	t1 := current_time_monotonic();
 
