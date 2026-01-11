@@ -8,6 +8,7 @@
 #import "String";
 
 #load "cpp.jai";
+#load "compile.jai";
 
 Token_Type :: enum {
 	Invalid;
@@ -95,14 +96,14 @@ Node :: struct {
 	type: Type;
 }
 
-Node_Type_Info :: struct {
+Node_Decl_Info :: struct {
 	qualifiers: [..]string;
 	specifiers: [..]string;
 	storage_class: string;
 	_struct: *Node_Struct;
 	_enum: *Node_Enum;
 	reference: bool;
-	atomic: *Node_Type_Info;
+	atomic: *Node_Decl_Info;
 	declarators: [..]*Node_Declarator;
 }
 
@@ -158,7 +159,7 @@ Node_Identifier_Declarator :: struct {
 Node_Decl :: struct {
 	#as using node: Node;
 	type = Node_Decl;
-	using base: Node_Type_Info;
+	using base: Node_Decl_Info;
 	body: *Node_Statement;
 }
 
@@ -186,14 +187,14 @@ Node_Unary :: struct {
 
 Node_Cast :: struct {
 	#as using node: Node_Expr;
-	base: Node_Type_Info;
+	base: Node_Decl_Info;
 	expr: *Node_Expr;
 	expr_type = #this;
 }
 
 Node_Sizeof_Type :: struct {
 	#as using node: Node_Expr;
-	base: Node_Type_Info;
+	base: Node_Decl_Info;
 	expr_type = #this;
 }
 
@@ -206,7 +207,7 @@ Node_Sizeof_Expr :: struct {
 Node_Compound :: struct {
 	#as using node: Node_Expr;
 	declarator: *Node_Declarator;
-	base_info: Node_Type_Info;
+	base_info: Node_Decl_Info;
 	init: *Node_Initializer;
 	expr_type = #this;
 }
@@ -840,7 +841,7 @@ next :: (p: *Parser) -> Token {
 }
 
 
-is_typedef :: (info: Node_Type_Info) -> bool {
+is_typedef :: (info: Node_Decl_Info) -> bool {
 	return info.storage_class == "typedef";
 }
 
@@ -897,7 +898,7 @@ is_function_specifier :: (token: Token) -> bool {
 }
 
 
-parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
+parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 	while is_declaration_start(p) {
 		if is_storage_specifier(current(p)) {
 			info.storage_class = current(p).view;
@@ -1020,7 +1021,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Type_Info) {
 			if current(p).view == "_Atomic" {
 				skip(p);
 				expect(p, .LeftParenthesis);
-				atomic_info := New(Node_Type_Info);
+				atomic_info := New(Node_Decl_Info);
 				parse_declaration_specifiers(p, atomic_info);
 				array_add(*atomic_info.declarators, parse_declarator(p));
 				expect(p, .RightParenthesis);
@@ -1279,7 +1280,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		if current(p).type == .LeftParenthesis {
 			if is_type_name(p, next(p)) {
 				skip(p);
-				base_info: Node_Type_Info;
+				base_info: Node_Decl_Info;
 				parse_declaration_specifiers(p, *base_info);
 				declarator := parse_declarator(p);
 				sizeof := New(Node_Sizeof_Type);
@@ -1307,7 +1308,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		result = unary;
 	} else if current(p).type == .LeftParenthesis && is_type_name(p, next(p)) {
 		expect(p, .LeftParenthesis);
-		base_info: Node_Type_Info;
+		base_info: Node_Decl_Info;
 		parse_declaration_specifiers(p, *base_info);
 		declarator := parse_declarator(p);
 		expect(p, .RightParenthesis);
@@ -1939,7 +1940,7 @@ parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
-	type: Node_Type_Info;
+	type: Node_Decl_Info;
 	parse_declaration_specifiers(p, *type);
 
 	decl := New(Node_Decl);
@@ -1947,6 +1948,10 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
+		name := identifier_from_declarator(declarator);
+		if name != "" {
+			table_add(*p.ordinary, name, decl);
+		}
 		if declarator {
 			array_add(*decl.declarators, declarator);
 			if current(p).type == .Equals {
@@ -1976,9 +1981,6 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	}
 
 	if current(p).type == .LeftBrace {
-		assert(decl.declarators.count == 1);
-		name := identifier_from_declarator(decl.declarators[0]);
-		table_add(*p.ordinary, name, decl);
 		decl.body = parse_statement(p);
 	}
 	
@@ -1990,7 +1992,7 @@ indent :: (builder: *String_Builder, depth: int) {
 }
 
 
-print_type :: (builder: *String_Builder, info: Node_Type_Info) {
+print_type :: (builder: *String_Builder, info: Node_Decl_Info) {
 	for info.declarators {
 		id := identifier_from_declarator(it);
 		if id {
@@ -2213,10 +2215,11 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	minimal := read_entire_file("smallpt.c");
-	// minimal = #string STRING
-	// int A_123 = 0.12323f;
-	// STRING;
+	minimal := #string STRING
+	int main() {
+		return 1 + 2;
+	}
+	STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
