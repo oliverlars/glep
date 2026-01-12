@@ -161,12 +161,14 @@ Node_Decl :: struct {
 	type = Node_Decl;
 	using base: Node_Decl_Info;
 	body: *Node_Statement;
+	resolved_type: *Resolved_Type;
 }
 
 Node_Expr :: struct {
 	#as using _: Node;
 	type = #this;
 	expr_type: Type;
+	resolved_type: *Resolved_Type;
 }
 
 Node_Binary :: struct {
@@ -1987,22 +1989,12 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	if current(p).type == .LeftBrace {
 		decl.body = parse_statement(p);
 	}
-
-	decl_type_info := type_info_from_decl(decl);
-	for decl.declarators {
-		if it.init && it.init.initializer_type == Node_Scalar_Initializer {
-			expr_type_info := type_info_from_expr(it.init.(*Node_Scalar_Initializer).expr);
-			if !types_compatible(decl_type_info, expr_type_info) {
-				print("YOU CANT DO THAT!!!");
-			}
-		}
-	}
 	
 	return decl;
 }
 
 indent :: (builder: *String_Builder, depth: int) {
-	for 0..depth*4 append(builder, " ");
+	for 0..depth*4-1 append(builder, " ");
 }
 
 
