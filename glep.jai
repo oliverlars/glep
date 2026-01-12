@@ -2221,9 +2221,7 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	minimal := #string STRING
-	int main() {
-		int a = 1 + 2;
-	}
+	char a = (char)2;
 	STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
@@ -2267,7 +2265,7 @@ main :: () {
 
 	tu := parse_translation_unit(*parser);
 
-
+	typecheck(tu);
 
 	t1 := current_time_monotonic();
 

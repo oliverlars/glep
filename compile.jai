@@ -16,81 +16,81 @@ Resolved_Type :: struct {
 	inner: *Resolved_Type;
 }
 
+base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
+
+	Type_Specifier :: enum {
+		Void;
+		Char;
+		Short;
+		Int;
+		Long;
+		Float;
+		Double;
+		Signed;
+		Unsigned;
+	};
+
+	counts: [9]int;
+	for decl_info.specifiers {
+		if it == {
+			case "char";     counts[Type_Specifier.Char] += 1;
+			case "short";    counts[Type_Specifier.Short] += 1;
+			case "int";      counts[Type_Specifier.Int] += 1;
+			case "long";     counts[Type_Specifier.Long] += 1;
+			case "float";    counts[Type_Specifier.Float] += 1;
+			case "double";   counts[Type_Specifier.Double] += 1;
+			case "signed";   counts[Type_Specifier.Signed] += 1;
+			case "unsigned"; counts[Type_Specifier.Unsigned] += 1;
+		}
+	}
+
+	info := New(Resolved_Type);
+	
+	if counts[Type_Specifier.Signed] {
+		info.unsigned = false;
+	}
+
+	if counts[Type_Specifier.Unsigned] {
+		info.unsigned = true;
+	}
+
+	if counts[Type_Specifier.Char] > 0 {
+		info.size_in_bytes = 1;
+	}
+
+	if counts[Type_Specifier.Short] > 0 {
+		info.size_in_bytes = 2;
+	}
+
+	if counts[Type_Specifier.Long] == 2 {
+		info.size_in_bytes = 8;
+	}
+
+	if counts[Type_Specifier.Float] {
+		info.size_in_bytes = 4;
+		info.kind = .Floating;
+	}
+
+	if counts[Type_Specifier.Double] {
+		info.size_in_bytes = 8;
+		info.kind = .Floating;
+	}
+
+	if counts[Type_Specifier.Int] {
+		info.size_in_bytes = 4;
+	}
+
+	for decl_info.qualifiers {
+		if it == "_Atomic" info.atomic = true;
+	}
+
+
+	return info;
+}
+
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
 type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
-
-	base_type_info :: (decl: *Node_Decl) -> *Resolved_Type {
-
-		Type_Specifier :: enum {
-			Void;
-			Char;
-			Short;
-			Int;
-			Long;
-			Float;
-			Double;
-			Signed;
-			Unsigned;
-		};
-
-		counts: [9]int;
-		for decl.specifiers {
-			if it == {
-				case "char";     counts[Type_Specifier.Char] += 1;
-				case "short";    counts[Type_Specifier.Short] += 1;
-				case "int";      counts[Type_Specifier.Int] += 1;
-				case "long";     counts[Type_Specifier.Long] += 1;
-				case "float";    counts[Type_Specifier.Float] += 1;
-				case "double";   counts[Type_Specifier.Double] += 1;
-				case "signed";   counts[Type_Specifier.Signed] += 1;
-				case "unsigned"; counts[Type_Specifier.Unsigned] += 1;
-			}
-		}
-
-		info := New(Resolved_Type);
-		
-		if counts[Type_Specifier.Signed] {
-			info.unsigned = false;
-		}
-
-		if counts[Type_Specifier.Unsigned] {
-			info.unsigned = true;
-		}
-
-		if counts[Type_Specifier.Char] > 0 {
-			info.size_in_bytes = 1;
-		}
-
-		if counts[Type_Specifier.Short] > 0 {
-			info.size_in_bytes = 2;
-		}
-
-		if counts[Type_Specifier.Long] == 2 {
-			info.size_in_bytes = 8;
-		}
-
-		if counts[Type_Specifier.Float] {
-			info.size_in_bytes = 4;
-			info.kind = .Floating;
-		}
-
-		if counts[Type_Specifier.Double] {
-			info.size_in_bytes = 8;
-			info.kind = .Floating;
-		}
-
-		if counts[Type_Specifier.Int] {
-			info.size_in_bytes = 4;
-		}
-
-		for decl.qualifiers {
-			if it == "_Atomic" info.atomic = true;
-		}
-
-
-		return info;
-	}
 
 	declarator_type_info :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
 		if !declarator return null;
@@ -116,14 +116,15 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 		return result;
 	}
 
-	base_info := base_type_info(decl);
+	base_info := base_type_info(decl.base);
 
 	declarator_type_info(base_info, declarator);
 
 	return base_info;
 }
 
-types_compatible :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
+coerce_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
+	if a.kind != b.kind return false;
 	if !a return false;
 	if !b return false;
 	if a.kind != b.kind return false;
@@ -184,7 +185,7 @@ type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Binary;
 			left_info := type_info_from_expr(expr.(*Node_Binary).left);
 			right_info := type_info_from_expr(expr.(*Node_Binary).right);
-			if types_compatible(left_info, right_info) {
+			if coerce_types(left_info, right_info) {
 				return left_info, true;
 			} else {
 				return null, false;
@@ -197,11 +198,29 @@ type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Unary;
 			info := type_info_from_expr(expr.(*Node_Unary).expr);
 			return info, info.kind != .Composite;
+		case Node_Cast;
+			to := type_info_from_expr(expr.(*Node_Cast).expr);
+			// Need to check if coercing to the cast type is possible
+			info := base_type_info(expr.(*Node_Cast).base);
+			return info, true;
 	}
 
 	return null, true;
 }
 
 typecheck :: (tu: *Node_Translation_Unit) {
-
+	for decl: tu.declarations {
+		for declarator: decl.declarators {
+			decl_type := type_from_decl(decl, declarator);
+			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
+				expr_type := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
+				if !coerce_types(decl_type, expr_type) {
+					print("Incompatible types");
+				} else {
+					decl.resolved_type = decl_type;
+					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
+				}
+			}
+		}
+	}
 }
