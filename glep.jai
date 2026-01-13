@@ -2221,9 +2221,12 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	minimal := #string STRING
-	struct A;
-	struct B;
-	struct A a = (struct A)2;
+	#define __asm(x)
+	#define __attribute__(x)
+	#include <stdio.h>
+	int main(int argc, char **args) {
+
+	}
 	STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;

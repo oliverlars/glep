@@ -97,18 +97,19 @@ base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 		info.composite = decl_info._struct;
 	}
 
-
 	return info;
 }
 
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
 type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
+	if !decl || !declarator return null;
 
 	declarator_type_info :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
-		if !declarator return null;
+		if !base || !declarator return null;
 
 		inner := declarator_type_info(base, declarator.inner);
+		if !inner return null;
 
 		result: *Resolved_Type;
 		if declarator.declarator_type == {
@@ -268,4 +269,18 @@ typecheck :: (tu: *Node_Translation_Unit) {
 			}
 		}
 	}
+}
+
+Compiler :: struct {
+
+}
+
+compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
+	if decl.body {
+
+	}
+}
+
+compile :: (compiler: *Compiler) {
+
 }

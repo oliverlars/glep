@@ -10,6 +10,9 @@ Function :: struct {
 Cursor :: struct {
 	at: int;
 }
+
+PRAGMA_ONCED :: #type,distinct bool;
+
 Preprocessor :: struct {
 	at: int;
 	path_stack: [..]string;
@@ -17,6 +20,7 @@ Preprocessor :: struct {
 	objects: Table(string, Object);
 	functions: Table(string, Function);
 	expand_count: int;
+	includes: Table(string, PRAGMA_ONCED);
 }
 
 Cond_State :: struct {
@@ -578,12 +582,13 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						}
 						print("\n");
 					case "pragma";
+						if current(cpp, src_tokens).view == "once" {
+							print("Found pragma once\n");
+							table_set(*cpp.includes, peek(cpp.path_stack), true);
+						}
 						skip_line(cpp, src_tokens);
 					case "define";
 						name := skip(cpp, src_tokens);
-						if name.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
-							a := 5;
-						}
 						is_function_definition := false;
 						if current(cpp, src_tokens).type == .LeftParenthesis {
 							// They need to be next to eachother
@@ -640,27 +645,66 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							path := path_to_string(resolved_path);
 							//print("RESOLVED: %\n", path);
 							//print("Loading include %\n", peek(cpp.path_stack));
-							file, found = read_entire_file(path);
-							if found {
-								array_add(*cpp.path_stack, path);
-								include_tokeniser := tokenise(file);
-								at := cpp.at;
-								cpp.at = 0;
-								include_tokens := preprocess(cpp, include_tokeniser.tokens);
-								for include_tokens {
-									array_add(*dst_tokens, it);
-								}
-								cpp.at = at;
-								cpp.path_stack.count -= 1;
-							} else {
-								for includes {
-									full_path := tprint("%/%", it, include_path);
-									if file_exists(full_path) {
-										file, found = read_entire_file(full_path);
-										array_add(*cpp.path_stack, full_path);
-										break;
+							if !table_find(*cpp.includes, path) {
+								file, found = read_entire_file(path);
+								if found {
+									if !table_contains(*cpp.includes, path) {
+										table_add(*cpp.includes, path, false);
 									}
+									array_add(*cpp.path_stack, path);
+									include_tokeniser := tokenise(file);
+									at := cpp.at;
+									cpp.at = 0;
+									include_tokens := preprocess(cpp, include_tokeniser.tokens);
+									for include_tokens {
+										array_add(*dst_tokens, it);
+									}
+									cpp.at = at;
+									cpp.path_stack.count -= 1;
+								} else {
+									for includes {
+										full_path := tprint("%/%", it, include_path);
+										if file_exists(full_path) {
+											file, found = read_entire_file(full_path);
+											array_add(*cpp.path_stack, full_path);
+											break;
+										}
+									}
+									assert(found);
+									//print("Loading include %\n", peek(cpp.path_stack));
+									include_tokeniser := tokenise(file);
+									at := cpp.at;
+									cpp.at = 0;
+									include_tokens := preprocess(cpp, include_tokeniser.tokens);
+									for include_tokens {
+										array_add(*dst_tokens, it);
+									}
+									cpp.at = at;
+									cpp.path_stack.count -= 1;
 								}
+							}
+						} else if current(cpp, src_tokens).type == .Less {
+							skip(cpp, src_tokens);
+							path := "";
+							while current(cpp, src_tokens).type != .Greater {
+								path = join(path, skip(cpp, src_tokens).view);
+							}
+							skip(cpp, src_tokens);
+							full_path: string;
+							for includes {
+								full_path = tprint("%/%", it, path);
+								if file_exists(full_path) {
+									break;
+								}
+							}
+							if !table_find(*cpp.includes, full_path) {
+								if !table_contains(*cpp.includes, full_path) {
+									table_add(*cpp.includes, full_path, false);
+								}
+								file: string;
+								found := false;
+								file, found = read_entire_file(full_path);
+								array_add(*cpp.path_stack, full_path);
 								assert(found);
 								//print("Loading include %\n", peek(cpp.path_stack));
 								include_tokeniser := tokenise(file);
@@ -673,34 +717,6 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								cpp.at = at;
 								cpp.path_stack.count -= 1;
 							}
-						} else if current(cpp, src_tokens).type == .Less {
-							skip(cpp, src_tokens);
-							path := "";
-							while current(cpp, src_tokens).type != .Greater {
-								path = join(path, skip(cpp, src_tokens).view);
-							}
-							skip(cpp, src_tokens);
-							file: string;
-							found := false;
-							for includes {
-								full_path := tprint("%/%", it, path);
-								if file_exists(full_path) {
-									file, found = read_entire_file(full_path);
-									array_add(*cpp.path_stack, full_path);
-									break;
-								}
-							}
-							assert(found);
-							//print("Loading include %\n", peek(cpp.path_stack));
-							include_tokeniser := tokenise(file);
-							at := cpp.at;
-							cpp.at = 0;
-							include_tokens := preprocess(cpp, include_tokeniser.tokens);
-							for include_tokens {
-								array_add(*dst_tokens, it);
-							}
-							cpp.at = at;
-							cpp.path_stack.count -= 1;
 						}
 						skip_line(cpp, src_tokens);
 					case "undef";
