@@ -2220,14 +2220,7 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	minimal := #string STRING
-	#define __asm(x)
-	#define __attribute__(x)
-	#include <stdio.h>
-	int main(int argc, char **args) {
-
-	}
-	STRING;
+	minimal := read_entire_file("test.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
@@ -2271,6 +2264,9 @@ main :: () {
 	tu := parse_translation_unit(*parser);
 
 	typecheck(tu);
+
+	compiler: Compiler;
+	compile(*compiler, tu);
 
 	t1 := current_time_monotonic();
 

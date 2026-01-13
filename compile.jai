@@ -272,15 +272,26 @@ typecheck :: (tu: *Node_Translation_Unit) {
 }
 
 Compiler :: struct {
+	builder: String_Builder;
+}
 
+emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
+	append(*compiler.builder, tprint(fmt, ..args));
+	append(*compiler.builder, "\n");
 }
 
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
+	// Better way to check if it's a function?
 	if decl.body {
-
+		emit(compiler, "%", identifier_from_declarator(decl.declarators[0]));
 	}
 }
 
-compile :: (compiler: *Compiler) {
-
+compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
+	emit(compiler, ".global main");
+	emit(compiler, ".align 2");
+	for tu.declarations {
+		compile_decl(compiler, it);
+	}
+	write_entire_file("out.c", *compiler.builder);
 }
