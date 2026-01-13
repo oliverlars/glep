@@ -273,6 +273,8 @@ typecheck :: (tu: *Node_Translation_Unit) {
 
 Compiler :: struct {
 	builder: String_Builder;
+
+	register := 9;
 }
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
@@ -280,10 +282,49 @@ emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	append(*compiler.builder, "\n");
 }
 
+compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
+	if !expr return;
+	if expr.expr_type == {
+		case Node_Binary;
+			compile_expr(compiler, expr.(*Node_Binary).left);
+			dst := compiler.register;
+			compiler.register += 1;
+			compile_expr(compiler, expr.(*Node_Binary).right);
+			if expr.(*Node_Binary).op.type == {
+				case .Plus;
+					emit(compiler, "add w%, w%, w%", dst, dst, compiler.register);
+				case .Minus;
+					emit(compiler, "sub w%, w%, w%", dst, dst, compiler.register);
+				case .Asterisk;
+					emit(compiler, "mul w%, w%, w%", dst, dst, compiler.register);
+				case .ForwardSlash;
+					emit(compiler, "div w%, w%, w%", dst, dst, compiler.register);
+			}
+			compiler.register -= 1;
+		case Node_Number;
+			emit(compiler, "mov w%, %", compiler.register, expr.(*Node_Number).as_u64.(u32));
+	}
+}
+
+compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
+	if !stmt return;
+	if stmt.statement_type == {
+		case Node_Block;
+			for stmt.(*Node_Block).statements {
+				compile_statement(compiler, it);
+			}
+		case Node_Return;
+			compile_expr(compiler, stmt.(*Node_Return).expr);
+			emit(compiler, "mov x0, x%", compiler.register);
+	}
+}
+
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	// Better way to check if it's a function?
 	if decl.body {
-		emit(compiler, "%", identifier_from_declarator(decl.declarators[0]));
+		emit(compiler, "%:", identifier_from_declarator(decl.declarators[0]));
+		compile_statement(compiler, decl.body);
+		emit(compiler, "ret");
 	}
 }
 
@@ -293,5 +334,5 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	for tu.declarations {
 		compile_decl(compiler, it);
 	}
-	write_entire_file("out.c", *compiler.builder);
+	write_entire_file("out.s", *compiler.builder);
 }
