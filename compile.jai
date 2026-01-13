@@ -171,6 +171,7 @@ can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 		case .Composite;
 			// HACK(Oliver): We rely on the type pointing to the same thing in memory
 			// maybe that is dumb?
+			if source.kind != .Composite return false;
 			return target.composite == source.composite;
 		case .Array;
 			 return source.kind == .Array;
@@ -244,10 +245,9 @@ type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
 			info := type_info_from_expr(expr.(*Node_Unary).expr);
 			return info, info.kind != .Composite;
 		case Node_Cast;
-			to := type_info_from_expr(expr.(*Node_Cast).expr);
-			// Need to check if coercing to the cast type is possible
-			info := base_type_info(expr.(*Node_Cast).base);
-			return info, true;
+			source := type_info_from_expr(expr.(*Node_Cast).expr);
+			target := base_type_info(expr.(*Node_Cast).base);
+			return target, can_coerce_to(target, source);
 	}
 
 	return null, true;
@@ -258,8 +258,8 @@ typecheck :: (tu: *Node_Translation_Unit) {
 		for declarator: decl.declarators {
 			decl_type := type_from_decl(decl, declarator);
 			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-				expr_type := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
-				if !can_coerce_to(decl_type, expr_type) {
+				expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
+				if !valid || !can_coerce_to(decl_type, expr_type) {
 					print("Incompatible types");
 				} else {
 					decl.resolved_type = decl_type;
