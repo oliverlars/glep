@@ -7,10 +7,13 @@ Resolved_Type :: struct {
 		Pointer;
 		Array;
 	};
+
 	size_in_bytes: int;
 	alignment: int;
 	unsigned: bool;
 	atomic: bool;
+
+	composite: *Node_Composite;
 
 	// For pointers and stuff
 	inner: *Resolved_Type;
@@ -84,8 +87,14 @@ base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 		if it == "_Atomic" info.atomic = true;
 	}
 
-	if decl_info._enum || decl_info._struct {
+	if decl_info._enum {
 		info.kind = .Composite;
+		info.composite = decl_info._enum;
+	}
+
+	if decl_info._struct {
+		info.kind = .Composite;
+		info.composite = decl_info._struct;
 	}
 
 
@@ -160,7 +169,9 @@ can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 		case .Floating;
 			return !(source.kind == .Composite || source.kind == .Array);
 		case .Composite;
-			return source.kind == .Composite;
+			// HACK(Oliver): We rely on the type pointing to the same thing in memory
+			// maybe that is dumb?
+			return target.composite == source.composite;
 		case .Array;
 			 return source.kind == .Array;
 	}

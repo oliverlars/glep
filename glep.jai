@@ -107,7 +107,12 @@ Node_Decl_Info :: struct {
 	declarators: [..]*Node_Declarator;
 }
 
+Node_Composite :: struct {
+	type: Type;
+}
+
 Node_Struct :: struct {
+	#as using _: Node_Composite;
 	name: Token;
 	is_union: bool;
 	members: [..]*Node_Decl;
@@ -119,6 +124,7 @@ Node_Enum_Member :: struct {
 }
 
 Node_Enum :: struct {
+	#as using _:Node_Composite;
 	name: Token;
 	members: [..]*Node_Enum_Member;
 }
@@ -2215,7 +2221,9 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	minimal := #string STRING
-	int *a = (struct A**)2;
+	struct A;
+	struct B;
+	struct A a = (struct A)2;
 	STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
