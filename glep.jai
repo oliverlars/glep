@@ -1020,7 +1020,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 				info.reference = false;
 			}
 			info._enum = _enum;
-		} else if is_type_name(p, current(p)) {
+		} else if is_declaration_start(p, current(p)) {
 			if current(p).view == "_Atomic" {
 				skip(p);
 				expect(p, .LeftParenthesis);
@@ -1056,7 +1056,7 @@ is_declaration_start :: (p: *Parser) -> bool {
 		   current(p).view == "struct" ||
 		   current(p).view == "enum" ||
 		   current(p).view == "union" ||
-		   is_type_name(p, current(p));
+		   table_contains(*p.typedefs, current(p).view);
 }
 
 is_declaration_start :: (p: *Parser, token: Token) -> bool {
@@ -1067,13 +1067,7 @@ is_declaration_start :: (p: *Parser, token: Token) -> bool {
 		   token.view == "struct" ||
 		   token.view == "enum" ||
 		   token.view == "union" ||
-		   is_type_name(p, token);
-}
-
-is_type_name :: (parser: *Parser, token: Token) -> bool {
-	return is_type_qualifier(token) ||
-		   is_type_specifier(token) ||
-		   table_contains(*parser.typedefs, token.view);
+		   table_contains(*p.typedefs, token.view);
 }
 
 is_assign_op :: (token: Token) -> bool {
@@ -1281,7 +1275,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 	if current(p).view == "sizeof" {
 		skip(p);
 		if current(p).type == .LeftParenthesis {
-			if is_type_name(p, next(p)) {
+			if is_declaration_start(p, next(p)) {
 				skip(p);
 				base_info: Node_Decl_Info;
 				parse_declaration_specifiers(p, *base_info);
@@ -1309,7 +1303,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		unary.op = op;
 		unary.expr = rhs;
 		result = unary;
-	} else if current(p).type == .LeftParenthesis && is_type_name(p, next(p)) {
+	} else if current(p).type == .LeftParenthesis && is_declaration_start(p, next(p)) {
 		expect(p, .LeftParenthesis);
 		base_info: Node_Decl_Info;
 		parse_declaration_specifiers(p, *base_info);
@@ -2221,7 +2215,7 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	minimal := #string STRING
-	char a = (char)2;
+	int *a = (struct A**)2;
 	STRING;
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;

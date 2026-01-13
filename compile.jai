@@ -84,6 +84,10 @@ base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 		if it == "_Atomic" info.atomic = true;
 	}
 
+	if decl_info._enum || decl_info._struct {
+		info.kind = .Composite;
+	}
+
 
 	return info;
 }
@@ -123,14 +127,43 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 	return base_info;
 }
 
-coerce_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
-	if a.kind != b.kind return false;
-	if !a return false;
-	if !b return false;
-	if a.kind != b.kind return false;
-	if a.size_in_bytes != b.size_in_bytes return false;
-	if a.atomic != b.atomic return false;
+match_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool, *Resolved_Type {
+	// This leaks
+	result := New(Resolved_Type);
+	if a.kind == .Floating && b.kind != .Floating {
+		result.kind = .Floating;
+		result.size_in_bytes = a.size_in_bytes;
+	} else if b.kind == .Floating && a.kind != .Floating {
+		result.kind = .Floating;
+		result.size_in_bytes = b.size_in_bytes;
+	} else if a.kind == .Integral && b.kind == .Integral {
+		result.kind = .Integral;
+		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
+		result.unsigned = a.unsigned || b.unsigned;
+	} else if a.kind == .Floating && b.kind == .Floating {
+		result.kind = .Floating;
+		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
+	} else if a.kind == .Pointer && b.kind == .Pointer {
+		matched, type := match_types(a.inner, b.inner);
+		return matched, type;
+	} else {
+		return false, null;
+	}
+	
+	return true, result;
+}
 
+can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
+	result: bool;
+	if target.kind == {
+		case .Integral; #through;
+		case .Floating;
+			return !(source.kind == .Composite || source.kind == .Array);
+		case .Composite;
+			return source.kind == .Composite;
+		case .Array;
+			 return source.kind == .Array;
+	}
 	return true;
 }
 
@@ -185,8 +218,9 @@ type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Binary;
 			left_info := type_info_from_expr(expr.(*Node_Binary).left);
 			right_info := type_info_from_expr(expr.(*Node_Binary).right);
-			if coerce_types(left_info, right_info) {
-				return left_info, true;
+			matched, resolved_type := match_types(left_info, right_info);
+			if matched {
+				return resolved_type, true;
 			} else {
 				return null, false;
 			}
@@ -214,7 +248,7 @@ typecheck :: (tu: *Node_Translation_Unit) {
 			decl_type := type_from_decl(decl, declarator);
 			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
 				expr_type := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
-				if !coerce_types(decl_type, expr_type) {
+				if !can_coerce_to(decl_type, expr_type) {
 					print("Incompatible types");
 				} else {
 					decl.resolved_type = decl_type;
