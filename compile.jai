@@ -303,6 +303,21 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 		case Node_Number;
 			emit(compiler, "mov w%, %", compiler.register, expr.(*Node_Number).as_u64.(u32));
+		case Node_Char;
+			value := 0;
+			for expr.(*Node_Char).token.view {
+				value += it;
+			}
+			emit(compiler, "mov w%, %", compiler.register, value);
+		case Node_Call;
+			call := expr.(*Node_Call);
+			for call.args {
+				compile_expr(compiler, it);
+				emit(compiler, "mov w%, w%", it_index, compiler.register);
+			}
+			assert(call.id.expr_type == Node_Identifier);
+			// NOTE(Oliver): All C symbols need underscores? what the hell?
+			emit(compiler, "bl _%", call.id.(*Node_Identifier).id.view);
 	}
 }
 
@@ -316,21 +331,30 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 		case Node_Return;
 			compile_expr(compiler, stmt.(*Node_Return).expr);
 			emit(compiler, "mov x0, x%", compiler.register);
+		case Node_Expr_Statement;
+			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);
 	}
 }
 
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	// Better way to check if it's a function?
 	if decl.body {
-		emit(compiler, "%:", identifier_from_declarator(decl.declarators[0]));
+		// NOTE(Oliver): All C symbols need underscores? what the hell?
+		emit(compiler, "_%:", identifier_from_declarator(decl.declarators[0]));
+		// TODO(Oliver): Figure out this magic shit
+		emit(compiler, "sub sp, sp, #32");
+		emit(compiler, "stp x29, x30, [sp, #16]");
+    	emit(compiler, "add x29, sp, #16");
 		compile_statement(compiler, decl.body);
+		emit(compiler, "ldp x29, x30, [sp, #16]");
+		emit(compiler, "add sp, sp, #32");
 		emit(compiler, "ret");
 	}
 }
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
-	emit(compiler, ".global main");
-	emit(compiler, ".align 2");
+	emit(compiler, ".globl _main"); // Set _main to be the entry point
+	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
 	for tu.declarations {
 		compile_decl(compiler, it);
 	}

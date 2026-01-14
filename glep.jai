@@ -232,7 +232,7 @@ Node_Call :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	id: *Node_Expr;
-	params: [..]*Node_Expr;
+	args: [..]*Node_Expr;
 }
 
 Node_Assign :: struct {
@@ -1415,7 +1415,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			call := New(Node_Call);
 			call.id = result;
 			while current(p).type != .RightParenthesis {
-				array_add(*call.params, parse_expr(p, precedence_of(.Comma) + 1));
+				array_add(*call.args, parse_expr(p, precedence_of(.Comma) + 1));
 				if current(p).type != .RightParenthesis {
 					expect(p, .Comma);
 				}
@@ -1646,9 +1646,9 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 	case Node_Call;
 		print_expr(builder, node.(*Node_Call).id);
 		append(builder, "(");
-		for node.(*Node_Call).params {
+		for node.(*Node_Call).args {
 			print_expr(builder, it);
-			if it_index < node.(*Node_Call).params.count - 1 then append(builder, ", ");
+			if it_index < node.(*Node_Call).args.count - 1 then append(builder, ", ");
 		}
 		append(builder, ")");
 	case Node_Array_Access;
