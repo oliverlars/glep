@@ -8,5 +8,7 @@
 
 int main(int argc, char **args) {
 	printf("Hello, World!");
+	printf("Hello, World!");
+	printf("Hello, World2!");
 	return (1 + 2) * (1 + 2) - 1;
 }

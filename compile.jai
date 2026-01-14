@@ -355,8 +355,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				emit(compiler, "adrp x%, l_.str@PAGE", compiler.register);
 				emit(compiler, "add x%, x%, l_.str@PAGEOFF", compiler.register, compiler.register);
 			} else {
-				emit(compiler, "adrp x%, l_.str%", compiler.register, count);
-				emit(compiler, "add x%, x%, l_.str%@PAGEOFF", compiler.register, compiler.register, count);
+				emit(compiler, "adrp x%, l_.str.%@PAGE", compiler.register, count);
+				emit(compiler, "add x%, x%, l_.str.%@PAGEOFF", compiler.register, compiler.register, count);
 			}
 	}
 }
@@ -406,7 +406,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			emit(compiler, "l_.str:");
 			emit(compiler, "	.asciz \"%\"", key);
 		} else {
-			emit(compiler, "l_.str%:", value);
+			emit(compiler, "l_.str.%:", value);
 			emit(compiler, "	.asciz \"%\"", key);
 		}
 	}
