@@ -249,22 +249,48 @@ type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
 			source := type_info_from_expr(expr.(*Node_Cast).expr);
 			target := base_type_info(expr.(*Node_Cast).base);
 			return target, can_coerce_to(target, source);
+		case Node_String;
+			info := New(Resolved_Type);
+			info.size_in_bytes = 8;
+			info.kind = .Pointer;
+			return info, true;
+		case Node_Call;
+			for expr.(*Node_Call).args {
+				arg_type := type_info_from_expr(it);
+				it.resolved_type = arg_type;
+			}
 	}
 
 	return null, true;
 }
 
+typecheck_statement :: (stmt: *Node_Statement) {
+	if !stmt return;
+	if stmt.statement_type == {
+		case Node_Block;
+			for stmt.(*Node_Block).statements {
+				typecheck_statement(it);
+			}
+		case Node_Expr_Statement;
+			type_info_from_expr(stmt.(*Node_Expr_Statement).expr);
+	}
+}
+
 typecheck :: (tu: *Node_Translation_Unit) {
 	for decl: tu.declarations {
-		for declarator: decl.declarators {
-			decl_type := type_from_decl(decl, declarator);
-			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-				expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
-				if !valid || !can_coerce_to(decl_type, expr_type) {
-					print("Incompatible types");
-				} else {
-					decl.resolved_type = decl_type;
-					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
+		if decl.body {
+			typecheck_statement(decl.body);
+		} else {
+			for declarator: decl.declarators {
+				decl_type := type_from_decl(decl, declarator);
+				if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
+					expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
+					if !valid || !can_coerce_to(decl_type, expr_type) {
+						print("Incompatible types");
+					} else {
+						decl.resolved_type = decl_type;
+						declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
+					}
 				}
 			}
 		}
@@ -273,7 +299,7 @@ typecheck :: (tu: *Node_Translation_Unit) {
 
 Compiler :: struct {
 	builder: String_Builder;
-
+	strings: Table(string, int);
 	register := 9;
 }
 
@@ -313,11 +339,25 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			call := expr.(*Node_Call);
 			for call.args {
 				compile_expr(compiler, it);
-				emit(compiler, "mov w%, w%", it_index, compiler.register);
+				if it.resolved_type && it.resolved_type.size_in_bytes == 8 {
+					emit(compiler, "mov x%, x%", it_index, compiler.register);
+				} else {
+					emit(compiler, "mov w%, w%", it_index, compiler.register);
+				}
 			}
 			assert(call.id.expr_type == Node_Identifier);
 			// NOTE(Oliver): All C symbols need underscores? what the hell?
 			emit(compiler, "bl _%", call.id.(*Node_Identifier).id.view);
+		case Node_String;
+			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
+			assert(ok);
+			if count == 0 {
+				emit(compiler, "adrp x%, l_.str@PAGE", compiler.register);
+				emit(compiler, "add x%, x%, l_.str@PAGEOFF", compiler.register, compiler.register);
+			} else {
+				emit(compiler, "adrp x%, l_.str%", compiler.register, count);
+				emit(compiler, "add x%, x%, l_.str%@PAGEOFF", compiler.register, compiler.register, count);
+			}
 	}
 }
 
@@ -344,11 +384,13 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		// TODO(Oliver): Figure out this magic shit
 		emit(compiler, "sub sp, sp, #32");
 		emit(compiler, "stp x29, x30, [sp, #16]");
-    	emit(compiler, "add x29, sp, #16");
+		emit(compiler, "add x29, sp, #16");
 		compile_statement(compiler, decl.body);
 		emit(compiler, "ldp x29, x30, [sp, #16]");
 		emit(compiler, "add sp, sp, #32");
 		emit(compiler, "ret");
+	} else {
+
 	}
 }
 
@@ -357,6 +399,16 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
 	for tu.declarations {
 		compile_decl(compiler, it);
+	}
+
+	for value, key: compiler.strings {
+		if value == 0 {
+			emit(compiler, "l_.str:");
+			emit(compiler, "	.asciz \"%\"", key);
+		} else {
+			emit(compiler, "l_.str%:", value);
+			emit(compiler, "	.asciz \"%\"", key);
+		}
 	}
 	write_entire_file("out.s", *compiler.builder);
 }

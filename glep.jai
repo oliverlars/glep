@@ -90,6 +90,10 @@ Parser :: struct {
 	structs: Table(string, *Node_Struct);
 	enums: Table(string, *Node_Enum);
 	typedefs: Table(string, *Node_Decl);
+
+	// Each string gets a unique index
+	strings: Table(string, int);
+	str_count: int;
 }
 
 Node :: struct {
@@ -1482,6 +1486,10 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		token.view = concat;
 		token.type = .String;
 		result.(*Node_String).token = token;
+		if !table_contains(*p.strings, token.view) {
+			table_add(*p.strings, token.view, p.str_count);
+			p.str_count += 1;
+		}
 	} else if current(p).type == .LeftParenthesis {
 		expect(p, .LeftParenthesis);
 		result = parse_expr(p);
@@ -2266,6 +2274,7 @@ main :: () {
 	typecheck(tu);
 
 	compiler: Compiler;
+	compiler.strings = parser.strings;
 	compile(*compiler, tu);
 
 	t1 := current_time_monotonic();
