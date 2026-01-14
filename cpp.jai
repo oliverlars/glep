@@ -67,6 +67,15 @@ add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 	table_add(*cpp.objects, builtin, object);
 }
 
+// HACK(Oliver): this is kinda dumb
+add_function_builtin :: (cpp: *Preprocessor, macro: string) {
+	tokeniser: Tokeniser;
+	tokeniser.source = macro;
+	tokenise(*tokeniser);
+	cpp.at = 0;
+	preprocess(cpp, tokeniser.tokens);
+}
+
 in_hideset :: (hideset: [..]string, name: string) -> bool {
 	for hideset {
 		if name == it {
@@ -515,6 +524,9 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_builtin_object(cpp, "va_list", "__builtin_va_list");
 	add_builtin_object(cpp, "va_copy", "__builtin_va_copy");
 	add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
+
+	add_function_builtin(cpp, "#define __asm(x)\n");
+	add_function_builtin(cpp, "#define __attribute__(x)\n");
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {

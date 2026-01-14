@@ -1,5 +1,3 @@
-#define __asm(x)
-#define __attribute__(x)
 #include <stdio.h>
 #include <assert.h>
 #include <float.h>
