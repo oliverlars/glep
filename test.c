@@ -7,6 +7,6 @@
 
 
 int main(int argc, char **args) {
-	printf("Hello, World! %d", 10);
+	printf("Hello, World! %d %d", 10, 20);
 	return (1 + 2) * (1 + 2) - 1;
 }

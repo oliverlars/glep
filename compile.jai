@@ -357,12 +357,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				emit(compiler, "mov x%, sp", variadic_stack_register);
 				compiler.register += 1;
 			}
+			vararg_offset := 0;
 			for call.args {
 				compile_expr(compiler, it);
-
-
 				if it_index >= param_count {
-					emit(compiler, "str x%, [x%]", compiler.register, variadic_stack_register);
+					if vararg_offset > 0 {
+						emit(compiler, "str x%, [x%, #%]", compiler.register, variadic_stack_register, vararg_offset);
+					} else {
+						emit(compiler, "str x%, [x%]", compiler.register, variadic_stack_register);
+					}
+					// NOTE(Oliver): always 8 byte aligned
+					vararg_offset += 8;
 				} else {
 					if it.resolved_type && it.resolved_type.size_in_bytes == 8 {
 						emit(compiler, "mov x%, x%", it_index, compiler.register);
