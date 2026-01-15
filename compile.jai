@@ -274,6 +274,9 @@ typecheck_statement :: (stmt: *Node_Statement) {
 			}
 		case Node_Expr_Statement;
 			type_info_from_expr(stmt.(*Node_Expr_Statement).expr);
+		case Node_Decl_Statement;
+			decl := stmt.(*Node_Decl_Statement).decl;
+			decl.resolved_type = base_type_info(decl.base);
 	}
 }
 
@@ -426,7 +429,8 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		// TODO(Oliver): Figure out this magic shit
 		stack_size := stack_space_to_allocate(decl.body);
 		if stack_size > 0 {
-			stack_size_p2 := next_power_of_two(stack_size);
+			// We have to align the stack size to be a multiple of 16
+			stack_size_p2 := (stack_size + 15) & ~15;
 			emit(compiler, "sub sp, sp, #%", stack_size_p2);
 			emit(compiler, "stp x29, x30, [sp, #16]");
 			emit(compiler, "add x29, sp, #16");
@@ -452,7 +456,7 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 		} else if it.statement_type == Node_Decl_Statement {
 			decl := it.(*Node_Decl_Statement).decl;
 			if decl.resolved_type {
-				stack_size += it.(*Node_Decl).resolved_type.size_in_bytes;
+				stack_size += decl.resolved_type.size_in_bytes;
 			}
 		}
 		print("Statement Type: %\n", it.statement_type);
