@@ -1,4 +1,5 @@
 
+
 Resolved_Type :: struct {
 	kind: enum {
 		Integral;
@@ -297,6 +298,11 @@ typecheck :: (tu: *Node_Translation_Unit) {
 	}
 }
 
+Decl_Info :: struct {
+
+	stack_offset: int;
+}
+
 Compiler :: struct {
 	builder: String_Builder;
 	strings: Table(string, int);
@@ -306,6 +312,8 @@ Compiler :: struct {
 	structs: Table(string, *Node_Struct);
 	enums: Table(string, *Node_Enum);
 	typedefs: Table(string, *Node_Decl);
+
+	stack_offset: int;
 }
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
@@ -353,6 +361,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			variadic_stack_register := compiler.register;
+			// HACK(Oliver): This needs to be restored i think?
+			// Also enough stack space should be picked for the function
+			// upfront
 			if variadic {
 				emit(compiler, "mov x%, sp", variadic_stack_register);
 				compiler.register += 1;
@@ -413,16 +424,40 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		// NOTE(Oliver): All C symbols need underscores? what the hell?
 		emit(compiler, "_%:", identifier_from_declarator(decl.declarators[0]));
 		// TODO(Oliver): Figure out this magic shit
-		emit(compiler, "sub sp, sp, #32");
-		emit(compiler, "stp x29, x30, [sp, #16]");
-		emit(compiler, "add x29, sp, #16");
-		compile_statement(compiler, decl.body);
-		emit(compiler, "ldp x29, x30, [sp, #16]");
-		emit(compiler, "add sp, sp, #32");
-		emit(compiler, "ret");
+		stack_size := stack_space_to_allocate(decl.body);
+		if stack_size > 0 {
+			stack_size_p2 := next_power_of_two(stack_size);
+			emit(compiler, "sub sp, sp, #%", stack_size_p2);
+			emit(compiler, "stp x29, x30, [sp, #16]");
+			emit(compiler, "add x29, sp, #16");
+			compile_statement(compiler, decl.body);
+			emit(compiler, "ldp x29, x30, [sp, #16]");
+			emit(compiler, "add sp, sp, #%", stack_size_p2);
+			emit(compiler, "ret");
+		}
 	} else {
 
 	}
+}
+
+stack_space_to_allocate :: (block: *Node_Statement) -> int {
+	if !block return 0;
+	assert(block.statement_type == Node_Block);
+	stack_size := 0;
+	for block.(*Node_Block).statements {
+		// FIXME(Oliver): Why is this happening????????
+		if !it break;
+		if it.statement_type == Node_Block {
+			stack_size = max(stack_size, stack_space_to_allocate(it));
+		} else if it.statement_type == Node_Decl_Statement {
+			decl := it.(*Node_Decl_Statement).decl;
+			if decl.resolved_type {
+				stack_size += it.(*Node_Decl).resolved_type.size_in_bytes;
+			}
+		}
+		print("Statement Type: %\n", it.statement_type);
+	}
+	return stack_size;
 }
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
