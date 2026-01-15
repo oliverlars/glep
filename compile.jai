@@ -301,6 +301,11 @@ Compiler :: struct {
 	builder: String_Builder;
 	strings: Table(string, int);
 	register := 9;
+
+	ordinary: Table(string, *Node);
+	structs: Table(string, *Node_Struct);
+	enums: Table(string, *Node_Enum);
+	typedefs: Table(string, *Node_Decl);
 }
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
@@ -337,17 +342,38 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			emit(compiler, "mov w%, %", compiler.register, value);
 		case Node_Call;
 			call := expr.(*Node_Call);
+			name := call.id.(*Node_Identifier).id.view;
+			_, decl := table_find(*compiler.ordinary, name);
+			param_count := 0;
+			variadic := false;
+			for decl.(*Node_Decl).declarators {
+				if it.declarator_type == Node_Function_Declarator {
+					param_count = it.(*Node_Function_Declarator).params.count;
+					variadic = it.(*Node_Function_Declarator).variadic;
+				}
+			}
+			variadic_stack_register := compiler.register;
+			if variadic {
+				emit(compiler, "mov x%, sp", variadic_stack_register);
+				compiler.register += 1;
+			}
 			for call.args {
 				compile_expr(compiler, it);
-				if it.resolved_type && it.resolved_type.size_in_bytes == 8 {
-					emit(compiler, "mov x%, x%", it_index, compiler.register);
+
+
+				if it_index >= param_count {
+					emit(compiler, "str x%, [x%]", compiler.register, variadic_stack_register);
 				} else {
-					emit(compiler, "mov w%, w%", it_index, compiler.register);
+					if it.resolved_type && it.resolved_type.size_in_bytes == 8 {
+						emit(compiler, "mov x%, x%", it_index, compiler.register);
+					} else {
+						emit(compiler, "mov w%, w%", it_index, compiler.register);
+					}
 				}
 			}
 			assert(call.id.expr_type == Node_Identifier);
 			// NOTE(Oliver): All C symbols need underscores? what the hell?
-			emit(compiler, "bl _%", call.id.(*Node_Identifier).id.view);
+			emit(compiler, "bl _%", name);
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);

@@ -2275,6 +2275,10 @@ main :: () {
 
 	compiler: Compiler;
 	compiler.strings = parser.strings;
+	compiler.ordinary = parser.ordinary;
+	compiler.structs = parser.structs;
+	compiler.enums = parser.enums;
+	compiler.typedefs = parser.typedefs;
 	compile(*compiler, tu);
 
 	t1 := current_time_monotonic();

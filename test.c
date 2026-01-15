@@ -7,8 +7,6 @@
 
 
 int main(int argc, char **args) {
-	printf("Hello, World!");
-	printf("Hello, World!");
-	printf("Hello, World2!");
+	printf("Hello, World! %d", 10);
 	return (1 + 2) * (1 + 2) - 1;
 }
