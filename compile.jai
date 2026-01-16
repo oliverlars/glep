@@ -301,9 +301,13 @@ typecheck :: (tu: *Node_Translation_Unit) {
 	}
 }
 
-Decl_Info :: struct {
+Decl_Offset :: struct {
+	name: string;
+	offset: int;
+}
 
-	stack_offset: int;
+Stack_Frame :: struct {
+	decls: [..]Decl_Offset;
 }
 
 Compiler :: struct {
@@ -315,8 +319,43 @@ Compiler :: struct {
 	structs: Table(string, *Node_Struct);
 	enums: Table(string, *Node_Enum);
 	typedefs: Table(string, *Node_Decl);
+	
+	stack_frames: [..]Stack_Frame;
 
 	stack_offset: int;
+}
+
+push_scope :: (compiler: *Compiler) {
+	frame: Stack_Frame;
+	array_add(*compiler.stack_frames, frame);
+}
+
+pop_scope :: (compiler: *Compiler) {
+	assert(compiler.stack_frames.count > 0);
+	compiler.stack_frames.count -= 1;
+}
+
+current_stack_frame :: (compiler: *Compiler) -> *Stack_Frame {
+	return peek_pointer(compiler.stack_frames);
+}
+
+push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int) {
+	frame := current_stack_frame(compiler);
+	decl: Decl_Offset;
+	decl.name = name;
+	decl.offset = compiler.stack_offset;
+	array_add(*frame.decls, decl);
+}
+
+find_decl :: (compiler: *Compiler, name: string) -> Decl_Offset {
+	frame := current_stack_frame(compiler);
+	for frame.decls {
+		if it.name == name {
+			return it;
+		}
+	}
+	assert(false);
+	return .{};
 }
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
@@ -440,7 +479,12 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 			emit(compiler, "ret");
 		}
 	} else {
-
+		for decl.declarators {
+			name := identifier_from_declarator(it);
+			if decl.resolved_type {
+				push_decl(compiler, name, decl.resolved_type.size_in_bytes);
+			}
+		}
 	}
 }
 
