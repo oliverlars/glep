@@ -7,5 +7,5 @@
 int main(int argc, char **args) {
 	printf("abc");
 	int a = 5;
-	return (1 + 2) * (1 + 2) - 1;;
+	return 1 + a;
 }

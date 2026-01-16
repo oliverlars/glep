@@ -304,6 +304,7 @@ typecheck :: (tu: *Node_Translation_Unit) {
 Decl_Offset :: struct {
 	name: string;
 	offset: int;
+	decl: *Node_Decl;
 }
 
 Stack_Frame :: struct {
@@ -328,6 +329,7 @@ Compiler :: struct {
 push_scope :: (compiler: *Compiler) {
 	frame: Stack_Frame;
 	array_add(*compiler.stack_frames, frame);
+	compiler.stack_offset = 0;
 }
 
 pop_scope :: (compiler: *Compiler) {
@@ -339,12 +341,13 @@ current_stack_frame :: (compiler: *Compiler) -> *Stack_Frame {
 	return peek_pointer(compiler.stack_frames);
 }
 
-push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int) {
+push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node_Decl) {
 	frame := current_stack_frame(compiler);
-	decl: Decl_Offset;
-	decl.name = name;
-	decl.offset = compiler.stack_offset;
-	array_add(*frame.decls, decl);
+	decl_offset: Decl_Offset;
+	decl_offset.name = name;
+	decl_offset.offset = compiler.stack_offset;
+	decl_offset.decl = decl;
+	array_add(*frame.decls, decl_offset);
 }
 
 find_decl :: (compiler: *Compiler, name: string) -> Decl_Offset {
@@ -442,6 +445,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				emit(compiler, "adrp x%, l_.str.%@PAGE", compiler.register, count);
 				emit(compiler, "add x%, x%, l_.str.%@PAGEOFF", compiler.register, compiler.register, count);
 			}
+		case Node_Identifier;
+			decl_offset := find_decl(compiler, expr.(*Node_Identifier).id.view);
+			if decl_offset.decl.resolved_type && decl_offset.decl.resolved_type.size_in_bytes == 8 {
+				emit(compiler, "ldr x%, [sp, #%]", compiler.register, decl_offset.offset);
+			} else {
+				emit(compiler, "ldr w%, [sp, #%]", compiler.register, decl_offset.offset);
+			}
+
 	}
 }
 
@@ -457,12 +468,29 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			emit(compiler, "mov x0, x%", compiler.register);
 		case Node_Expr_Statement;
 			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);
+		case Node_Decl_Statement;
+			decl := stmt.(*Node_Decl_Statement).decl;
+			for decl.declarators {
+				name := identifier_from_declarator(it);
+				// FIXME(Oliver): Enums won't work yet
+				print("DECL %\n", decl.*);
+				if decl.resolved_type {
+					push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
+				}
+				if it.init {
+					if it.init.initializer_type == Node_Scalar_Initializer {
+						compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
+						emit(compiler, "str x%, [sp, #%]", compiler.register, compiler.stack_offset);
+					}
+				}
+			}
 	}
 }
 
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	// Better way to check if it's a function?
 	if decl.body {
+		push_scope(compiler);
 		// NOTE(Oliver): All C symbols need underscores? what the hell?
 		emit(compiler, "_%:", identifier_from_declarator(decl.declarators[0]));
 		// TODO(Oliver): Figure out this magic shit
@@ -481,8 +509,16 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	} else {
 		for decl.declarators {
 			name := identifier_from_declarator(it);
+			// FIXME(Oliver): Enums won't work yet
+			print("DECL %\n", decl.*);
 			if decl.resolved_type {
-				push_decl(compiler, name, decl.resolved_type.size_in_bytes);
+				push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
+			}
+			if it.init {
+				if it.init.initializer_type == Node_Scalar_Initializer {
+					compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
+					emit(compiler, "str x%, [sp, #%]", compiler.register, compiler.stack_offset);
+				}
 			}
 		}
 	}
