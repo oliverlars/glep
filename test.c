@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 int main(int argc, char **args) {
-	printf("abc");
+	printf("abc %d", argc);
 	int a = 5;
 	return 1 + a;
 }

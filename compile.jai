@@ -280,24 +280,35 @@ typecheck_statement :: (stmt: *Node_Statement) {
 	}
 }
 
-typecheck :: (tu: *Node_Translation_Unit) {
-	for decl: tu.declarations {
-		if decl.body {
-			typecheck_statement(decl.body);
-		} else {
-			for declarator: decl.declarators {
-				decl_type := type_from_decl(decl, declarator);
-				if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-					expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
-					if !valid || !can_coerce_to(decl_type, expr_type) {
-						print("Incompatible types");
-					} else {
-						decl.resolved_type = decl_type;
-						declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
-					}
+typecheck_decl :: (decl: *Node_Decl) {
+	if !decl return;
+	if decl.body {
+		function := function_declarator(decl.declarators[0]);
+		for function.params {
+			typecheck_decl(it);
+		}
+		typecheck_statement(decl.body);
+	} else {
+		for declarator: decl.declarators {
+			decl_type := type_from_decl(decl, declarator);
+			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
+				expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
+				if !valid || !can_coerce_to(decl_type, expr_type) {
+					print("Incompatible types");
+				} else {
+					decl.resolved_type = decl_type;
+					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
 				}
+			} else {
+				decl.resolved_type = decl_type;
 			}
 		}
+	}
+}
+
+typecheck :: (tu: *Node_Translation_Unit) {
+	for decl: tu.declarations {
+		typecheck_decl(decl);
 	}
 }
 
@@ -329,7 +340,7 @@ Compiler :: struct {
 push_scope :: (compiler: *Compiler) {
 	frame: Stack_Frame;
 	array_add(*compiler.stack_frames, frame);
-	compiler.stack_offset = 0;
+	compiler.stack_offset = 16;
 }
 
 pop_scope :: (compiler: *Compiler) {
@@ -348,6 +359,8 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node
 	decl_offset.offset = compiler.stack_offset;
 	decl_offset.decl = decl;
 	array_add(*frame.decls, decl_offset);
+	// TODO(Oliver): Derive from decl?
+	compiler.stack_offset += size_in_bytes;
 }
 
 find_decl :: (compiler: *Compiler, name: string) -> Decl_Offset {
@@ -386,13 +399,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 			compiler.register -= 1;
 		case Node_Number;
-			emit(compiler, "mov w%, %", compiler.register, expr.(*Node_Number).as_u64.(u32));
+			emit(compiler, "mov w%, #%", compiler.register, expr.(*Node_Number).as_u64.(u32));
 		case Node_Char;
 			value := 0;
 			for expr.(*Node_Char).token.view {
 				value += it;
 			}
-			emit(compiler, "mov w%, %", compiler.register, value);
+			emit(compiler, "mov w%, #%", compiler.register, value);
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -473,7 +486,6 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			for decl.declarators {
 				name := identifier_from_declarator(it);
 				// FIXME(Oliver): Enums won't work yet
-				print("DECL %\n", decl.*);
 				if decl.resolved_type {
 					push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
 				}
@@ -487,6 +499,15 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	}
 }
 
+function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarator {
+	result := declarator;
+	while result && result.declarator_type != Node_Function_Declarator {
+		result = result.inner;
+	}
+	assert(result.declarator_type == Node_Function_Declarator);
+	return result.(*Node_Function_Declarator);
+}
+
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	// Better way to check if it's a function?
 	if decl.body {
@@ -494,18 +515,32 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		// NOTE(Oliver): All C symbols need underscores? what the hell?
 		emit(compiler, "_%:", identifier_from_declarator(decl.declarators[0]));
 		// TODO(Oliver): Figure out this magic shit
-		stack_size := stack_space_to_allocate(decl.body);
-		if stack_size > 0 {
-			// We have to align the stack size to be a multiple of 16
-			stack_size_p2 := (stack_size + 15) & ~15;
-			emit(compiler, "sub sp, sp, #%", stack_size_p2);
-			emit(compiler, "stp x29, x30, [sp, #16]");
-			emit(compiler, "add x29, sp, #16");
-			compile_statement(compiler, decl.body);
-			emit(compiler, "ldp x29, x30, [sp, #16]");
-			emit(compiler, "add sp, sp, #%", stack_size_p2);
-			emit(compiler, "ret");
+		stack_size := stack_space_to_allocate(decl.body) + 16;
+		function := function_declarator(decl.declarators[0]);
+		for function.params {
+			name := identifier_from_declarator(it.declarators[0]);
+			if it.resolved_type{
+				stack_size += it.resolved_type.size_in_bytes;
+			}
 		}
+		// We have to align the stack size to be a multiple of 16
+		stack_size_p2 := (stack_size + 15) & ~15;
+		emit(compiler, "sub sp, sp, #%", stack_size_p2);
+		emit(compiler, "stp x29, x30, [sp]");
+		emit(compiler, "add x29, sp, #0");
+
+		for function.params {
+			name := identifier_from_declarator(it.declarators[0]);
+			if it.resolved_type{
+				emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
+				push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
+			}
+		}
+		// FIXME(Oliver): This could be better
+		compile_statement(compiler, decl.body);
+		emit(compiler, "ldp x29, x30, [sp]");
+		emit(compiler, "add sp, sp, #%", stack_size_p2);
+		emit(compiler, "ret");
 	} else {
 		for decl.declarators {
 			name := identifier_from_declarator(it);
@@ -545,6 +580,9 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 }
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
+	
+	// HACK(Oliver): Globals go in the data section
+	push_scope(compiler);
 	emit(compiler, ".globl _main"); // Set _main to be the entry point
 	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
 	for tu.declarations {
