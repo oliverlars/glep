@@ -4,8 +4,13 @@
 #include <time.h>
 #include <stdlib.h>
 
+
+int get(int a) {
+	return a;
+}
+
 int main(int argc, char **args) {
 	printf("abc %d", argc);
 	int a = 5;
-	return 1 + a;
+	return 1 + get(a);
 }

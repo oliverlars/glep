@@ -352,7 +352,7 @@ current_stack_frame :: (compiler: *Compiler) -> *Stack_Frame {
 	return peek_pointer(compiler.stack_frames);
 }
 
-push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node_Decl) {
+push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node_Decl) -> Decl_Offset {
 	frame := current_stack_frame(compiler);
 	decl_offset: Decl_Offset;
 	decl_offset.name = name;
@@ -361,6 +361,7 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node
 	array_add(*frame.decls, decl_offset);
 	// TODO(Oliver): Derive from decl?
 	compiler.stack_offset += size_in_bytes;
+	return decl_offset;
 }
 
 find_decl :: (compiler: *Compiler, name: string) -> Decl_Offset {
@@ -375,7 +376,9 @@ find_decl :: (compiler: *Compiler, name: string) -> Decl_Offset {
 }
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
-	append(*compiler.builder, tprint(fmt, ..args));
+	to_append := tprint(fmt, ..args);
+	print("%\n", to_append);
+	append(*compiler.builder, to_append);
 	append(*compiler.builder, "\n");
 }
 
@@ -448,6 +451,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			assert(call.id.expr_type == Node_Identifier);
 			// NOTE(Oliver): All C symbols need underscores? what the hell?
 			emit(compiler, "bl _%", name);
+			emit(compiler, "mov w%, w0", compiler.register);
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);
@@ -486,13 +490,14 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			for decl.declarators {
 				name := identifier_from_declarator(it);
 				// FIXME(Oliver): Enums won't work yet
+				decl_offset: Decl_Offset;
 				if decl.resolved_type {
-					push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
+					decl_offset = push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
 				}
 				if it.init {
 					if it.init.initializer_type == Node_Scalar_Initializer {
 						compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
-						emit(compiler, "str x%, [sp, #%]", compiler.register, compiler.stack_offset);
+						emit(compiler, "str x%, [sp, #%]", compiler.register, decl_offset.offset);
 					}
 				}
 			}
