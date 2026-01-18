@@ -13,6 +13,12 @@ int get(int a) {
 
 int main(int argc, char **args) {
 	printf("abc %d", argc);
+	{
+		int x = 10;
+		int a = x + 1;
+		printf("a should be 11: %d", a);
+	}
 	int a = x + 1;
+	printf(" a should be 6: %d", a);
 	return 1 + get(a);
 }

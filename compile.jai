@@ -402,8 +402,8 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 	if !found {
 		for compiler.globals {
 			if it == name {
-				emit(compiler, "adrp x%, %@PAGE", compiler.register, name, compiler.register);
-				emit(compiler, "ldr w%, [x%, %@PAGEOFF]", compiler.register, compiler.register, name, compiler.register, compiler.register);
+				emit(compiler, "adrp x%, _%@PAGE", compiler.register, name, compiler.register);
+				emit(compiler, "ldr w%, [x%, _%@PAGEOFF]", compiler.register, compiler.register, name, compiler.register, compiler.register);
 				return;
 			}
 		}
@@ -591,47 +591,65 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 	return stack_size;
 }
 
+is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
+	return is_function_declaration(declarator) && decl.body != null;
+}
+
+is_function_declaration :: (declarator: *Node_Declarator) -> bool {
+	while declarator {
+		if declarator.declarator_type == Node_Function_Declarator {
+			return true;
+		}
+		declarator = declarator.inner;
+	}
+	return false;
+}
+
+is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
+	return !is_function_declaration(declarator) && !is_typedef(decl.base);
+}
+
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	emit(compiler, ".globl _main"); // Set _main to be the entry point
 	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
 	for decl: tu.declarations {
-		if decl.body {
-			push_scope(compiler);
-			compiler.stack_offset = 0;
-			// NOTE(Oliver): All C symbols need underscores? what the hell?
-			emit(compiler, "_%:", identifier_from_declarator(decl.declarators[0]));
-			// TODO(Oliver): Figure out this magic shit
-			stack_size := stack_space_to_allocate(decl.body) + 16;
-			function := function_declarator(decl.declarators[0]);
-			for function.params {
-				name := identifier_from_declarator(it.declarators[0]);
-				if it.resolved_type{
-					stack_size += it.resolved_type.size_in_bytes;
+		for declarator: decl.declarators {
+			if is_function_definition(decl, declarator){
+				push_scope(compiler);
+				compiler.stack_offset = 0;
+				// NOTE(Oliver): All C symbols need underscores? what the hell?
+				emit(compiler, "_%:", identifier_from_declarator(declarator));
+				// TODO(Oliver): Figure out this magic shit
+				stack_size := stack_space_to_allocate(decl.body) + 16;
+				function := function_declarator(declarator);
+				for function.params {
+					name := identifier_from_declarator(it.declarators[0]);
+					if it.resolved_type{
+						stack_size += it.resolved_type.size_in_bytes;
+					}
 				}
-			}
-			// We have to align the stack size to be a multiple of 16
-			stack_size_p2 := (stack_size + 15) & ~15;
-			emit(compiler, "sub sp, sp, #%", stack_size_p2);
-			emit(compiler, "stp x29, x30, [sp]");
-			emit(compiler, "add x29, sp, #0");
+				// We have to align the stack size to be a multiple of 16
+				stack_size_p2 := (stack_size + 15) & ~15;
+				emit(compiler, "sub sp, sp, #%", stack_size_p2);
+				emit(compiler, "stp x29, x30, [sp]");
+				emit(compiler, "add x29, sp, #0");
 
-			for function.params {
-				name := identifier_from_declarator(it.declarators[0]);
-				if it.resolved_type{
-					emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
-					push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
+				for function.params {
+					name := identifier_from_declarator(it.declarators[0]);
+					if it.resolved_type{
+						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
+						push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
+					}
 				}
-			}
-			// FIXME(Oliver): This could be better
-			compile_statement(compiler, decl.body);
-			emit(compiler, "ldp x29, x30, [sp]");
-			emit(compiler, "add sp, sp, #%", stack_size_p2);
-			emit(compiler, "ret");
-			pop_scope(compiler);
-		} else if !is_typedef(decl.base) {
-			for decl.declarators {
-				if it.init {
-					array_add(*compiler.globals, identifier_from_declarator(it));
+				// FIXME(Oliver): This could be better
+				compile_statement(compiler, decl.body);
+				emit(compiler, "ldp x29, x30, [sp]");
+				emit(compiler, "add sp, sp, #%", stack_size_p2);
+				emit(compiler, "ret");
+				pop_scope(compiler);
+			} else if is_variable_declaration(decl, declarator) {
+				if declarator.init {
+					array_add(*compiler.globals, identifier_from_declarator(declarator));
 				}
 			}
 		}
@@ -648,13 +666,13 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	}
 
 	for tu.declarations {
-		if !it.body {
-			for declarator: it.declarators {
+		for declarator: it.declarators {
+			if is_variable_declaration(it, declarator) { 
 				name := identifier_from_declarator(declarator);
-				emit(compiler, ".globl %", name);
+				emit(compiler, ".globl _%", name);
 				init_expr: *Node_Expr;
 				if declarator.init &&
-				   declarator.init.initializer_type == Node_Scalar_Initializer {
+					declarator.init.initializer_type == Node_Scalar_Initializer {
 					init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
 				} else if declarator.init {
 					// TODO(Oliver): handle aggregate initialzirs
@@ -664,19 +682,19 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				if it.resolved_type.size_in_bytes == {
 					case 1;
 						emit(compiler, ".p2align %", 0);
-						emit(compiler, "%:", name);
+						emit(compiler, "_%:", name);
 						emit(compiler, ".byte %", eval_expr(init_expr));
 					case 2;
 						emit(compiler, ".p2align %", 1);
-						emit(compiler, "%:", name);
+						emit(compiler, "_%:", name);
 						emit(compiler, ".short %", eval_expr(init_expr));
 					case 4;
 						emit(compiler, ".p2align %", 2);
-						emit(compiler, "%:", name);
+						emit(compiler, "_%:", name);
 						emit(compiler, ".long %", eval_expr(init_expr));
 					case 8;
 						emit(compiler, ".p2align %", 3);
-						emit(compiler, "%:", name);
+						emit(compiler, "_%:", name);
 						emit(compiler, ".quad %", eval_expr(init_expr));
 				}
 			}
