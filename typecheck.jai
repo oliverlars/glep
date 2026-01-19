@@ -156,10 +156,10 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 	if !decl || !declarator return null;
 
 	declarator_type_info :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
-		if !base || !declarator return null;
+		if !base || !declarator return base;
 
 		inner := declarator_type_info(base, declarator.inner);
-		if !inner return null;
+		if !inner return base;
 
 		result: *Resolved_Type;
 		if declarator.declarator_type == {
@@ -182,7 +182,7 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 
 	base_info := base_type_info(decl.base);
 
-	declarator_type_info(base_info, declarator);
+	base_info = declarator_type_info(base_info, declarator);
 
 	return base_info;
 }
@@ -348,10 +348,12 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	if !decl return;
 	if decl.body {
 		function := function_declarator(decl.declarators[0]);
+		push_scope(tc);
 		for function.params {
 			typecheck_decl(tc, it);
 		}
 		typecheck_statement(tc, decl.body);
+		pop_scope(tc);
 	} else {
 		for declarator: decl.declarators {
 			decl_type := type_from_decl(decl, declarator);
@@ -366,6 +368,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 			} else {
 				declarator.resolved_type = decl_type;
 			}
+			//push_decl(tc, decl.base, declarator);
 		}
 	}
 }
