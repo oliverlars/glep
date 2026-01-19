@@ -8,6 +8,7 @@
 #import "String";
 
 #load "cpp.jai";
+#load "typecheck.jai";
 #load "compile.jai";
 
 Token_Type :: enum {
@@ -140,6 +141,7 @@ Node_Declarator :: struct {
 	init: *Node_Initializer;
 	bitfield: *Node_Expr;
 	inner: *Node_Declarator;
+	resolved_type: *Resolved_Type;
 }
 
 Node_Function_Declarator :: struct {
@@ -171,7 +173,6 @@ Node_Decl :: struct {
 	type = Node_Decl;
 	using base: Node_Decl_Info;
 	body: *Node_Statement;
-	resolved_type: *Resolved_Type;
 }
 
 Node_Expr :: struct {
@@ -2271,7 +2272,8 @@ main :: () {
 
 	tu := parse_translation_unit(*parser);
 
-	typecheck(tu);
+	typechecker: Type_Checker;
+	typecheck(*typechecker, tu);
 
 	compiler: Compiler;
 	compiler.strings = parser.strings;

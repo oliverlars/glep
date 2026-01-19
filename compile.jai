@@ -1,321 +1,9 @@
 
-
-Resolved_Type :: struct {
-	kind: enum {
-		Integral;
-		Composite;
-		Floating;
-		Pointer;
-		Array;
-	};
-
-	size_in_bytes: int;
-	alignment: int;
-	unsigned: bool;
-	atomic: bool;
-
-	composite: *Node_Composite;
-
-	// For pointers and stuff
-	inner: *Resolved_Type;
-}
-
-base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
-
-	Type_Specifier :: enum {
-		Void;
-		Char;
-		Short;
-		Int;
-		Long;
-		Float;
-		Double;
-		Signed;
-		Unsigned;
-	};
-
-	counts: [9]int;
-	for decl_info.specifiers {
-		if it == {
-			case "char";     counts[Type_Specifier.Char] += 1;
-			case "short";    counts[Type_Specifier.Short] += 1;
-			case "int";      counts[Type_Specifier.Int] += 1;
-			case "long";     counts[Type_Specifier.Long] += 1;
-			case "float";    counts[Type_Specifier.Float] += 1;
-			case "double";   counts[Type_Specifier.Double] += 1;
-			case "signed";   counts[Type_Specifier.Signed] += 1;
-			case "unsigned"; counts[Type_Specifier.Unsigned] += 1;
-		}
-	}
-
-	info := New(Resolved_Type);
-	
-	if counts[Type_Specifier.Signed] {
-		info.unsigned = false;
-	}
-
-	if counts[Type_Specifier.Unsigned] {
-		info.unsigned = true;
-	}
-
-	if counts[Type_Specifier.Char] > 0 {
-		info.size_in_bytes = 1;
-	}
-
-	if counts[Type_Specifier.Short] > 0 {
-		info.size_in_bytes = 2;
-	}
-
-	if counts[Type_Specifier.Long] == 2 {
-		info.size_in_bytes = 8;
-	}
-
-	if counts[Type_Specifier.Float] {
-		info.size_in_bytes = 4;
-		info.kind = .Floating;
-	}
-
-	if counts[Type_Specifier.Double] {
-		info.size_in_bytes = 8;
-		info.kind = .Floating;
-	}
-
-	if counts[Type_Specifier.Int] {
-		info.size_in_bytes = 4;
-	}
-
-	for decl_info.qualifiers {
-		if it == "_Atomic" info.atomic = true;
-	}
-
-	if decl_info._enum {
-		info.kind = .Composite;
-		info.composite = decl_info._enum;
-	}
-
-	if decl_info._struct {
-		info.kind = .Composite;
-		info.composite = decl_info._struct;
-	}
-
-	return info;
-}
-
-// This takes a declarator because the base decl stores all the comma separated declarators,
-// so it's just easier for now to specify which one and get a type that.
-type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
-	if !decl || !declarator return null;
-
-	declarator_type_info :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
-		if !base || !declarator return null;
-
-		inner := declarator_type_info(base, declarator.inner);
-		if !inner return null;
-
-		result: *Resolved_Type;
-		if declarator.declarator_type == {
-			case Node_Pointer_Declarator;
-				result = New(Resolved_Type);
-				result.kind = .Pointer;
-				result.size_in_bytes = 8;
-				result.inner = inner;
-			case Node_Array_Declarator;
-				result = New(Resolved_Type);
-				result.kind = .Array;
-				result.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
-				result.inner = inner;
-			case;
-				result = inner;
-		}
-		
-		return result;
-	}
-
-	base_info := base_type_info(decl.base);
-
-	declarator_type_info(base_info, declarator);
-
-	return base_info;
-}
-
-match_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool, *Resolved_Type {
-	// This leaks
-	result := New(Resolved_Type);
-	if a.kind == .Floating && b.kind != .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = a.size_in_bytes;
-	} else if b.kind == .Floating && a.kind != .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = b.size_in_bytes;
-	} else if a.kind == .Integral && b.kind == .Integral {
-		result.kind = .Integral;
-		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
-		result.unsigned = a.unsigned || b.unsigned;
-	} else if a.kind == .Floating && b.kind == .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
-	} else if a.kind == .Pointer && b.kind == .Pointer {
-		matched, type := match_types(a.inner, b.inner);
-		return matched, type;
-	} else {
-		return false, null;
-	}
-	
-	return true, result;
-}
-
-can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
-	result: bool;
-	if target.kind == {
-		case .Integral; #through;
-		case .Floating;
-			return !(source.kind == .Composite || source.kind == .Array);
-		case .Composite;
-			// HACK(Oliver): We rely on the type pointing to the same thing in memory
-			// maybe that is dumb?
-			if source.kind != .Composite return false;
-			return target.composite == source.composite;
-		case .Array;
-			 return source.kind == .Array;
-	}
-	return true;
-}
-
-split_suffix_from_number :: (number_with_suffix: string) -> string, string {
-	suffix := number_with_suffix;
-	suffix.count = 0;
-	number := number_with_suffix;
-	for < number_with_suffix {
-		if is_suffix(it) {
-			number.count -= 1;
-			suffix.count += 1;
-		}
-	}
-	suffix.data = number.data + number.count;
-	return number, suffix;
-}
-
-type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
-	info := New(Resolved_Type);
-	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
-	if number_node.is == {
-		case .Float;
-			info.kind = .Floating;
-			info.size_in_bytes = 8;
-			if suffix == "f" {
-				info.size_in_bytes = 4;
-			} else {
-				info.size_in_bytes = 8;
-			}
-		case;
-			info.kind = .Integral;
-			info.size_in_bytes = 4;
-			if suffix == "ll" {
-				info.size_in_bytes = 8;
-			} else if suffix == "llu" {
-				info.size_in_bytes = 8;
-				info.unsigned = true;
-			} else if suffix == "ull" {
-				info.size_in_bytes = 8;
-				info.unsigned = true;
-			} else if suffix == "u" {
-				info.size_in_bytes = 4;
-				info.unsigned = true;
-			}
-	}
-	return info;
-}
-
-type_info_from_expr :: (expr: *Node_Expr) -> *Resolved_Type, bool {
-	if !expr return null, false;
-	if expr.expr_type == {
-		case Node_Binary;
-			left_info := type_info_from_expr(expr.(*Node_Binary).left);
-			right_info := type_info_from_expr(expr.(*Node_Binary).right);
-			matched, resolved_type := match_types(left_info, right_info);
-			if matched {
-				return resolved_type, true;
-			} else {
-				return null, false;
-			}
-		case Node_Number;
-			info := type_info_from_number(expr.(*Node_Number));
-			return info, true;
-		case Node_Identifier;
-
-		case Node_Unary;
-			info := type_info_from_expr(expr.(*Node_Unary).expr);
-			return info, info.kind != .Composite;
-		case Node_Cast;
-			source := type_info_from_expr(expr.(*Node_Cast).expr);
-			target := base_type_info(expr.(*Node_Cast).base);
-			return target, can_coerce_to(target, source);
-		case Node_String;
-			info := New(Resolved_Type);
-			info.size_in_bytes = 8;
-			info.kind = .Pointer;
-			return info, true;
-		case Node_Call;
-			for expr.(*Node_Call).args {
-				arg_type := type_info_from_expr(it);
-				it.resolved_type = arg_type;
-			}
-	}
-
-	return null, true;
-}
-
-typecheck_statement :: (stmt: *Node_Statement) {
-	if !stmt return;
-	if stmt.statement_type == {
-		case Node_Block;
-			for stmt.(*Node_Block).statements {
-				typecheck_statement(it);
-			}
-		case Node_Expr_Statement;
-			type_info_from_expr(stmt.(*Node_Expr_Statement).expr);
-		case Node_Decl_Statement;
-			decl := stmt.(*Node_Decl_Statement).decl;
-			decl.resolved_type = base_type_info(decl.base);
-	}
-}
-
-typecheck_decl :: (decl: *Node_Decl) {
-	if !decl return;
-	if decl.body {
-		function := function_declarator(decl.declarators[0]);
-		for function.params {
-			typecheck_decl(it);
-		}
-		typecheck_statement(decl.body);
-	} else {
-		for declarator: decl.declarators {
-			decl_type := type_from_decl(decl, declarator);
-			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-				expr_type, valid := type_info_from_expr(declarator.init.(*Node_Scalar_Initializer).expr);
-				if !valid || !can_coerce_to(decl_type, expr_type) {
-					print("Incompatible types");
-				} else {
-					decl.resolved_type = decl_type;
-					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
-				}
-			} else {
-				decl.resolved_type = decl_type;
-			}
-		}
-	}
-}
-
-typecheck :: (tu: *Node_Translation_Unit) {
-	for decl: tu.declarations {
-		typecheck_decl(decl);
-	}
-}
-
 Stack_Slot :: struct {
 	name: string;
 	offset: int;
-	decl: *Node_Decl;
+	resolved_type: *Resolved_Type;
+	declarator: *Node_Declarator;
 }
 
 Scope_Frame :: struct {
@@ -365,12 +53,12 @@ current_scope_frame :: (compiler: *Compiler) -> *Scope_Frame {
 	return *compiler.scopes[compiler.scopes.count - 1];
 }
 
-push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, decl: *Node_Decl) -> Stack_Slot {
+push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, declarator: *Node_Declarator) -> Stack_Slot {
 	scope := current_scope_frame(compiler);
 	stack_slot: Stack_Slot;
 	stack_slot.name = name;
 	stack_slot.offset = compiler.stack_offset;
-	stack_slot.decl = decl;
+	stack_slot.declarator = declarator;
 	array_add(*scope.slots, stack_slot);
 	// TODO(Oliver): Derive from decl?
 	compiler.stack_offset += size_in_bytes*8;
@@ -411,7 +99,7 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 		// TODO(Oliver): error checking
 		assert(false);
 	} else {
-		if stack_slot.decl.resolved_type && stack_slot.decl.resolved_type.size_in_bytes == 8 {
+		if stack_slot.declarator.resolved_type && stack_slot.declarator.resolved_type.size_in_bytes == 8 {
 			emit(compiler, "ldr x%, [sp, #%]", compiler.register, stack_slot.offset);
 		} else {
 			emit(compiler, "ldr w%, [sp, #%]", compiler.register, stack_slot.offset);
@@ -429,6 +117,24 @@ emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
+		case Node_Unary;
+			op := expr.(*Node_Unary).op;
+			if op.type == {
+				case .Asterisk;
+					compile_expr(compiler, expr.(*Node_Unary).expr);
+					emit(compiler, "ldr x%, [x%]", compiler.register, compiler.register);
+				case .Ampersand;
+					rhs := expr.(*Node_Unary).expr;
+					assert(rhs.expr_type == Node_Identifier);
+					id := rhs.(*Node_Identifier).id.view;
+					// TODO(Oliver): handle globals for addresses
+					found, stack_slot := find_decl_on_stack(compiler, id);
+					if !found {
+						// Might be a global, handle that
+						assert(false);
+					}
+					emit(compiler, "add x%, sp, #%", compiler.register, stack_slot.offset);
+			}
 		case Node_Binary;
 			compile_expr(compiler, expr.(*Node_Binary).left);
 			dst := compiler.register;
@@ -531,8 +237,8 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 				name := identifier_from_declarator(it);
 				// FIXME(Oliver): Enums won't work yet
 				stack_slot: Stack_Slot;
-				if decl.resolved_type {
-					stack_slot = push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
+				if it.resolved_type {
+					stack_slot = push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
 				}
 				if it.init {
 					if it.init.initializer_type == Node_Scalar_Initializer {
@@ -558,9 +264,9 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	for decl.declarators {
 		name := identifier_from_declarator(it);
 		// FIXME(Oliver): Enums won't work yet
-		if decl.resolved_type {
+		if it.resolved_type {
 			print("DECL %: %\n", name, decl.*);
-			push_decl(compiler, name, decl.resolved_type.size_in_bytes, decl);
+			push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
 		}
 		if it.init {
 			if it.init.initializer_type == Node_Scalar_Initializer {
@@ -582,8 +288,10 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 			stack_size = max(stack_size, stack_space_to_allocate(it));
 		} else if it.statement_type == Node_Decl_Statement {
 			decl := it.(*Node_Decl_Statement).decl;
-			if decl.resolved_type {
-				stack_size += decl.resolved_type.size_in_bytes;
+			for declarator: decl.declarators {
+				if declarator.resolved_type {
+					stack_size += declarator.resolved_type.size_in_bytes;
+				}
 			}
 		}
 		print("Statement Type: %\n", it.statement_type);
@@ -624,8 +332,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				function := function_declarator(declarator);
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if it.resolved_type{
-						stack_size += it.resolved_type.size_in_bytes;
+					if it.declarators[0].resolved_type {
+						stack_size += it.declarators[0].resolved_type.size_in_bytes;
 					}
 				}
 				// We have to align the stack size to be a multiple of 16
@@ -636,9 +344,9 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if it.resolved_type{
+					if it.declarators[0].resolved_type{
 						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
-						push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
+						push_decl(compiler, name, it.declarators[0].resolved_type.size_in_bytes, it.declarators[0]);
 					}
 				}
 				// FIXME(Oliver): This could be better
@@ -678,8 +386,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					// TODO(Oliver): handle aggregate initialzirs
 					continue;
 				}
-				assert(it.resolved_type != null);
-				if it.resolved_type.size_in_bytes == {
+				assert(declarator.resolved_type != null);
+				if declarator.resolved_type.size_in_bytes == {
 					case 1;
 						emit(compiler, ".p2align %", 0);
 						emit(compiler, "_%:", name);
