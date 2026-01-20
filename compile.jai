@@ -32,7 +32,8 @@ Compiler :: struct {
 	// entered so we can restore it on exit
 	scopes: [..]Scope_Frame;
 	stack_offset: int;
-	variadic_stack_offset: int;
+
+	variadic_stack_size: int;
 }
 
 push_scope :: (compiler: *Compiler) {
@@ -174,21 +175,18 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			variadic_stack_register := compiler.register;
-			// HACK(Oliver): This needs to be restored i think?
-			// Also enough stack space should be picked for the function
-			// upfront
 			if variadic {
-				emit(compiler, "add x%, sp, #%", variadic_stack_register, compiler.variadic_stack_offset);
-				compiler.register += 1;
+				emit(compiler, "sub sp, sp, #%", compiler.variadic_stack_size);
 			}
 			vararg_offset := 0;
 			for call.args {
 				compile_expr(compiler, it);
 				if it_index >= param_count {
+					print("USING: %\n", compiler.register);
 					if vararg_offset > 0 {
-						emit(compiler, "str x%, [x%, #%]", compiler.register, variadic_stack_register, vararg_offset);
+						emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
 					} else {
-						emit(compiler, "str x%, [x%]", compiler.register, variadic_stack_register);
+						emit(compiler, "str x%, [sp]", compiler.register);
 					}
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
@@ -204,6 +202,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// NOTE(Oliver): All C symbols need underscores? what the hell?
 			emit(compiler, "bl _%", name);
 			emit(compiler, "mov w%, w0", compiler.register);
+			if variadic {
+				emit(compiler, "add sp, sp, #%", compiler.variadic_stack_size);
+			}
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);
@@ -385,10 +386,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 				}
 				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
+				compiler.variadic_stack_size = variadic_stack_size;
 				stack_size += variadic_stack_size;
 				// We have to align the stack size to be a multiple of 16
 				stack_size_p2 := (stack_size + 15) & ~15;
-				compiler.variadic_stack_offset = ((stack_size_p2 - variadic_stack_size) + 15) & ~15;
 				emit(compiler, "sub sp, sp, #%", stack_size_p2);
 				emit(compiler, "stp x29, x30, [sp]");
 				emit(compiler, "add x29, sp, #0");
