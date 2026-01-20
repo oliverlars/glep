@@ -191,6 +191,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			assert(call.id.expr_type == Node_Identifier);
+			// The intuition here is that printf expects all varargs at sp, but we store them elsewhere
+			// in the frame, so we need to offset it to where our varargs start. However, we account
+			// for it above when we store the varargs on the stack since we need them to start at
+			// sp - variadic_stack_size. Then, when we shift the stack pointer, sp starts where our
+			// varargs start
 			if variadic {
 				emit(compiler, "sub sp, sp, #%", compiler.variadic_stack_size);
 			}
