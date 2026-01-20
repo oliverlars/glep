@@ -32,6 +32,7 @@ Compiler :: struct {
 	// entered so we can restore it on exit
 	scopes: [..]Scope_Frame;
 	stack_offset: int;
+	variadic_stack_offset: int;
 }
 
 push_scope :: (compiler: *Compiler) {
@@ -61,6 +62,7 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, declarator:
 	stack_slot.declarator = declarator;
 	array_add(*scope.slots, stack_slot);
 	// TODO(Oliver): Derive from decl?
+	// Nearest 8 bytes because alignment
 	compiler.stack_offset += (size_in_bytes + 7) & ~7;
 	return stack_slot;
 }
@@ -176,7 +178,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// Also enough stack space should be picked for the function
 			// upfront
 			if variadic {
-				emit(compiler, "mov x%, sp", variadic_stack_register);
+				emit(compiler, "add x%, sp, #%", variadic_stack_register, compiler.variadic_stack_offset);
 				compiler.register += 1;
 			}
 			vararg_offset := 0;
@@ -277,7 +279,7 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	}
 }
 
-stack_space_to_allocate :: (block: *Node_Statement) -> int {
+stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
 	if !block return 0;
 	assert(block.statement_type == Node_Block);
 	stack_size := 0;
@@ -285,7 +287,7 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 		// FIXME(Oliver): Why is this happening????????
 		if !it break;
 		if it.statement_type == Node_Block {
-			stack_size = max(stack_size, stack_space_to_allocate(it));
+			stack_size = max(stack_size, stack_space_needed_for_variables(it));
 		} else if it.statement_type == Node_Decl_Statement {
 			decl := it.(*Node_Decl_Statement).decl;
 			for declarator: decl.declarators {
@@ -295,6 +297,39 @@ stack_space_to_allocate :: (block: *Node_Statement) -> int {
 			}
 		}
 		print("Statement Type: %\n", it.statement_type);
+	}
+	return stack_size;
+}
+
+stack_space_needed_for_variadic_functions :: (compiler: *Compiler, block: *Node_Statement) -> int {
+	if !block return 0;
+	assert(block.statement_type == Node_Block);
+	stack_size := 0;
+	for block.(*Node_Block).statements {
+		// FIXME(Oliver): Why is this happening????????
+		if !it break;
+		if it.statement_type == Node_Block {
+			stack_size = max(stack_size, stack_space_needed_for_variadic_functions(compiler, it));
+		} else if it.statement_type == Node_Expr_Statement {
+			// FIXME(Oliver): This looks ugly as fuck
+			if it.(*Node_Expr_Statement).expr.expr_type == Node_Call {
+				call := it.(*Node_Expr_Statement).expr.(*Node_Call);
+				found, decl := table_find(*compiler.ordinary, call.id.(*Node_Identifier).id.view);
+				assert(found);
+				param_count := 0;
+				variadic := false;
+				for decl.(*Node_Decl).declarators {
+					if it.declarator_type == Node_Function_Declarator {
+						param_count = it.(*Node_Function_Declarator).params.count;
+						variadic = it.(*Node_Function_Declarator).variadic;
+					}
+				}
+				if variadic {
+					stack_size += (call.args.count - param_count) * 8;
+					print("Variadic stack size: %\n", (call.args.count - param_count) * 8);
+				}
+			}
+		}
 	}
 	return stack_size;
 }
@@ -322,13 +357,26 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
-			if is_function_definition(decl, declarator){
+			if is_function_definition(decl, declarator) {
+				/*
+					The intuition behind this is that return address
+					and frame pointer are stored in x29 and x30 we save
+					those on the stack using store pair (stp). This writes
+					x29 at sp + 0 and x30 stores it at sp + 8. That occupies
+					16 bytes and so we need to make sure our locals write from
+					byte 16 onwards. Similarly, we want to write all variadic stuff
+					in a different part of the stack frame than the locals to avoid
+					overwriting anything, so we calculate these sizes separately. Both
+					also need to be aligned to a multiple of 16. Likely this can be cleaned
+					up in some way but for now its' fine.
+
+				*/
 				push_scope(compiler);
-				compiler.stack_offset = 0;
+				compiler.stack_offset = 16;
 				// NOTE(Oliver): All C symbols need underscores? what the hell?
 				emit(compiler, "_%:", identifier_from_declarator(declarator));
-				// TODO(Oliver): Figure out this magic shit
-				stack_size := stack_space_to_allocate(decl.body) + 16;
+				stack_size := stack_space_needed_for_variables(decl.body) + 16;
+
 				function := function_declarator(declarator);
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
@@ -336,8 +384,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						stack_size += it.declarators[0].resolved_type.size_in_bytes;
 					}
 				}
+				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
+				stack_size += variadic_stack_size;
 				// We have to align the stack size to be a multiple of 16
 				stack_size_p2 := (stack_size + 15) & ~15;
+				compiler.variadic_stack_offset = ((stack_size_p2 - variadic_stack_size) + 15) & ~15;
 				emit(compiler, "sub sp, sp, #%", stack_size_p2);
 				emit(compiler, "stp x29, x30, [sp]");
 				emit(compiler, "add x29, sp, #0");
