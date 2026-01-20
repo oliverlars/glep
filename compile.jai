@@ -179,7 +179,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			for call.args {
 				compile_expr(compiler, it);
 				if it_index >= param_count {
-					emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset - compiler.variadic_stack_size);
+					emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
 				} else {
@@ -191,19 +191,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			assert(call.id.expr_type == Node_Identifier);
-			// The intuition here is that printf expects all varargs at sp, but we store them elsewhere
-			// in the frame, so we need to offset it to where our varargs start. However, we account
-			// for it above when we store the varargs on the stack since we need them to start at
-			// sp - variadic_stack_size. Then, when we shift the stack pointer, sp starts where our
-			// varargs start
-			if variadic {
-				emit(compiler, "sub sp, sp, #%", compiler.variadic_stack_size);
-			}
 			emit(compiler, "bl _%", name);
 			emit(compiler, "mov w%, w0", compiler.register);
-			if variadic {
-				emit(compiler, "add sp, sp, #%", compiler.variadic_stack_size);
-			}
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);
@@ -372,25 +361,29 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				*/
 				push_scope(compiler);
-				compiler.stack_offset = 16;
 				// NOTE(Oliver): All C symbols need underscores? what the hell?
 				emit(compiler, "_%:", identifier_from_declarator(declarator));
-				stack_size := stack_space_needed_for_variables(decl.body) + 16;
+				link_and_return_stack_size := 16;
+				locals_stack_size := stack_space_needed_for_variables(decl.body);
+				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
 
 				function := function_declarator(declarator);
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
 					if it.declarators[0].resolved_type {
-						stack_size += it.declarators[0].resolved_type.size_in_bytes;
+						locals_stack_size += it.declarators[0].resolved_type.size_in_bytes;
 					}
 				}
-				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
-				compiler.variadic_stack_size = variadic_stack_size;
-				stack_size += variadic_stack_size;
-				// We have to align the stack size to be a multiple of 16
-				stack_size_p2 := (stack_size + 15) & ~15;
-				emit(compiler, "sub sp, sp, #%", stack_size_p2);
-				emit(compiler, "stp x29, x30, [sp]");
+				locals_stack_size = (locals_stack_size + 15) & ~15;
+				variadic_stack_size = (variadic_stack_size + 15) & ~15;
+				total_stack_space_needed := locals_stack_size + variadic_stack_size + link_and_return_stack_size;
+				// We have to align the stack offsets and size to be a multiple of 16
+				variadic_offset := 0;
+				locals_offset := variadic_stack_size;
+				link_and_return_offset := total_stack_space_needed - link_and_return_stack_size;
+				compiler.stack_offset = locals_offset;
+				emit(compiler, "sub sp, sp, #%", total_stack_space_needed);
+				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add x29, sp, #0");
 
 				for function.params {
@@ -402,8 +395,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				}
 				// FIXME(Oliver): This could be better
 				compile_statement(compiler, decl.body);
-				emit(compiler, "ldp x29, x30, [sp]");
-				emit(compiler, "add sp, sp, #%", stack_size_p2);
+				emit(compiler, "ldp x29, x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "add sp, sp, #%", total_stack_space_needed);
 				emit(compiler, "ret");
 				pop_scope(compiler);
 			} else if is_variable_declaration(decl, declarator) {
