@@ -175,19 +175,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			variadic_stack_register := compiler.register;
-			if variadic {
-				emit(compiler, "sub sp, sp, #%", compiler.variadic_stack_size);
-			}
 			vararg_offset := 0;
 			for call.args {
 				compile_expr(compiler, it);
 				if it_index >= param_count {
-					print("USING: %\n", compiler.register);
-					if vararg_offset > 0 {
-						emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
-					} else {
-						emit(compiler, "str x%, [sp]", compiler.register);
-					}
+					emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset - compiler.variadic_stack_size);
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
 				} else {
@@ -199,7 +191,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			assert(call.id.expr_type == Node_Identifier);
-			// NOTE(Oliver): All C symbols need underscores? what the hell?
+			if variadic {
+				emit(compiler, "sub sp, sp, #%", compiler.variadic_stack_size);
+			}
 			emit(compiler, "bl _%", name);
 			emit(compiler, "mov w%, w0", compiler.register);
 			if variadic {
