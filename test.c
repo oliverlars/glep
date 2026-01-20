@@ -7,6 +7,6 @@
 int main(int argc, char **args) {
 	int a = 5;
 	int *b = &a;
-	printf("%llu", b);
+	printf("%llu %llu", b, &a);
 	return 0;
 }

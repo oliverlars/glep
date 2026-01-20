@@ -61,7 +61,7 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, declarator:
 	stack_slot.declarator = declarator;
 	array_add(*scope.slots, stack_slot);
 	// TODO(Oliver): Derive from decl?
-	compiler.stack_offset += size_in_bytes*8;
+	compiler.stack_offset += (size_in_bytes + 7) & ~7;
 	return stack_slot;
 }
 

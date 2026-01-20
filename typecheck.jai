@@ -182,7 +182,7 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 
 	base_info := base_type_info(decl.base);
 
-	base_info = declarator_type_info(base_info, declarator);
+base_info = declarator_type_info(base_info, declarator);
 
 	return base_info;
 }
@@ -293,7 +293,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 		case Node_Identifier;
 			found, decl := find_decl_in_scope(tc, expr.(*Node_Identifier).id.view);
 			assert(found);
-			return base_type_info(decl.base), true;
+			return decl.declarator.resolved_type, true;
 		case Node_Unary;
 			info := type_info_from_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
@@ -319,6 +319,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 				arg_type := type_info_from_expr(tc, it);
 				it.resolved_type = arg_type;
 			}
+			// TODO(Oliver): Return return type
 	}
 
 	return null, true;
