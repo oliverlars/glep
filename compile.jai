@@ -147,7 +147,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
-	if expr.expr_type == 
+	if expr.expr_type == {
 		case Node_Unary;
 			op := expr.(*Node_Unary).op;
 			if op.type == {
@@ -248,7 +248,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 		case Node_Identifier;
 			load_variable_into_register(compiler, expr.(*Node_Identifier).id.view);
-	
+	}
 }
 
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {

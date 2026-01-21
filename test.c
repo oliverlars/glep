@@ -13,7 +13,7 @@ int sqr(int num) {
 }
 
 int main(int argc, char **args) {
-	int *a = wrapped_malloc(4);
+	int *a = wrapped_malloc(sqr(2));
 	*a = sqr(10);
 	printf("a is: %d", *a);
 	return 0;
