@@ -147,7 +147,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
-	if expr.expr_type == {
+	if expr.expr_type == 
 		case Node_Unary;
 			op := expr.(*Node_Unary).op;
 			if op.type == {
@@ -167,13 +167,16 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "add x%, sp, #%", compiler.register, stack_slot.offset);
 			}
 		case Node_Assign;
-			compile_lvalue(compiler, expr.(*Node_Assign).left);
-			dst := compiler.register;
-			compiler.register += 1;
+			// To avoid any clobbering of the expression using the register we store
+			// the lvalue in, we just evaluate the expression first then load the
+			// lvalue address
 			compile_expr(compiler, expr.(*Node_Assign).right);
+			src := compiler.register;
+			compiler.register += 1;
+			compile_lvalue(compiler, expr.(*Node_Assign).left);
 			if expr.(*Node_Assign).op.type == {
 				case .Equals;
-					emit(compiler, "str x%, [x%]", compiler.register, dst);
+					emit(compiler, "str x%, [x%]", src, compiler.register);
 			}
 			compiler.register -= 1;
 		case Node_Binary;
@@ -245,7 +248,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 		case Node_Identifier;
 			load_variable_into_register(compiler, expr.(*Node_Identifier).id.view);
-	}
+	
 }
 
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
