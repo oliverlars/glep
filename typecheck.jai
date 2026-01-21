@@ -33,6 +33,8 @@ Scope :: struct {
 
 Type_Checker :: struct {
 	scopes: [..]Scope;
+
+	ordinary: Table(string, *Node);
 }
 
 current_scope :: (tc: *Type_Checker) -> *Scope {
@@ -182,7 +184,7 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 
 	base_info := base_type_info(decl.base);
 
-base_info = declarator_type_info(base_info, declarator);
+	base_info = declarator_type_info(base_info, declarator);
 
 	return base_info;
 }
@@ -278,6 +280,11 @@ type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
 type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
+		case Node_Assign;
+			left_info := type_info_from_expr(tc, expr.(*Node_Assign).left);
+			right_info := type_info_from_expr(tc, expr.(*Node_Assign).right);
+			matched, resolved_type := match_types(left_info, right_info);
+			return resolved_type, true;
 		case Node_Binary;
 			left_info := type_info_from_expr(tc, expr.(*Node_Binary).left);
 			right_info := type_info_from_expr(tc, expr.(*Node_Binary).right);
@@ -319,7 +326,17 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 				arg_type := type_info_from_expr(tc, it);
 				it.resolved_type = arg_type;
 			}
-			// TODO(Oliver): Return return type
+			name := expr.(*Node_Call).id.(*Node_Identifier).id.view;
+			print("TYPECHECKING: %\n", name);
+			found, decl := table_find(*tc.ordinary, name);
+			assert(found);
+			for decl.(*Node_Decl).declarators {
+				if it.declarator_type == Node_Function_Declarator {
+					ret_type := type_from_decl(decl.(*Node_Decl), it);
+					expr.(*Node_Call).resolved_type = ret_type;
+					return ret_type, true;
+				}
+			}
 	}
 
 	return null, true;
@@ -339,6 +356,9 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
+				if it.init.initializer_type == Node_Scalar_Initializer {
+					type_info_from_expr(tc, it.init.(*Node_Scalar_Initializer).expr);
+				}
 				it.resolved_type = type_from_decl(decl, it);
 				push_decl(tc, decl.base, it);
 			}

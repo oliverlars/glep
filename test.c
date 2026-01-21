@@ -5,8 +5,8 @@
 #include <stdlib.h>
 
 int main(int argc, char **args) {
-	int a = 5;
-	int *b = &a;
-	printf("%p %p", b, &a);
+	int *a = malloc(4);
+	*a = 10;
+	printf("a is: %d", *a);
 	return 0;
 }

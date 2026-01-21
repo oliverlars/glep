@@ -117,6 +117,34 @@ emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	append(*compiler.builder, "\n");
 }
 
+compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
+	if !expr return;
+	if expr.expr_type == {
+		case Node_Identifier;
+			name := expr.(*Node_Identifier).id.view;
+			found, stack_slot := find_decl_on_stack(compiler, name);
+			if !found {
+				for compiler.globals {
+					if it == name {
+						emit(compiler, "adrp x%, _%@PAGE", compiler.register, name, compiler.register);
+						emit(compiler, "ldr w%, [x%, _%@PAGEOFF]", compiler.register, compiler.register, name, compiler.register, compiler.register);
+						return;
+					}
+				}
+				assert(false);
+			} else {
+				emit(compiler, "add x%, sp, #%", compiler.register, stack_slot.offset);
+			}
+		case Node_Unary;
+			op := expr.(*Node_Unary).op;
+			if op.type == {
+				case .Asterisk;
+					compile_lvalue(compiler, expr.(*Node_Unary).expr);
+					emit(compiler, "ldr x%, [x%]", compiler.register, compiler.register);
+			}
+	}
+}
+
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
@@ -138,12 +166,24 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					}
 					emit(compiler, "add x%, sp, #%", compiler.register, stack_slot.offset);
 			}
+		case Node_Assign;
+			compile_lvalue(compiler, expr.(*Node_Assign).left);
+			dst := compiler.register;
+			compiler.register += 1;
+			compile_expr(compiler, expr.(*Node_Assign).right);
+			if expr.(*Node_Assign).op.type == {
+				case .Equals;
+					emit(compiler, "str x%, [x%]", compiler.register, dst);
+			}
+			compiler.register -= 1;
 		case Node_Binary;
+			op := expr.(*Node_Binary).op;
 			compile_expr(compiler, expr.(*Node_Binary).left);
 			dst := compiler.register;
 			compiler.register += 1;
 			compile_expr(compiler, expr.(*Node_Binary).right);
-			if expr.(*Node_Binary).op.type == {
+			if op.type == {
+				case .Equals;
 				case .Plus;
 					emit(compiler, "add w%, w%, w%", dst, dst, compiler.register);
 				case .Minus;
@@ -178,7 +218,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			vararg_offset := 0;
 			for call.args {
 				compile_expr(compiler, it);
-				if it_index >= param_count {
+				if variadic && it_index >= param_count {
 					emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
@@ -192,7 +232,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 			assert(call.id.expr_type == Node_Identifier);
 			emit(compiler, "bl _%", name);
-			emit(compiler, "mov w%, w0", compiler.register);
+			emit(compiler, "mov x%, x0", compiler.register);
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);

@@ -2273,6 +2273,7 @@ main :: () {
 	tu := parse_translation_unit(*parser);
 
 	typechecker: Type_Checker;
+	typechecker.ordinary = parser.ordinary;
 	typecheck(*typechecker, tu);
 
 	compiler: Compiler;
