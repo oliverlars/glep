@@ -1449,7 +1449,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		token := current(p);
 		result.(*Node_Number).is = token.number_type;
 		result.(*Node_Number).token_with_suffix = token;
-		// HACK(Oliver): This could include apostrophes, remove them
+	// HACK(Oliver): This could include apostrophes, remove them
 		// This will ignore any trailing letters, which is what we want but
 		// might seem confusing
 		if token.number_type == {
@@ -2251,11 +2251,11 @@ main :: () {
 		}
 	}
 
-	// output: string;
-	// for tokens {
-	// 	output = join(output, sprint("% ", it.view));
-	// }
-	// write_entire_file("processed.c", output);
+	output: string;
+	for tokens {
+		output = join(output, sprint("% ", it.view));
+	}
+	write_entire_file("processed.c", output);
 
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;

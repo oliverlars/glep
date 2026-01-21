@@ -1,20 +1,8 @@
 #include <stdio.h>
-#include <assert.h>
-#include <float.h>
-#include <time.h>
-#include <stdlib.h>
-
-int *wrapped_malloc(int size) {
-	return malloc(size);
-}
-
-int sqr(int num) {
-	return num * num;
-}
 
 int main(int argc, char **args) {
-	int *a = wrapped_malloc(sqr(2));
-	*a = sqr(10);
-	printf("a is: %d", *a);
+	FILE *a = fopen("my_compiler_is_awesome.txt", "w");
+	fprintf(a, "writing to a file now works");
+	fclose(a);
 	return 0;
 }

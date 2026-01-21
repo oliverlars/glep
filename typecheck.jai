@@ -67,6 +67,7 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 			id := identifier_from_declarator(it.declarator);
 			if id == name return true, it;
 		}
+		scope_index -= 1;
 	}
 	return false, .{};
 }

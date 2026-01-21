@@ -527,6 +527,8 @@ add_all_builtins :: (cpp: *Preprocessor) {
 
 	add_function_builtin(cpp, "#define __asm(x)\n");
 	add_function_builtin(cpp, "#define __attribute__(x)\n");
+	// HACK(Oliver): Remove this dumbass shit
+	cpp.at = 0;
 }
 
 preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
@@ -657,6 +659,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							path := path_to_string(resolved_path);
 							//print("RESOLVED: %\n", path);
 							//print("Loading include %\n", peek(cpp.path_stack));
+							found_include, pragma_onced := table_find(*cpp.includes, path);
 							if !table_find(*cpp.includes, path) {
 								file, found = read_entire_file(path);
 								if found {
@@ -700,6 +703,10 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							path := "";
 							while current(cpp, src_tokens).type != .Greater {
 								path = join(path, skip(cpp, src_tokens).view);
+							}
+							print("PATH: %\n", path);
+							if path == "stdio.h" {
+								a := 5;
 							}
 							skip(cpp, src_tokens);
 							full_path: string;
