@@ -192,6 +192,9 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 
 match_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool, *Resolved_Type {
 	// This leaks
+	if !a || !b return false, null;
+	// TODO(Oliver): These should emit casts otherwise their types are gonna
+	// be weird
 	result := New(Resolved_Type);
 	if a.kind == .Floating && b.kind != .Floating {
 		result.kind = .Floating;
@@ -208,7 +211,11 @@ match_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool, *Resolved_Type {
 		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
 	} else if a.kind == .Pointer && b.kind == .Pointer {
 		matched, type := match_types(a.inner, b.inner);
-		return matched, type;
+		return matched, a;
+	} else if a.kind == .Integral && b.kind == .Pointer {
+		return true, b;
+	} else if a.kind == .Pointer && b.kind == .Integral {
+		return true, a;
 	} else {
 		return false, null;
 	}
@@ -290,6 +297,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			left_info := type_info_from_expr(tc, expr.(*Node_Binary).left);
 			right_info := type_info_from_expr(tc, expr.(*Node_Binary).right);
 			matched, resolved_type := match_types(left_info, right_info);
+			expr.resolved_type = resolved_type;
 			if matched {
 				return resolved_type, true;
 			} else {
@@ -299,7 +307,11 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			info := type_info_from_number(expr.(*Node_Number));
 			return info, true;
 		case Node_Identifier;
-			found, decl := find_decl_in_scope(tc, expr.(*Node_Identifier).id.view);
+			id := expr.(*Node_Identifier).id.view;
+			if id == "argc" {
+				a := 5;
+			}
+			found, decl := find_decl_in_scope(tc, id);
 			assert(found);
 			return decl.declarator.resolved_type, true;
 		case Node_Unary;
@@ -373,6 +385,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		push_scope(tc);
 		for function.params {
 			typecheck_decl(tc, it);
+			push_decl(tc, it.base, it.declarators[0]);
 		}
 		typecheck_statement(tc, decl.body);
 		pop_scope(tc);
@@ -390,7 +403,6 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 			} else {
 				declarator.resolved_type = decl_type;
 			}
-			//push_decl(tc, decl.base, declarator);
 		}
 	}
 }

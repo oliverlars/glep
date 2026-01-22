@@ -145,6 +145,28 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 	}
 }
 
+register :: (reg: int, resolved_type: *Resolved_Type) -> string {
+	assert(resolved_type != null);
+	if resolved_type.kind == .Integral || resolved_type.kind == .Pointer {
+		if resolved_type.size_in_bytes == {
+			case 8;
+				return tprint("x%", reg);
+			case 4; #through;
+			case 2;
+				return tprint("w%", reg);
+		}
+	} else if resolved_type.kind == .Floating {
+		if resolved_type.size_in_bytes == {
+			case 8;
+				return tprint("x%", reg);
+			case 4;
+				return tprint("w%", reg);
+		}
+	}
+	assert(false);
+	return "";
+}
+
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
@@ -181,20 +203,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
+			t := expr.resolved_type;
 			compile_expr(compiler, expr.(*Node_Binary).left);
 			dst := compiler.register;
 			compiler.register += 1;
 			compile_expr(compiler, expr.(*Node_Binary).right);
+			// TODO(Oliver): This doesn't account for the types, fix that
 			if op.type == {
 				case .Equals;
 				case .Plus;
-					emit(compiler, "add w%, w%, w%", dst, dst, compiler.register);
+					emit(compiler, "add %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
 				case .Minus;
-					emit(compiler, "sub w%, w%, w%", dst, dst, compiler.register);
+					emit(compiler, "sub %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
 				case .Asterisk;
-					emit(compiler, "mul w%, w%, w%", dst, dst, compiler.register);
+					emit(compiler, "mul %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
 				case .ForwardSlash;
-					emit(compiler, "div w%, w%, w%", dst, dst, compiler.register);
+					emit(compiler, "div %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
 			}
 			compiler.register -= 1;
 		case Node_Number;
