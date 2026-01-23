@@ -4,7 +4,7 @@
 int main(int argc, char **args) {
 
 	int a = 5;
-	double f = a;
+	double f = a + 1.0;
 	printf(" float test: %f", f);
 	return 0;
 }

@@ -206,20 +206,69 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register += 1;
 			compile_expr(compiler, expr.(*Node_Binary).right);
 			// TODO(Oliver): This doesn't account for the types, fix that
+			f := "";
+			if t.kind == .Floating {
+				f = "f";
+			}
 			if op.type == {
 				case .Equals;
 				case .Plus;
-					emit(compiler, "add %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
+					emit(compiler, "%add %, %, %", f, register(dst, t), register(dst, t), register(compiler.register, t));
 				case .Minus;
-					emit(compiler, "sub %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
+					emit(compiler, "%sub %, %, %", f, register(dst, t), register(dst, t), register(compiler.register, t));
 				case .Asterisk;
-					emit(compiler, "mul %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
+					emit(compiler, "%mul %, %, %", f, register(dst, t), register(dst, t), register(compiler.register, t));
 				case .ForwardSlash;
-					emit(compiler, "div %, %, %", register(dst, t), register(dst, t), register(compiler.register, t));
+					div: string;
+					if t.kind == .Integral {
+						if t.unsigned {
+							div = "udiv";
+						} else {
+							div = "sdiv";
+						}
+					} else if t.kind == .Floating {
+						div = "fdiv";
+					}
+					emit(compiler, "% %, %, %", div, register(dst, t), register(dst, t), register(compiler.register, t));
 			}
 			compiler.register -= 1;
 		case Node_Number;
-			emit(compiler, "mov w%, #%", compiler.register, expr.(*Node_Number).as_u64.(u32));
+			number := expr.(*Node_Number);
+			t := number.resolved_type;
+			reg := register(compiler.register, t);
+			if t.kind == {
+				case .Floating;
+					if t.size_in_bytes == {
+						case 8;
+							emit(compiler, "fmov %, #%", reg, number.as_f64);
+						case 4;
+							emit(compiler, "fmov %, #%", reg, cast(float32)number.as_f64);
+					}
+				case .Integral;
+					if t.unsigned {
+						if t.size_in_bytes == {
+							case 8;
+								emit(compiler, "mov %, #%", reg, number.as_u64);
+							case 4;
+								emit(compiler, "mov %, #%", reg, cast(u32)number.as_u64);
+							case 2;
+								emit(compiler, "mov %, #%", reg, cast(u16)number.as_u64);
+							case 1;
+								emit(compiler, "mov %, #%", reg, cast(u8)number.as_u64);
+						}
+					} else {
+						if t.size_in_bytes == {
+							case 8;
+								emit(compiler, "mov %, #%", reg, number.as_u64);
+							case 4;
+								emit(compiler, "mov %, #%", reg, cast(s32)number.as_u64);
+							case 2;
+								emit(compiler, "mov %, #%", reg, cast(s16)number.as_u64);
+							case 1;
+								emit(compiler, "mov %, #%", reg, cast(s8)number.as_u64);
+						}
+					}
+			}
 		case Node_Cast;
 			cast_node := expr.(*Node_Cast);
 			compile_expr(compiler, cast_node.expr);

@@ -282,9 +282,7 @@ Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	is:     Number_Type;
-	as_s64: int;
 	as_u64: u64;
-	as_f32: float32;
 	as_f64: float64;
 	token_with_suffix: Token;
 }

@@ -386,6 +386,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			return resolved_type, true;
 		case Node_Number;
 			info := type_info_from_number(expr.(*Node_Number));
+			expr.(*Node_Number).resolved_type = info;
 			return info, true;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
@@ -446,6 +447,8 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			pop_scope(tc);
 		case Node_Expr_Statement;
 			type_info_from_expr(tc, stmt.(*Node_Expr_Statement).expr);
+		case Node_Return;
+			type_info_from_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
