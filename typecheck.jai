@@ -190,54 +190,104 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 	return base_info;
 }
 
-match_types :: (a: *Resolved_Type, b: *Resolved_Type) -> bool, *Resolved_Type {
-	// This leaks
-	if !a || !b return false, null;
-	// TODO(Oliver): These should emit casts otherwise their types are gonna
-	// be weird
-	result := New(Resolved_Type);
-	if a.kind == .Floating && b.kind != .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = a.size_in_bytes;
-	} else if b.kind == .Floating && a.kind != .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = b.size_in_bytes;
+types_equal :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
+	if !a && !b return true;
+	if !a return false;
+	if !b return false;
+	inner_equal := types_equal(a.inner, b.inner);
+	result := true;
+	result &= a.kind == b.kind;
+	result &= a.alignment == b.alignment;
+	result &= a.atomic == b.atomic;
+	result &= a.composite == b.composite;
+	result &= a.size_in_bytes == b.size_in_bytes;
+	result &= a.unsigned == b.unsigned;
+	result &= inner_equal;
+	return result;
+}
+
+
+ 
+common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
+	resolved: *Resolved_Type;
+	if a.kind == .Floating || b.kind == .Floating {
+		resolved = New(Resolved_Type);
+		if a.kind != .Floating then resolved.* = b.*;
+		if b.kind != .Floating then resolved.* = a.*;
+		resolved.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
 	} else if a.kind == .Integral && b.kind == .Integral {
-		result.kind = .Integral;
-		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
-		result.unsigned = a.unsigned || b.unsigned;
-	} else if a.kind == .Floating && b.kind == .Floating {
-		result.kind = .Floating;
-		result.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
-	} else if a.kind == .Pointer && b.kind == .Pointer {
-		matched, type := match_types(a.inner, b.inner);
-		return matched, a;
-	} else if a.kind == .Integral && b.kind == .Pointer {
-		return true, b;
-	} else if a.kind == .Pointer && b.kind == .Integral {
-		return true, a;
-	} else {
-		return false, null;
+		resolved = New(Resolved_Type);
+		resolved.* = a.*;
+		resolved.unsigned = b.unsigned || a.unsigned;
+		resolved.size_in_bytes = max(max(a.size_in_bytes, b.size_in_bytes), 4);
 	}
 	
-	return true, result;
+	return resolved;
+}
+
+pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *Resolved_Type) -> *Resolved_Type {
+	add := binary.op.type == .Plus;
+	subtract := binary.op.type == .Minus;
+
+	insert_scale :: (at: *Node_Binary, side: enum { Left; Right; }, size_in_bytes: int) {
+		scale := New(Node_Binary);
+		scale.op.view = "*";
+		scale.op.type = .Asterisk;
+		scale.resolved_type = New(Resolved_Type);
+
+		size_number := New(Node_Number);
+		size_number.is = .Decimal;
+		size_number.as_u64 = xx size_in_bytes;
+		size_number.resolved_type = type_info_from_number(size_number);
+
+		scale.resolved_type.* = size_number.resolved_type.*;
+
+		if side == .Left {
+			scale.left = at.left;
+			scale.right = size_number;
+			at.left = scale;
+		} else {
+			scale.left = at.right;
+			scale.right = size_number;
+			at.right = scale;
+		}
+	}
+
+	resolved: *Resolved_Type;
+	if left.kind == .Pointer && right.kind == .Integral {
+		insert_scale(binary, .Right, left.inner.size_in_bytes);
+		resolved = left;
+	} else if left.kind == .Integral && right.kind == .Pointer {
+		insert_scale(binary, .Left, right.inner.size_in_bytes);
+		resolved = right;
+	} else if subtract && left.kind == .Pointer && right.kind == .Pointer {
+		if subtract {
+			resolved = New(Resolved_Type);
+			resolved.kind = .Integral;
+			resolved.size_in_bytes = 8;
+			resolved.unsigned = false;
+		}
+	}
+	return resolved;
 }
 
 can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
-	result: bool;
-	if target.kind == {
-		case .Integral; #through;
-		case .Floating;
-			return !(source.kind == .Composite || source.kind == .Array);
-		case .Composite;
-			// HACK(Oliver): We rely on the type pointing to the same thing in memory
-			// maybe that is dumb?
-			if source.kind != .Composite return false;
-			return target.composite == source.composite;
-		case .Array;
-			 return source.kind == .Array;
+	if !target || !source return false;
+
+	if target.kind == .Integral && source.kind == .Integral return true;
+	if target.kind == .Floating && source.kind == .Floating return true;
+	if target.kind == .Integral && source.kind == .Floating return true;
+	if target.kind == .Floating && source.kind == .Integral return true;
+
+	if target.kind == .Pointer && source.kind == .Pointer return true; 
+	if target.kind == .Pointer && source.kind == .Integral return true;
+	if target.kind == .Integral && source.kind == .Pointer return true;
+
+	if target.kind == .Composite && source.kind == .Composite {
+		return target.composite == source.composite;
 	}
-	return true;
+
+	return false;
 }
 
 split_suffix_from_number :: (number_with_suffix: string) -> string, string {
@@ -285,53 +335,59 @@ type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	return info;
 }
 
+insert_cast :: (at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
+	c := New(Node_Cast);
+	c.expr = at;
+	c.resolved_type = target;
+	return c;
+}
+
 type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
 		case Node_Assign;
-			left_info := type_info_from_expr(tc, expr.(*Node_Assign).left);
-			right_info := type_info_from_expr(tc, expr.(*Node_Assign).right);
-			matched, resolved_type := match_types(left_info, right_info);
-			return resolved_type, true;
-		case Node_Binary;
-			left_info := type_info_from_expr(tc, expr.(*Node_Binary).left);
-			right_info := type_info_from_expr(tc, expr.(*Node_Binary).right);
-			if left_info.kind == .Pointer && right_info.kind == .Integral {
-				bin := New(Node_Binary);
-				bin.left = New(Node_Number);
-				bin.left.(*Node_Number).is = .Decimal;
-				bin.left.(*Node_Number).as_u64 = xx left_info.inner.size_in_bytes;
-				bin.op.view = "*";
-				bin.op.type = .Asterisk;
-				bin.right = expr.(*Node_Binary).right;
-				expr.(*Node_Binary).right = bin;
-				right_info = type_info_from_expr(tc, expr.(*Node_Binary).right);
-			} if left_info.kind == .Integral && right_info.kind == .Pointer {
-				bin := New(Node_Binary);
-				bin.right = New(Node_Number);
-				bin.right.(*Node_Number).is = .Decimal;
-				bin.right.(*Node_Number).as_u64 = xx right_info.inner.size_in_bytes;
-				bin.op.view = "*";
-				bin.op.type = .Asterisk;
-				bin.left = expr.(*Node_Binary).left;
-				expr.(*Node_Binary).left = bin;
-				left_info = type_info_from_expr(tc, expr.(*Node_Binary).left);
-			}
-			matched, resolved_type := match_types(left_info, right_info);
-			expr.resolved_type = resolved_type;
-			if matched {
-				return resolved_type, true;
-			} else {
+			assign := expr.(*Node_Assign);
+			left_info := type_info_from_expr(tc, assign.left);
+			right_info := type_info_from_expr(tc, assign.right);
+			
+			if !can_coerce_to(left_info, right_info) {
 				return null, false;
 			}
+			
+			if !types_equal(right_info, left_info) {
+				assign.right = insert_cast(assign.right, left_info);
+			}
+			
+			expr.resolved_type = left_info;
+			return left_info, true;
+		case Node_Binary;
+			binary := expr.(*Node_Binary);
+			left_info := type_info_from_expr(tc, binary.left);
+			right_info := type_info_from_expr(tc, binary.right);
+
+			if left_info.kind == .Pointer || right_info.kind == .Pointer {
+				resolved_type := pointer_arithmetic_type(binary, left_info, right_info);
+				expr.resolved_type = resolved_type;
+				return resolved_type, resolved_type != null;
+			}
+
+			resolved_type := common_type(left_info, right_info);
+			if !resolved_type return null, false;
+
+			if !types_equal(left_info, resolved_type) {
+				binary.left = insert_cast(binary.left, resolved_type);
+			}
+			if !types_equal(right_info, resolved_type) {
+				binary.right = insert_cast(binary.right, resolved_type);
+			}
+			
+			expr.resolved_type = resolved_type;
+			return resolved_type, true;
 		case Node_Number;
 			info := type_info_from_number(expr.(*Node_Number));
 			return info, true;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
-			if id == "argc" {
-				a := 5;
-			}
 			found, decl := find_decl_in_scope(tc, id);
 			assert(found);
 			return decl.declarator.resolved_type, true;
@@ -344,6 +400,8 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 					info.kind = .Pointer;
 					info.size_in_bytes = 8;
 					info.inner = inner;
+				case .Asterisk;
+					info = info.inner;
 			}
 			return info, info.kind != .Composite;
 		case Node_Cast;
