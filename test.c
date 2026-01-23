@@ -2,9 +2,9 @@
 #include <stdlib.h>
 
 int main(int argc, char **args) {
-	printf("how many args: %d first and second args are: %s, %s", argc, *(args + 1), *(args + 2));
-	FILE *a = fopen("my_compiler_is_awesome.txt", "w");
-	fprintf(a, "writing to a file now works");
-	fclose(a);
+
+	int a = 5;
+	double f = a;
+	printf(" float test: %f", f);
 	return 0;
 }

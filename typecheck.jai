@@ -335,9 +335,10 @@ type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	return info;
 }
 
-insert_cast :: (at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
+insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
 	c := New(Node_Cast);
 	c.expr = at;
+	c.expr.resolved_type = type_info_from_expr(tc, c.expr);
 	c.resolved_type = target;
 	return c;
 }
@@ -355,7 +356,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			}
 			
 			if !types_equal(right_info, left_info) {
-				assign.right = insert_cast(assign.right, left_info);
+				assign.right = insert_cast(tc, assign.right, left_info);
 			}
 			
 			expr.resolved_type = left_info;
@@ -375,13 +376,13 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			if !resolved_type return null, false;
 
 			if !types_equal(left_info, resolved_type) {
-				binary.left = insert_cast(binary.left, resolved_type);
+				binary.left = insert_cast(tc, binary.left, resolved_type);
 			}
 			if !types_equal(right_info, resolved_type) {
-				binary.right = insert_cast(binary.right, resolved_type);
+				binary.right = insert_cast(tc, binary.right, resolved_type);
 			}
 			
-			expr.resolved_type = resolved_type;
+			binary.resolved_type = resolved_type;
 			return resolved_type, true;
 		case Node_Number;
 			info := type_info_from_number(expr.(*Node_Number));
@@ -448,10 +449,23 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
+				rhs: *Resolved_Type;
+				init_expr: *Node_Expr;
 				if it.init.initializer_type == Node_Scalar_Initializer {
-					type_info_from_expr(tc, it.init.(*Node_Scalar_Initializer).expr);
+					init_expr = it.init.(*Node_Scalar_Initializer).expr;
+					rhs = type_info_from_expr(tc, init_expr);
 				}
-				it.resolved_type = type_from_decl(decl, it);
+				lhs := type_from_decl(decl, it);
+				
+				if !can_coerce_to(lhs, rhs) {
+					print("Cant coerce in decl!!!\n");
+				}
+				
+				if !types_equal(rhs, lhs) {
+					it.init.(*Node_Scalar_Initializer).expr = insert_cast(tc, init_expr, lhs);
+				}
+	
+				it.resolved_type = lhs;
 				push_decl(tc, decl.base, it);
 			}
 	}
@@ -471,6 +485,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	} else {
 		for declarator: decl.declarators {
 			decl_type := type_from_decl(decl, declarator);
+			print("typechecking: %\n", identifier_from_declarator(declarator));
 			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
 				expr_type, valid := type_info_from_expr(tc, declarator.init.(*Node_Scalar_Initializer).expr);
 				if !valid || !can_coerce_to(decl_type, expr_type) {

@@ -61,6 +61,7 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, declarator:
 	stack_slot.name = name;
 	stack_slot.offset = compiler.stack_offset;
 	stack_slot.declarator = declarator;
+	stack_slot.resolved_type = declarator.resolved_type;
 	array_add(*scope.slots, stack_slot);
 	// TODO(Oliver): Derive from decl?
 	// Nearest 8 bytes because alignment
@@ -102,11 +103,7 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 		// TODO(Oliver): error checking
 		assert(false);
 	} else {
-		if stack_slot.declarator.resolved_type && stack_slot.declarator.resolved_type.size_in_bytes == 8 {
-			emit(compiler, "ldr x%, [sp, #%]", compiler.register, stack_slot.offset);
-		} else {
-			emit(compiler, "ldr w%, [sp, #%]", compiler.register, stack_slot.offset);
-		}
+		emit(compiler, "ldr %, [sp, #%]", register(compiler.register, stack_slot.resolved_type), stack_slot.offset);
 	}
 }
 
@@ -158,9 +155,9 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 	} else if resolved_type.kind == .Floating {
 		if resolved_type.size_in_bytes == {
 			case 8;
-				return tprint("x%", reg);
+				return tprint("d%", reg);
 			case 4;
-				return tprint("w%", reg);
+				return tprint("s%", reg);
 		}
 	}
 	assert(false);
@@ -193,12 +190,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// the lvalue in, we just evaluate the expression first then load the
 			// lvalue address
 			compile_expr(compiler, expr.(*Node_Assign).right);
-			src := compiler.register;
+			src := register(compiler.register, expr.(*Node_Assign).right.resolved_type);
 			compiler.register += 1;
 			compile_lvalue(compiler, expr.(*Node_Assign).left);
 			if expr.(*Node_Assign).op.type == {
 				case .Equals;
-					emit(compiler, "str x%, [x%]", src, compiler.register);
+					emit(compiler, "str %, [x%]", src, compiler.register);
 			}
 			compiler.register -= 1;
 		case Node_Binary;
@@ -223,6 +220,37 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 		case Node_Number;
 			emit(compiler, "mov w%, #%", compiler.register, expr.(*Node_Number).as_u64.(u32));
+		case Node_Cast;
+			cast_node := expr.(*Node_Cast);
+			compile_expr(compiler, cast_node.expr);
+		
+			source := cast_node.expr.resolved_type;
+			target := cast_node.resolved_type;
+
+			src := register(compiler.register, source);
+			dst := register(compiler.register, target);
+
+			if source.kind == .Integral && target.kind == .Floating {
+				if source.unsigned {
+					emit(compiler, "ucvtf %, %", dst, src);
+				} else {
+					emit(compiler, "scvtf %, %", dst, src);
+				}
+			} else if source.kind == .Floating && target.kind == .Integral {
+				if target.unsigned {
+					emit(compiler, "fcvtzu %, %", dst, src);
+				} else {
+					emit(compiler, "fcvtzs %, %", dst, src);
+				}
+			} else if source.kind == .Integral && target.kind == .Integral {
+				if target.size_in_bytes > source.size_in_bytes {
+					if source.unsigned {
+						emit(compiler, "mov %, %", dst, src);
+					} else {
+						emit(compiler, "sxtw %, %", dst, src);
+					}
+				}
+			}
 		case Node_Char;
 			value := 0;
 			for expr.(*Node_Char).token.view {
@@ -243,17 +271,23 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 			variadic_stack_register := compiler.register;
 			vararg_offset := 0;
+			reg_float := 0;
+			reg_integer := 0;
 			for call.args {
 				compile_expr(compiler, it);
 				if variadic && it_index >= param_count {
-					emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
+					emit(compiler, "str %, [sp, #%]", register(compiler.register, it.resolved_type), vararg_offset);
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
 				} else {
-					if it.resolved_type && it.resolved_type.size_in_bytes == 8 {
-						emit(compiler, "mov x%, x%", it_index, compiler.register);
+					if it.resolved_type.kind == .Floating {
+						emit(compiler, "mov %, %", register(reg_float, it.resolved_type), register(compiler.register, it.resolved_type));
+						reg_float += 1;
+					} else if it.resolved_type.kind == .Integral || it.resolved_type.kind == .Pointer {
+						emit(compiler, "mov %, %", register(reg_integer, it.resolved_type), register(compiler.register, it.resolved_type));
+						reg_integer += 1;
 					} else {
-						emit(compiler, "mov w%, w%", it_index, compiler.register);
+						assert(false);
 					}
 				}
 			}
@@ -301,7 +335,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 				if it.init {
 					if it.init.initializer_type == Node_Scalar_Initializer {
 						compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
-						emit(compiler, "str x%, [sp, #%]", compiler.register, stack_slot.offset);
+						emit(compiler, "str %, [sp, #%]", register(compiler.register, it.resolved_type), stack_slot.offset);
 					}
 				}
 			}
@@ -329,7 +363,7 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		if it.init {
 			if it.init.initializer_type == Node_Scalar_Initializer {
 				compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
-				emit(compiler, "str x%, [sp, #%]", compiler.register, compiler.stack_offset);
+				emit(compiler, "str %, [sp, #%]", register(compiler.register, it.resolved_type), compiler.stack_offset);
 			}
 		}
 	}
