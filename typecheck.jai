@@ -296,6 +296,27 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 		case Node_Binary;
 			left_info := type_info_from_expr(tc, expr.(*Node_Binary).left);
 			right_info := type_info_from_expr(tc, expr.(*Node_Binary).right);
+			if left_info.kind == .Pointer && right_info.kind == .Integral {
+				bin := New(Node_Binary);
+				bin.left = New(Node_Number);
+				bin.left.(*Node_Number).is = .Decimal;
+				bin.left.(*Node_Number).as_u64 = xx left_info.inner.size_in_bytes;
+				bin.op.view = "*";
+				bin.op.type = .Asterisk;
+				bin.right = expr.(*Node_Binary).right;
+				expr.(*Node_Binary).right = bin;
+				right_info = type_info_from_expr(tc, expr.(*Node_Binary).right);
+			} if left_info.kind == .Integral && right_info.kind == .Pointer {
+				bin := New(Node_Binary);
+				bin.right = New(Node_Number);
+				bin.right.(*Node_Number).is = .Decimal;
+				bin.right.(*Node_Number).as_u64 = xx right_info.inner.size_in_bytes;
+				bin.op.view = "*";
+				bin.op.type = .Asterisk;
+				bin.left = expr.(*Node_Binary).left;
+				expr.(*Node_Binary).left = bin;
+				left_info = type_info_from_expr(tc, expr.(*Node_Binary).left);
+			}
 			matched, resolved_type := match_types(left_info, right_info);
 			expr.resolved_type = resolved_type;
 			if matched {

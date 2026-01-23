@@ -465,7 +465,7 @@ is_suffix :: (char: int) -> bool {
 	char == #char "d" ||
 	char == #char "D" ||
 	char == #char "B";
-} 
+}
 
 tokenise :: (t: *Tokeniser) {
 	is_ws    :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char " " || t.source[t.at] == #char "\t"; }
