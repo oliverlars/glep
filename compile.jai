@@ -443,15 +443,13 @@ stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
 	assert(block.statement_type == Node_Block);
 	stack_size := 0;
 	for block.(*Node_Block).statements {
-		// FIXME(Oliver): Why is this happening????????
-		if !it break;
 		if it.statement_type == Node_Block {
 			stack_size = max(stack_size, stack_space_needed_for_variables(it));
 		} else if it.statement_type == Node_Decl_Statement {
 			decl := it.(*Node_Decl_Statement).decl;
 			for declarator: decl.declarators {
 				if declarator.resolved_type {
-					stack_size += declarator.resolved_type.size_in_bytes;
+					stack_size += (declarator.resolved_type.size_in_bytes + 7) & ~7;
 				}
 			}
 		}
@@ -465,8 +463,6 @@ stack_space_needed_for_variadic_functions :: (compiler: *Compiler, block: *Node_
 	assert(block.statement_type == Node_Block);
 	stack_size := 0;
 	for block.(*Node_Block).statements {
-		// FIXME(Oliver): Why is this happening????????
-		if !it break;
 		if it.statement_type == Node_Block {
 			stack_size = max(stack_size, stack_space_needed_for_variadic_functions(compiler, it));
 		} else if it.statement_type == Node_Expr_Statement {
@@ -544,9 +540,9 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						locals_stack_size += it.declarators[0].resolved_type.size_in_bytes;
 					}
 				}
-				locals_stack_size = (locals_stack_size + 15) & ~15;
-				variadic_stack_size = (variadic_stack_size + 15) & ~15;
+				// We should only need to resize the final total here
 				total_stack_space_needed := locals_stack_size + variadic_stack_size + link_and_return_stack_size;
+				total_stack_space_needed = (total_stack_space_needed + 15) & ~15; 
 				// We have to align the stack offsets and size to be a multiple of 16
 				variadic_offset := 0;
 				locals_offset := variadic_stack_size;
@@ -558,10 +554,16 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if it.declarators[0].resolved_type{
+					if it.declarators[0].resolved_type.kind == .Integral {
 						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
-						push_decl(compiler, name, it.declarators[0].resolved_type.size_in_bytes, it.declarators[0]);
+					} else if it.declarators[0].resolved_type.kind == .Floating {
+						if it.declarators[0].resolved_type.size_in_bytes == 8 {
+							emit(compiler, "str d%, [sp, #%]", it_index, compiler.stack_offset);
+						} else {
+							emit(compiler, "str s%, [sp, #%]", it_index, compiler.stack_offset);
+						}
 					}
+					push_decl(compiler, name, it.declarators[0].resolved_type.size_in_bytes, it.declarators[0]);
 				}
 				// FIXME(Oliver): This could be better
 				compile_statement(compiler, decl.body);

@@ -461,7 +461,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Expr_Statement;
 			type_info_from_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
-			stmt.(*Node_Return).expr.resolved_type = type_info_from_expr(tc, stmt.(*Node_Return).expr);
+			type_info_from_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
