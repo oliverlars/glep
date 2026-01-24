@@ -299,6 +299,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						emit(compiler, "sxtw %, %", dst, src);
 					}
 				}
+			} else if source.kind == .Floating && target.kind == .Floating {
+				emit(compiler, "fcvt %, %", dst, src);
 			}
 		case Node_Char;
 			value := 0;
@@ -325,7 +327,16 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			for call.args {
 				compile_expr(compiler, it);
 				if variadic && it_index >= param_count {
-					emit(compiler, "str %, [sp, #%]", register(compiler.register, it.resolved_type), vararg_offset);
+					if it.resolved_type.kind == .Floating {
+						if it.resolved_type.size_in_bytes == 4 {
+							emit(compiler, "fcvt d%, %", compiler.register, register(compiler.register, it.resolved_type));
+						}
+						emit(compiler, "str d%, [sp, #%]", compiler.register, vararg_offset);
+					} else if it.resolved_type.kind == .Integral {
+						emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
+					} else {
+						assert(false);
+					}
 					// NOTE(Oliver): always 8 byte aligned
 					vararg_offset += 8;
 				} else {

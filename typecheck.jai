@@ -220,6 +220,8 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 		resolved.* = a.*;
 		resolved.unsigned = b.unsigned || a.unsigned;
 		resolved.size_in_bytes = max(max(a.size_in_bytes, b.size_in_bytes), 4);
+	} else {
+		assert(false);
 	}
 	
 	return resolved;
@@ -338,8 +340,9 @@ type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
 insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
 	c := New(Node_Cast);
 	c.expr = at;
-	c.expr.resolved_type = type_info_from_expr(tc, c.expr);
 	c.resolved_type = target;
+	assert(c.resolved_type != null);
+	assert(c.expr.resolved_type != null);
 	return c;
 }
 
@@ -357,9 +360,16 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			
 			if !types_equal(right_info, left_info) {
 				assign.right = insert_cast(tc, assign.right, left_info);
+				assign.right.resolved_type = type_info_from_expr(tc, assign.right);
+			} else {
+				assign.right.resolved_type = left_info;
 			}
-			
-			expr.resolved_type = left_info;
+			assign.left.resolved_type = left_info;
+			assign.resolved_type = left_info;
+
+			assert(assign.resolved_type != null);
+			assert(assign.left.resolved_type != null);
+			assert(assign.right.resolved_type != null);
 			return left_info, true;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
@@ -392,6 +402,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
 			assert(found);
+			expr.(*Node_Identifier).resolved_type = decl.declarator.resolved_type;
 			return decl.declarator.resolved_type, true;
 		case Node_Unary;
 			info := type_info_from_expr(tc, expr.(*Node_Unary).expr);
@@ -409,6 +420,8 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 		case Node_Cast;
 			source := type_info_from_expr(tc, expr.(*Node_Cast).expr);
 			target := base_type_info(expr.(*Node_Cast).base);
+			expr.(*Node_Cast).resolved_type = target;
+			expr.(*Node_Cast).expr.resolved_type = source;
 			return target, can_coerce_to(target, source);
 		case Node_String;
 			info := New(Resolved_Type);
@@ -433,7 +446,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			}
 	}
 
-	return null, true;
+	return null, false;
 }
 
 typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
@@ -466,9 +479,12 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 				
 				if !types_equal(rhs, lhs) {
 					it.init.(*Node_Scalar_Initializer).expr = insert_cast(tc, init_expr, lhs);
+				} else {
+					it.init.(*Node_Scalar_Initializer).expr.resolved_type = lhs;
 				}
-	
 				it.resolved_type = lhs;
+				assert(it.init.(*Node_Scalar_Initializer).expr.resolved_type != null);
+				assert(it.resolved_type != null);
 				push_decl(tc, decl.base, it);
 			}
 	}
