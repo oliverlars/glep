@@ -341,7 +341,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					vararg_offset += 8;
 				} else {
 					if it.resolved_type.kind == .Floating {
-						emit(compiler, "mov %, %", register(reg_float, it.resolved_type), register(compiler.register, it.resolved_type));
+						emit(compiler, "fmov %, %", register(reg_float, it.resolved_type), register(compiler.register, it.resolved_type));
 						reg_float += 1;
 					} else if it.resolved_type.kind == .Integral || it.resolved_type.kind == .Pointer {
 						emit(compiler, "mov %, %", register(reg_integer, it.resolved_type), register(compiler.register, it.resolved_type));
@@ -353,7 +353,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 			assert(call.id.expr_type == Node_Identifier);
 			emit(compiler, "bl _%", name);
-			emit(compiler, "mov x%, x0", compiler.register);
+			if call.resolved_type.kind == .Floating {
+				emit(compiler, "fmov d%, d0", compiler.register);
+			} else {
+				emit(compiler, "mov x%, x0", compiler.register);
+			}
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);
@@ -380,7 +384,12 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			pop_scope(compiler);
 		case Node_Return;
 			compile_expr(compiler, stmt.(*Node_Return).expr);
-			emit(compiler, "mov x0, x%", compiler.register);
+			t := stmt.(*Node_Return).expr.resolved_type;
+			if t.kind == .Floating {
+				emit(compiler, "fmov d0, d%", compiler.register);
+			} else {
+				emit(compiler, "mov x0, x%", compiler.register);
+			}
 		case Node_Expr_Statement;
 			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);
 		case Node_Decl_Statement;

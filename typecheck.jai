@@ -69,7 +69,7 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 		}
 		scope_index -= 1;
 	}
-	return false, .{};
+return false, .{};
 }
 
 base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
@@ -461,7 +461,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Expr_Statement;
 			type_info_from_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
-			type_info_from_expr(tc, stmt.(*Node_Return).expr);
+			stmt.(*Node_Return).expr.resolved_type = type_info_from_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
@@ -478,9 +478,8 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 				}
 				
 				if !types_equal(rhs, lhs) {
-					it.init.(*Node_Scalar_Initializer).expr = insert_cast(tc, init_expr, lhs);
-				} else {
-					it.init.(*Node_Scalar_Initializer).expr.resolved_type = lhs;
+					c := insert_cast(tc, init_expr, lhs);
+					it.init.(*Node_Scalar_Initializer).expr = c;
 				}
 				it.resolved_type = lhs;
 				assert(it.init.(*Node_Scalar_Initializer).expr.resolved_type != null);
