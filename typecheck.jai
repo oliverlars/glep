@@ -74,7 +74,9 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 }
 
 resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
-
+	if decl_info.typedef {
+		return resolve_base(decl_info.typedef.base);
+	}
 	Type_Specifier :: enum {
 		Void;
 		Char;
@@ -151,12 +153,13 @@ resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 		info.composite = decl_info._struct;
 	}
 
+
 	return info;
 }
 
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
-resolve_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
+resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
 	if !decl || !declarator return null;
 
 	resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
@@ -470,7 +473,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			assert(found);
 			for decl.(*Node_Decl).declarators {
 				if it.declarator_type == Node_Function_Declarator {
-					ret_type := resolve_decl(decl.(*Node_Decl), it);
+					ret_type := resolve_decl(tc, decl.(*Node_Decl), it);
 					expr.(*Node_Call).resolved_type = ret_type;
 					return ret_type, true;
 				}
@@ -499,9 +502,9 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			for decl.declarators {
 				print("TYPECHECKING DECLARATOR: %\n", it.*);
 				print("TYPECHECKING INIT: %\n", it.init.*);
-				lhs := resolve_decl(decl, it);
-				rhs := resolve_initializer(tc, lhs, it.init);
-				it.resolved_type = rhs;
+				lhs := resolve_decl(tc, decl, it);
+				it.resolved_type = lhs;
+				resolve_initializer(tc, lhs, it.init);
 				push_decl(tc, decl.base, it);
 			}
 	}
@@ -511,7 +514,6 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 	resolved := New(Resolved_Type);
 	if !init {
 		resolved.* = target.*;
-		assert(resolved.size_in_bytes > 0);
 		return resolved;
 	}
 
@@ -563,21 +565,10 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		pop_scope(tc);
 	} else {
 		for declarator: decl.declarators {
-			decl_type := resolve_decl(decl, declarator);
+			decl_type := resolve_decl(tc, decl, declarator);
 			print("typechecking: %\n", identifier_from_declarator(declarator));
-			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-				expr_type, valid := resolve_expr(tc, declarator.init.(*Node_Scalar_Initializer).expr);
-				if !valid || !can_coerce_to(decl_type, expr_type) {
-					print("Incompatible types");
-				} else {
-					declarator.resolved_type = decl_type;
-					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
-				}
-			} else if declarator.init && declarator.init.initializer_type == Node_Designated_Initializer {
-
-			} else {
-				declarator.resolved_type = decl_type;
-			}
+			declarator.resolved_type = decl_type;
+			resolve_initializer(tc, decl_type, declarator.init);
 		}
 	}
 }

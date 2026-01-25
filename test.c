@@ -3,13 +3,18 @@
 
 //#define DO_TEST
 
+typedef int A;
 
 int main() {
-	int b[2][2] = {
-		{1, 2},
-		{3, 4},
-	};
-	printf("b[0] = %d, b[1] = %d", b[0][0], b[1][1]);
+	// int *a[2] = {
+	// 	malloc(4),
+	// 	malloc(4),
+	// };
+	// *a[0] = 10;
+	// *a[1] = 10;
+	A a = 5;
+	printf("a is: %d", a);
+	// printf("%d\n", a);
 }
 
 #if defined(DO_TEST)

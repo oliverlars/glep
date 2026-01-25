@@ -110,6 +110,7 @@ Node_Decl_Info :: struct {
 	reference: bool;
 	atomic: *Node_Decl_Info;
 	declarators: [..]*Node_Declarator;
+	typedef: *Node_Decl;
 }
 
 Node_Composite :: struct {
@@ -1041,6 +1042,8 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 			} else {
 				_, info._struct = table_find(*p.structs, current(p).view);
 				_, info._enum   = table_find(*p.enums, current(p).view);
+				_, typedef_decl := table_find(*p.typedefs, current(p).view);
+				info.typedef = typedef_decl;
 				if info._enum || info._struct {
 					info.reference = true;
 				} else {
@@ -1049,9 +1052,12 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 				skip(p);
 			}
 		} else {
+			// Is this even possible to enter here? Idk
 			array_add(*info.qualifiers, current(p).view);
 			_, info._struct = table_find(*p.structs, current(p).view);
 			_, info._enum   = table_find(*p.enums, current(p).view);
+			found, typedef_decl := table_find(*p.typedefs, current(p).view);
+			info.typedef = typedef_decl;
 			skip(p);
 		}
 	}
