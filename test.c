@@ -5,8 +5,11 @@
 
 
 int main() {
-	int b[2] = {1, 2};
-	printf("b[0] = %d, b[1] = %d", b[0], b[1]);
+	int b[2][2] = {
+		{1, 2},
+		{3, 4},
+	};
+	printf("b[0] = %d, b[1] = %d", b[0][0], b[1][1]);
 }
 
 #if defined(DO_TEST)

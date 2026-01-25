@@ -139,6 +139,28 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 					compile_lvalue(compiler, expr.(*Node_Unary).expr);
 					emit(compiler, "ldr x%, [x%]", compiler.register, compiler.register);
 			}
+		case Node_Array_Access;
+			array_access := expr.(*Node_Array_Access);
+			
+			compile_expr(compiler, array_access.offset);
+			offset_register := compiler.register;
+			
+			compiler.register += 1;
+			base_register := compiler.register;
+			compile_lvalue(compiler, array_access.left);
+			
+			compiler.register += 1;
+			scale_register := compiler.register;
+			
+			bytes_per_element := expr.resolved_type.size_in_bytes;
+			
+			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
+			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
+			emit(compiler, "add x%, x%, x%", base_register, base_register, offset_register);
+			
+			compiler.register -= 1;
+			compiler.register -= 1;
+			emit(compiler, "mov x%, x%", compiler.register, base_register);
 	}
 }
 
@@ -205,7 +227,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			offset_register := compiler.register;
 			
 			compiler.register += 1;
-			lvalue_register := compiler.register;
+			base_register := compiler.register;
 			compile_lvalue(compiler, array_access.left);
 
 			compiler.register += 1;
@@ -216,12 +238,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
 			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
-			emit(compiler, "add x%, x%, x%", lvalue_register, lvalue_register, offset_register);
+			emit(compiler, "add x%, x%, x%", base_register, base_register, offset_register);
 
 			compiler.register -= 1;
 			compiler.register -= 1;
 			
-			emit(compiler, "ldr %, [x%]", register(compiler.register, array_access.resolved_type), lvalue_register);
+			emit(compiler, "ldr %, [x%]", register(compiler.register, array_access.resolved_type), base_register);
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
 			t := expr.resolved_type;
