@@ -212,9 +212,16 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 	resolved: *Resolved_Type;
 	if a.kind == .Floating || b.kind == .Floating {
 		resolved = New(Resolved_Type);
-		if a.kind != .Floating then resolved.* = b.*;
-		if b.kind != .Floating then resolved.* = a.*;
-		resolved.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
+		if a.kind != .Floating {
+			resolved.* = b.*;
+		} else if b.kind != .Floating {
+			resolved.* = a.*;
+		} else {
+			// Both are floating point, pick one side then pick the larger
+			// size of the two, incase one is double
+			resolved.* = a.*;
+			resolved.size_in_bytes = max(a.size_in_bytes, b.size_in_bytes);
+		}
 	} else if a.kind == .Integral && b.kind == .Integral {
 		resolved = New(Resolved_Type);
 		resolved.* = a.*;

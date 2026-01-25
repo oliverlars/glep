@@ -300,7 +300,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					}
 				}
 			} else if source.kind == .Floating && target.kind == .Floating {
-				emit(compiler, "fcvt %, %", dst, src);
+				if target.size_in_bytes > source.size_in_bytes {
+					emit(compiler, "fcvt %, %", dst, src);
+				}
 			}
 		case Node_Char;
 			value := 0;
@@ -385,6 +387,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 		case Node_Return;
 			compile_expr(compiler, stmt.(*Node_Return).expr);
 			t := stmt.(*Node_Return).expr.resolved_type;
+			print("RETURN TYPE: %\n", t.*);
 			if t.kind == .Floating {
 				emit(compiler, "fmov d0, d%", compiler.register);
 			} else {
