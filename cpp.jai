@@ -536,7 +536,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 	dst_tokens: [..]Token;
 
 	skip_line :: (cpp: *Preprocessor, src_tokens: [..]Token) {
-		while current(cpp, src_tokens).type != .Newline {
+		while cpp.at < src_tokens.count && current(cpp, src_tokens).type != .Newline {
 			skip(cpp, src_tokens);
 		}
 	}

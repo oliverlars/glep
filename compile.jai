@@ -198,6 +198,30 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "str %, [x%]", src, compiler.register);
 			}
 			compiler.register -= 1;
+		case Node_Array_Access;
+			array_access := expr.(*Node_Array_Access);
+
+			compile_expr(compiler, array_access.offset);
+			offset_register := compiler.register;
+			
+			compiler.register += 1;
+			lvalue_register := compiler.register;
+			compile_lvalue(compiler, array_access.left);
+
+			compiler.register += 1;
+			scale_register := compiler.register;
+			
+
+			bytes_per_element := array_access.resolved_type.size_in_bytes;
+
+			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
+			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
+			emit(compiler, "add x%, x%, x%", lvalue_register, lvalue_register, offset_register);
+
+			compiler.register -= 1;
+			compiler.register -= 1;
+			
+			emit(compiler, "ldr %, [x%]", register(compiler.register, array_access.resolved_type), lvalue_register);
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
 			t := expr.resolved_type;
@@ -375,6 +399,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	}
 }
 
+compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, stack_offset: int) -> int {
+	if !init return stack_offset;
+	if init.initializer_type == Node_Scalar_Initializer {
+		expr := init.(*Node_Scalar_Initializer).expr;
+		compile_expr(compiler, expr);
+		emit(compiler, "str %, [sp, #%]", register(compiler.register, expr.resolved_type), stack_offset);
+		return stack_offset + expr.resolved_type.size_in_bytes;
+	} else {
+
+		for init.(*Node_Designated_Initializer).designations {
+			stack_offset = compile_initializer(compiler, it.expr, stack_offset);
+		}
+	}
+	return stack_offset;
+}
+
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	if !stmt return;
 	if stmt.statement_type == {
@@ -404,12 +444,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 				if it.resolved_type {
 					stack_slot = push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
 				}
-				if it.init {
-					if it.init.initializer_type == Node_Scalar_Initializer {
-						compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
-						emit(compiler, "str %, [sp, #%]", register(compiler.register, it.resolved_type), stack_slot.offset);
-					}
-				}
+				compile_initializer(compiler, it.init, stack_slot.offset);
 			}
 	}
 }

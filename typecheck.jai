@@ -7,6 +7,7 @@ Resolved_Type :: struct {
 		Array;
 	};
 
+	array_count: int;
 	size_in_bytes: int;
 	alignment: int;
 	unsigned: bool;
@@ -69,10 +70,10 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 		}
 		scope_index -= 1;
 	}
-return false, .{};
+	return false, .{};
 }
 
-base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
+resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 
 	Type_Specifier :: enum {
 		Void;
@@ -155,13 +156,13 @@ base_type_info :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
-type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
+resolve_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
 	if !decl || !declarator return null;
 
-	declarator_type_info :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
+	resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
 		if !base || !declarator return base;
 
-		inner := declarator_type_info(base, declarator.inner);
+		inner := resolve_declarator(base, declarator.inner);
 		if !inner return base;
 
 		result: *Resolved_Type;
@@ -183,9 +184,8 @@ type_from_decl :: (decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_
 		return result;
 	}
 
-	base_info := base_type_info(decl.base);
-
-	base_info = declarator_type_info(base_info, declarator);
+	base_info := resolve_base(decl.base);
+	base_info = resolve_declarator(base_info, declarator);
 
 	return base_info;
 }
@@ -202,6 +202,7 @@ types_equal :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
 	result &= a.composite == b.composite;
 	result &= a.size_in_bytes == b.size_in_bytes;
 	result &= a.unsigned == b.unsigned;
+	result &= a.array_count == b.array_count;
 	result &= inner_equal;
 	return result;
 }
@@ -247,7 +248,7 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 		size_number := New(Node_Number);
 		size_number.is = .Decimal;
 		size_number.as_u64 = xx size_in_bytes;
-		size_number.resolved_type = type_info_from_number(size_number);
+		size_number.resolved_type = resolve_number(size_number);
 
 		scale.resolved_type.* = size_number.resolved_type.*;
 
@@ -262,6 +263,24 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 		}
 	}
 
+	insert_divide_by_size :: (at: *Node_Binary, size_in_bytes: int) {
+		div := New(Node_Binary);
+		div.op.view = "/";
+		div.op.type = .ForwardSlash;
+		div.resolved_type = New(Resolved_Type);
+
+		size_number := New(Node_Number);
+		size_number.is = .Decimal;
+		size_number.as_u64 = xx size_in_bytes;
+		size_number.resolved_type = resolve_number(size_number);
+
+		div.resolved_type.* = size_number.resolved_type.*;
+
+		div.left = at.left;
+		div.right = size_number;
+		at.left = div;
+	}
+
 	resolved: *Resolved_Type;
 	if left.kind == .Pointer && right.kind == .Integral {
 		insert_scale(binary, .Right, left.inner.size_in_bytes);
@@ -270,12 +289,12 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 		insert_scale(binary, .Left, right.inner.size_in_bytes);
 		resolved = right;
 	} else if subtract && left.kind == .Pointer && right.kind == .Pointer {
-		if subtract {
-			resolved = New(Resolved_Type);
-			resolved.kind = .Integral;
-			resolved.size_in_bytes = 8;
-			resolved.unsigned = false;
-		}
+		assert(left.inner.size_in_bytes == right.inner.size_in_bytes);
+		insert_divide_by_size(binary, left.inner.size_in_bytes);
+		resolved = New(Resolved_Type);
+		resolved.kind = .Integral;
+		resolved.size_in_bytes = 8;
+		resolved.unsigned = false;
 	}
 	return resolved;
 }
@@ -313,7 +332,7 @@ split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 	return number, suffix;
 }
 
-type_info_from_number :: (number_node: *Node_Number) -> *Resolved_Type {
+resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	info := New(Resolved_Type);
 	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
 	if number_node.is == {
@@ -353,13 +372,13 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 	return c;
 }
 
-type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
+resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
-			left_info := type_info_from_expr(tc, assign.left);
-			right_info := type_info_from_expr(tc, assign.right);
+			left_info := resolve_expr(tc, assign.left);
+			right_info := resolve_expr(tc, assign.right);
 			
 			if !can_coerce_to(left_info, right_info) {
 				return null, false;
@@ -367,7 +386,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			
 			if !types_equal(right_info, left_info) {
 				assign.right = insert_cast(tc, assign.right, left_info);
-				assign.right.resolved_type = type_info_from_expr(tc, assign.right);
+				assign.right.resolved_type = resolve_expr(tc, assign.right);
 			} else {
 				assign.right.resolved_type = left_info;
 			}
@@ -380,8 +399,8 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			return left_info, true;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
-			left_info := type_info_from_expr(tc, binary.left);
-			right_info := type_info_from_expr(tc, binary.right);
+			left_info := resolve_expr(tc, binary.left);
+			right_info := resolve_expr(tc, binary.right);
 
 			if left_info.kind == .Pointer || right_info.kind == .Pointer {
 				resolved_type := pointer_arithmetic_type(binary, left_info, right_info);
@@ -402,9 +421,14 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			binary.resolved_type = resolved_type;
 			return resolved_type, true;
 		case Node_Number;
-			info := type_info_from_number(expr.(*Node_Number));
+			info := resolve_number(expr.(*Node_Number));
 			expr.(*Node_Number).resolved_type = info;
 			return info, true;
+		case Node_Array_Access;
+			array_access := expr.(*Node_Array_Access);
+			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
+			array_access.offset.resolved_type = resolve_expr(tc, array_access.offset);
+			return array_access.left.resolved_type.inner, true;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
@@ -412,7 +436,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			expr.(*Node_Identifier).resolved_type = decl.declarator.resolved_type;
 			return decl.declarator.resolved_type, true;
 		case Node_Unary;
-			info := type_info_from_expr(tc, expr.(*Node_Unary).expr);
+			info := resolve_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
 				case .Ampersand;
 					inner := info;
@@ -425,8 +449,8 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			}
 			return info, info.kind != .Composite;
 		case Node_Cast;
-			source := type_info_from_expr(tc, expr.(*Node_Cast).expr);
-			target := base_type_info(expr.(*Node_Cast).base);
+			source := resolve_expr(tc, expr.(*Node_Cast).expr);
+			target := resolve_base(expr.(*Node_Cast).base);
 			expr.(*Node_Cast).resolved_type = target;
 			expr.(*Node_Cast).expr.resolved_type = source;
 			return target, can_coerce_to(target, source);
@@ -437,7 +461,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			return info, true;
 		case Node_Call;
 			for expr.(*Node_Call).args {
-				arg_type := type_info_from_expr(tc, it);
+				arg_type := resolve_expr(tc, it);
 				it.resolved_type = arg_type;
 			}
 			name := expr.(*Node_Call).id.(*Node_Identifier).id.view;
@@ -446,7 +470,7 @@ type_info_from_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, 
 			assert(found);
 			for decl.(*Node_Decl).declarators {
 				if it.declarator_type == Node_Function_Declarator {
-					ret_type := type_from_decl(decl.(*Node_Decl), it);
+					ret_type := resolve_decl(decl.(*Node_Decl), it);
 					expr.(*Node_Call).resolved_type = ret_type;
 					return ret_type, true;
 				}
@@ -466,34 +490,60 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			}
 			pop_scope(tc);
 		case Node_Expr_Statement;
-			type_info_from_expr(tc, stmt.(*Node_Expr_Statement).expr);
+			resolve_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
-			type_info_from_expr(tc, stmt.(*Node_Return).expr);
+			resolve_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
+			print("TYPECHECKING DECL: %\n", decl.*);
 			for decl.declarators {
-				rhs: *Resolved_Type;
-				init_expr: *Node_Expr;
-				if it.init.initializer_type == Node_Scalar_Initializer {
-					init_expr = it.init.(*Node_Scalar_Initializer).expr;
-					rhs = type_info_from_expr(tc, init_expr);
-				}
-				lhs := type_from_decl(decl, it);
-				
-				if !can_coerce_to(lhs, rhs) {
-					print("Cant coerce in decl!!!\n");
-				}
-				
-				if !types_equal(rhs, lhs) {
-					c := insert_cast(tc, init_expr, lhs);
-					it.init.(*Node_Scalar_Initializer).expr = c;
-				}
-				it.resolved_type = lhs;
-				assert(it.init.(*Node_Scalar_Initializer).expr.resolved_type != null);
-				assert(it.resolved_type != null);
+				print("TYPECHECKING DECLARATOR: %\n", it.*);
+				print("TYPECHECKING INIT: %\n", it.init.*);
+				lhs := resolve_decl(decl, it);
+				rhs := resolve_initializer(tc, lhs, it.init);
+				it.resolved_type = rhs;
 				push_decl(tc, decl.base, it);
 			}
 	}
+}
+
+resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
+	resolved := New(Resolved_Type);
+	if !init {
+		resolved.* = target.*;
+		assert(resolved.size_in_bytes > 0);
+		return resolved;
+	}
+
+	if target.kind == .Composite {
+		// TODO(Oliver): Handle designations properly for structs
+		// .a[10].b[1].c = 5,
+	} else if target.kind == .Array {
+		assert(init.initializer_type == Node_Designated_Initializer);
+		for init.(*Node_Designated_Initializer).designations {
+			source := resolve_initializer(tc, target.inner, it.expr);
+		}
+		resolved.* = target.*;
+	} else {
+		// Scalar
+		assert(init.initializer_type == Node_Scalar_Initializer);
+		scalar := init.(*Node_Scalar_Initializer);
+		source := resolve_expr(tc, scalar.expr);
+		if !can_coerce_to(target, source) {
+			print("Uh oh\n");
+			return null;
+		}
+
+		if !types_equal(target, source) {
+			scalar.expr = insert_cast(tc, scalar.expr, target);
+			scalar.expr.resolved_type = resolve_expr(tc, scalar.expr);
+		} else {
+			scalar.expr.resolved_type = source;
+			resolved = source;
+		}
+	}
+
+	return resolved;
 }
 
 typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
@@ -503,22 +553,28 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		push_scope(tc);
 		for function.params {
 			typecheck_decl(tc, it);
-			push_decl(tc, it.base, it.declarators[0]);
+			// 'void' is the only type you can have as a function
+			// parameter without a declarator
+			if it.base.specifiers[0] != "void" {
+				push_decl(tc, it.base, it.declarators[0]);
+			}
 		}
 		typecheck_statement(tc, decl.body);
 		pop_scope(tc);
 	} else {
 		for declarator: decl.declarators {
-			decl_type := type_from_decl(decl, declarator);
+			decl_type := resolve_decl(decl, declarator);
 			print("typechecking: %\n", identifier_from_declarator(declarator));
 			if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-				expr_type, valid := type_info_from_expr(tc, declarator.init.(*Node_Scalar_Initializer).expr);
+				expr_type, valid := resolve_expr(tc, declarator.init.(*Node_Scalar_Initializer).expr);
 				if !valid || !can_coerce_to(decl_type, expr_type) {
 					print("Incompatible types");
 				} else {
 					declarator.resolved_type = decl_type;
 					declarator.init.(*Node_Scalar_Initializer).expr.resolved_type = expr_type;
 				}
+			} else if declarator.init && declarator.init.initializer_type == Node_Designated_Initializer {
+
 			} else {
 				declarator.resolved_type = decl_type;
 			}
