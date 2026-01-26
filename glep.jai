@@ -1693,8 +1693,6 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			skip(p);
 			declarator = parse_declarator(p);
 			expect(p, .RightParenthesis);
-		} else {
-			a := 5;
 		}
 	} else if current(p).type == .Identifier {
 		declarator = New(Node_Identifier_Declarator);
@@ -1969,6 +1967,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		declarator := parse_declarator(p);
 		name := identifier_from_declarator(declarator);
 		if name != "" {
+			if name == "test" {
+				a := 5;
+			}
 			table_add(*p.ordinary, name, decl);
 		}
 		if declarator {

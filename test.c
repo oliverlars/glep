@@ -1,21 +1,18 @@
+#include <stdlib.h>
 #include <stdio.h>
 
+int main() {
+	int *a[2] = {
+		malloc(4),
+		malloc(4),
+	};
+
+	*a[0] = 10;
+	*a[1] = 10;
+	printf("a: %d, b: %d\n", *a[0], *a[1]);
+}
 
 //#define DO_TEST
-
-typedef int A;
-
-int main() {
-	// int *a[2] = {
-	// 	malloc(4),
-	// 	malloc(4),
-	// };
-	// *a[0] = 10;
-	// *a[1] = 10;
-	A a = 5;
-	printf("a is: %d", a);
-	// printf("%d\n", a);
-}
 
 #if defined(DO_TEST)
 int main(void) {

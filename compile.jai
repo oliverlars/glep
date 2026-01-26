@@ -152,7 +152,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register += 1;
 			scale_register := compiler.register;
 			
-			bytes_per_element := expr.resolved_type.size_in_bytes;
+			size_in_bytes := array_access.left.resolved_type.size_in_bytes;
+			count := array_access.left.resolved_type.array_count;
+			bytes_per_element := size_in_bytes / count;
 			
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
 			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
@@ -233,8 +235,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register += 1;
 			scale_register := compiler.register;
 			
-
-			bytes_per_element := array_access.resolved_type.size_in_bytes;
+			size_in_bytes := array_access.left.resolved_type.size_in_bytes;
+			count := array_access.left.resolved_type.array_count;
+			bytes_per_element := size_in_bytes / count;
 
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
 			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
@@ -243,7 +246,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 			compiler.register -= 1;
 			
-			emit(compiler, "ldr %, [x%]", register(compiler.register, array_access.resolved_type), base_register);
+			emit(compiler, "ldr %, [x%]", register(compiler.register, array_access.left.resolved_type.inner), base_register);
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
 			t := expr.resolved_type;
@@ -362,12 +365,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			_, decl := table_find(*compiler.ordinary, name);
 			param_count := 0;
 			variadic := false;
-			for decl.(*Node_Decl).declarators {
-				if it.declarator_type == Node_Function_Declarator {
-					param_count = it.(*Node_Function_Declarator).params.count;
-					variadic = it.(*Node_Function_Declarator).variadic;
-				}
-			}
+			function := function_declarator(decl.(*Node_Decl).declarators[0]);
+			param_count = function.params.count;
+			variadic = function.variadic;
 			variadic_stack_register := compiler.register;
 			vararg_offset := 0;
 			reg_float := 0;
@@ -380,7 +380,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 							emit(compiler, "fcvt d%, %", compiler.register, register(compiler.register, it.resolved_type));
 						}
 						emit(compiler, "str d%, [sp, #%]", compiler.register, vararg_offset);
-					} else if it.resolved_type.kind == .Integral {
+					} else if it.resolved_type.kind == .Integral || it.resolved_type.kind == .Pointer {
 						emit(compiler, "str x%, [sp, #%]", compiler.register, vararg_offset);
 					} else {
 						assert(false);

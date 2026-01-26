@@ -163,28 +163,28 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 	if !decl || !declarator return null;
 
 	resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
-		if !base || !declarator return base;
+		if !declarator return base;
 
-		inner := resolve_declarator(base, declarator.inner);
-		if !inner return base;
-
-		result: *Resolved_Type;
 		if declarator.declarator_type == {
 			case Node_Pointer_Declarator;
-				result = New(Resolved_Type);
-				result.kind = .Pointer;
-				result.size_in_bytes = 8;
-				result.inner = inner;
+				ptr := New(Resolved_Type);
+				ptr.kind = .Pointer;
+				ptr.size_in_bytes = 8;
+				ptr.inner = base;
+				return resolve_declarator(ptr, declarator.inner);
 			case Node_Array_Declarator;
-				result = New(Resolved_Type);
-				result.kind = .Array;
-				result.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
-				result.inner = inner;
-			case;
-				result = inner;
+				inner := resolve_declarator(base, declarator.inner);
+				array := New(Resolved_Type);
+				array.kind = .Array;
+				array.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
+				array.inner = inner;
+				array.array_count = declarator.(*Node_Array_Declarator).count;
+				return array;
+			case Node_Identifier_Declarator;
+				return base;
 		}
-		
-		return result;
+
+		return base;
 	}
 
 	base_info := resolve_base(decl.base);
@@ -389,7 +389,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			
 			if !types_equal(right_info, left_info) {
 				assign.right = insert_cast(tc, assign.right, left_info);
-				assign.right.resolved_type = resolve_expr(tc, assign.right);
+				assign.right.resolved_type = left_info;
 			} else {
 				assign.right.resolved_type = left_info;
 			}
@@ -468,16 +468,13 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				it.resolved_type = arg_type;
 			}
 			name := expr.(*Node_Call).id.(*Node_Identifier).id.view;
-			print("TYPECHECKING: %\n", name);
+			print("\nTYPECHECKING CALL: %\n", name);
 			found, decl := table_find(*tc.ordinary, name);
 			assert(found);
-			for decl.(*Node_Decl).declarators {
-				if it.declarator_type == Node_Function_Declarator {
-					ret_type := resolve_decl(tc, decl.(*Node_Decl), it);
-					expr.(*Node_Call).resolved_type = ret_type;
-					return ret_type, true;
-				}
-			}
+			function := function_declarator(decl.(*Node_Decl).declarators[0]);
+			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
+			expr.(*Node_Call).resolved_type = ret_type;
+			return ret_type, true;
 	}
 
 	return null, false;
@@ -516,18 +513,14 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 		resolved.* = target.*;
 		return resolved;
 	}
-
-	if target.kind == .Composite {
-		// TODO(Oliver): Handle designations properly for structs
-		// .a[10].b[1].c = 5,
-	} else if target.kind == .Array {
-		assert(init.initializer_type == Node_Designated_Initializer);
+	if init.initializer_type == Node_Designated_Initializer {
 		for init.(*Node_Designated_Initializer).designations {
 			source := resolve_initializer(tc, target.inner, it.expr);
 		}
 		resolved.* = target.*;
 	} else {
 		// Scalar
+		print("INITIALIZER TYPE: %", init.initializer_type);
 		assert(init.initializer_type == Node_Scalar_Initializer);
 		scalar := init.(*Node_Scalar_Initializer);
 		source := resolve_expr(tc, scalar.expr);
@@ -538,10 +531,10 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 
 		if !types_equal(target, source) {
 			scalar.expr = insert_cast(tc, scalar.expr, target);
-			scalar.expr.resolved_type = resolve_expr(tc, scalar.expr);
+			scalar.expr.resolved_type = target;
 		} else {
-			scalar.expr.resolved_type = source;
-			resolved = source;
+			scalar.expr.resolved_type = target;
+			resolved = target;
 		}
 	}
 
@@ -566,7 +559,8 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	} else {
 		for declarator: decl.declarators {
 			decl_type := resolve_decl(tc, decl, declarator);
-			print("typechecking: %\n", identifier_from_declarator(declarator));
+			name := identifier_from_declarator(declarator);
+			print("typechecking: %\n", name);
 			declarator.resolved_type = decl_type;
 			resolve_initializer(tc, decl_type, declarator.init);
 		}
