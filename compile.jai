@@ -163,7 +163,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 			compiler.register -= 1;
 			emit(compiler, "mov x%, x%", compiler.register, base_register);
-	}
+	}	
 }
 
 register :: (reg: int, resolved_type: *Resolved_Type) -> string {
@@ -533,12 +533,9 @@ stack_space_needed_for_variadic_functions :: (compiler: *Compiler, block: *Node_
 				assert(found);
 				param_count := 0;
 				variadic := false;
-				for decl.(*Node_Decl).declarators {
-					if it.declarator_type == Node_Function_Declarator {
-						param_count = it.(*Node_Function_Declarator).params.count;
-						variadic = it.(*Node_Function_Declarator).variadic;
-					}
-				}
+				function := function_declarator(decl.(*Node_Decl).declarators[0]);
+				param_count = function.params.count;
+				variadic = function.variadic;
 				if variadic {
 					stack_size += (call.args.count - param_count) * 8;
 					print("Variadic stack size: %\n", (call.args.count - param_count) * 8);
@@ -614,7 +611,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if it.declarators[0].resolved_type.kind == .Integral {
+					if name == "a" {
+						a := 5;
+					}
+					if it.declarators[0].resolved_type.kind == .Integral ||
+					   it.declarators[0].resolved_type.kind == .Pointer {
 						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
 					} else if it.declarators[0].resolved_type.kind == .Floating {
 						if it.declarators[0].resolved_type.size_in_bytes == 8 {
