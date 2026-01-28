@@ -472,7 +472,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			assert(left_type.composite.type == Node_Struct);
 			for left_type.composite.(*Node_Struct).members {
 				for declarator: it.declarators {
-					if identifier_from_declarator(declarator) {
+					if id == identifier_from_declarator(declarator) {
 						rt := resolve_decl(tc, it, declarator);
 						member_access.resolved_type = rt;
 						return member_access.resolved_type, true;

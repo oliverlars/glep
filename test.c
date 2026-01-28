@@ -5,15 +5,22 @@
 
 int main() {
 
+	struct B {
+		int x;
+		int y;
+		int z;
+	};
 	struct A { 
 		int a;
 		int b;
 		int c;
+		struct B the_other;
 	};
 
 	struct A adfadf = {};
 	adfadf.b = 10;
-	printf("%d\n", adfadf.b);
+	adfadf.the_other.x = 10;
+	printf("%d\n", adfadf.the_other.x);
 }
 
 //#define DO_TEST
