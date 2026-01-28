@@ -153,7 +153,6 @@ resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 		info.composite = decl_info._struct;
 	}
 
-
 	return info;
 }
 
@@ -189,6 +188,40 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 
 	base_info := resolve_base(decl.base);
 	base_info = resolve_declarator(base_info, declarator);
+
+	padding_decl :: (size_in_bytes: int) -> *Node_Decl {
+		padding := New(Node_Decl);
+		array_add(*padding.base.qualifiers, "char");
+		declarator := New(Node_Array_Declarator);
+		declarator.count = size_in_bytes / 8;
+		declarator.inner = New(Node_Identifier_Declarator);
+		// HACK(Oliver): the name isnt unique
+		declarator.inner.(*Node_Identifier_Declarator).name = "padding";
+
+		array_add(*padding.base.declarators, declarator);
+
+		return padding;
+	}
+
+	if base_info.composite && base_info.composite.type == Node_Struct {
+		_struct := base_info.composite.(*Node_Struct);
+		offset := 0;
+		for member_decl, member_it: _struct.members {
+			for member_declarator: member_decl.declarators {
+				member_type := resolve_decl(tc, member_decl, member_declarator);
+				if offset % member_type.size_in_bytes != 0 {
+					size := member_type.size_in_bytes;
+					bytes_to_pad := (size - (offset % size)) % size;
+					array_insert_at(*_struct.members, padding_decl(bytes_to_pad), member_it);
+					member_it += 1;
+					offset += bytes_to_pad;
+				}
+				offset += member_type.size_in_bytes;
+			}
+		}
+		base_info.size_in_bytes = (offset + 3) & ~3;
+		print("This struct is % bytes\n", base_info.size_in_bytes);
+	}
 
 	return base_info;
 }

@@ -119,6 +119,7 @@ Node_Composite :: struct {
 
 Node_Struct :: struct {
 	#as using _: Node_Composite;
+	type = #this;
 	name: Token;
 	is_union: bool;
 	members: [..]*Node_Decl;
@@ -131,6 +132,7 @@ Node_Enum_Member :: struct {
 
 Node_Enum :: struct {
 	#as using _:Node_Composite;
+	type = #this;
 	name: Token;
 	members: [..]*Node_Enum_Member;
 }

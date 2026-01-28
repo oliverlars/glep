@@ -1,5 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
+
+// #include <stdlib.h>
+// #include <stdio.h>
 
 
 void augment(int *a) {
@@ -7,23 +8,14 @@ void augment(int *a) {
 }
 
 int main() {
-	int *a[2] = {
-		malloc(4),
-		malloc(4),
+
+	struct A { 
+		char a;
+		int b;
+		char c;
 	};
 
-	*a[0] = 10;
-	*a[1] = 10;
-	augment(a[0]);
-	printf("a[0]: %d, a[1]: %d\n", *a[0], *a[1]);
-
-
-	int b[2][2] = {
-		{1, 2},
-		{3, 4}
-	};
-
-	printf("b[0]: %d, b[1]: %d", b[0][0], b[1][1]);
+	struct A adfadf = {};
 }
 
 //#define DO_TEST
