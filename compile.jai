@@ -163,6 +163,30 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register -= 1;
 			compiler.register -= 1;
 			emit(compiler, "mov x%, x%", compiler.register, base_register);
+		case Node_Member_Access;
+			member_access := expr.(*Node_Member_Access);
+
+			lvalue_register := compiler.register;
+			compile_lvalue(compiler, member_access.left);
+			compiler.register += 1;
+
+
+			left_type := member_access.left.resolved_type;
+			offset := 0;
+			for left_type.composite.(*Node_Struct).members {
+				for declarator: it.declarators {
+					name := identifier_from_declarator(declarator);
+					if name == member_access.right.view {
+						break it;
+					}
+					offset += declarator.resolved_type.size_in_bytes;
+				}
+			}
+
+			emit(compiler, "mov x%, #%", compiler.register, offset);
+			emit(compiler, "add x%, x%, x%", lvalue_register, lvalue_register, compiler.register);
+			emit(compiler, "mov x%, x%", compiler.register, lvalue_register);
+
 	}	
 }
 
@@ -222,7 +246,30 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "str %, [x%]", src, compiler.register);
 			}
 			compiler.register -= 1;
-		case Node_Array_Access;
+		case Node_Member_Access;
+			member_access := expr.(*Node_Member_Access);
+
+			lvalue_register := compiler.register;
+			compile_lvalue(compiler, member_access.left);
+			compiler.register += 1;
+
+
+			left_type := member_access.left.resolved_type;
+			offset := 0;
+			for left_type.composite.(*Node_Struct).members {
+				for declarator: it.declarators {
+					name := identifier_from_declarator(declarator);
+					if name == member_access.right.view {
+						break it;
+					}
+					offset += declarator.resolved_type.size_in_bytes;
+				}
+			}
+
+			emit(compiler, "mov x%, #%", compiler.register, offset);
+			emit(compiler, "add x%, x%, x%", lvalue_register, lvalue_register, compiler.register);
+			emit(compiler, "ldr %, [x%]", register(compiler.register, member_access.resolved_type), lvalue_register);
+		case Node_Array_Access; 
 			array_access := expr.(*Node_Array_Access);
 
 			compile_expr(compiler, array_access.offset);

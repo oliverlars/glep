@@ -189,7 +189,7 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 	base_info := resolve_base(decl.base);
 	base_info = resolve_declarator(base_info, declarator);
 
-	padding_decl :: (size_in_bytes: int) -> *Node_Decl {
+	padding_decl :: (tc: *Type_Checker, size_in_bytes: int) -> *Node_Decl {
 		padding := New(Node_Decl);
 		array_add(*padding.base.qualifiers, "char");
 		declarator := New(Node_Array_Declarator);
@@ -199,7 +199,8 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 		declarator.inner.(*Node_Identifier_Declarator).name = "padding";
 
 		array_add(*padding.base.declarators, declarator);
-
+		declarator.resolved_type = resolve_decl(tc, padding, declarator);
+		
 		return padding;
 	}
 
@@ -212,11 +213,13 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 				if offset % member_type.size_in_bytes != 0 {
 					size := member_type.size_in_bytes;
 					bytes_to_pad := (size - (offset % size)) % size;
-					array_insert_at(*_struct.members, padding_decl(bytes_to_pad), member_it);
+					padding := padding_decl(tc, bytes_to_pad);
+					array_insert_at(*_struct.members, padding, member_it);
 					member_it += 1;
 					offset += bytes_to_pad;
 				}
 				offset += member_type.size_in_bytes;
+				member_declarator.resolved_type = member_type;
 			}
 		}
 		base_info.size_in_bytes = (offset + 3) & ~3;
@@ -460,6 +463,22 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			info := resolve_number(expr.(*Node_Number));
 			expr.(*Node_Number).resolved_type = info;
 			return info, true;
+		case Node_Member_Access;
+			member_access := expr.(*Node_Member_Access);
+			member_access.left.resolved_type = resolve_expr(tc, member_access.left);
+			left_type := member_access.left.resolved_type;
+			id := member_access.right.view;
+			assert(left_type.composite != null);
+			assert(left_type.composite.type == Node_Struct);
+			for left_type.composite.(*Node_Struct).members {
+				for declarator: it.declarators {
+					if identifier_from_declarator(declarator) {
+						rt := resolve_decl(tc, it, declarator);
+						member_access.resolved_type = rt;
+						return member_access.resolved_type, true;
+					}
+				}
+			}
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);

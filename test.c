@@ -1,21 +1,19 @@
 
 // #include <stdlib.h>
-// #include <stdio.h>
+#include <stdio.h>
 
-
-void augment(int *a) {
-	*a = 5;
-}
 
 int main() {
 
 	struct A { 
-		char a;
+		int a;
 		int b;
-		char c;
+		int c;
 	};
 
 	struct A adfadf = {};
+	adfadf.b = 10;
+	printf("%d\n", adfadf.b);
 }
 
 //#define DO_TEST
