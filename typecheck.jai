@@ -482,7 +482,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
-			array_access.offset.resolved_type = resolve_expr(tc, array_access.offset);
+			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
 			return array_access.left.resolved_type.inner, true;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
@@ -567,7 +567,34 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 	}
 	if init.initializer_type == Node_Designated_Initializer {
 		for init.(*Node_Designated_Initializer).designations {
-			source := resolve_initializer(tc, target.inner, it.expr);
+			assert(target.composite != null);
+			_struct := target.composite.(*Node_Struct);
+			type: *Resolved_Type;
+			for designator: it.designators {
+				if designator.designator_type == Node_Field_Designator {
+					field := designator.(*Node_Field_Designator);
+					member_offset := 0;
+					for member: _struct.members {
+						for declarator: member.declarators {
+							member_name := identifier_from_declarator(declarator);
+							if member_name == field.name.view {
+								type = declarator.resolved_type;
+								field.resolved_type = type;
+								field.offset = member_offset;
+								_struct = type.composite.(*Node_Struct);
+								break member;
+							}
+							member_offset += declarator.resolved_type.size_in_bytes;
+						}
+					}
+				} else {
+					array := designator.(*Node_Index_Designator);
+					type = type.inner;
+					array.resolved_type = type;
+					array.offset = type.size_in_bytes * eval_expr(array.index);
+				}
+			}
+			expr_type := resolve_initializer(tc, type, it.expr);
 		}
 		resolved.* = target.*;
 	} else {

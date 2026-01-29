@@ -262,7 +262,7 @@ Node_Member_Access :: struct {
 Node_Array_Access :: struct {
 	#as using node: Node_Expr;
 	left: *Node_Expr;
-	offset: *Node_Expr;
+	index: *Node_Expr;
 	expr_type = #this;
 }
 
@@ -331,6 +331,11 @@ Node_Designator :: struct {
 	#as using node: Node;
 	type = #this;
 	designator_type: Type;
+	resolved_type: *Resolved_Type;
+	// HACK(Oliver): This is a weird hack that lets me determine
+	// what the offset is in the initializer without manually
+	// summing all the members' sizes
+	offset: int;
 }
 
 Node_Field_Designator :: struct {
@@ -342,7 +347,7 @@ Node_Field_Designator :: struct {
 Node_Index_Designator :: struct {
 	#as using _: Node_Designator;
 	designator_type = #this;
-	offset: *Node_Expr;
+	index: *Node_Expr;
 }
 
 Node_Statement :: struct {
@@ -1416,7 +1421,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 		} else if current(p).type == .LeftBracket {
 			skip(p);
 			access := New(Node_Array_Access);
-			access.offset = parse_expr(p);
+			access.index = parse_expr(p);
 			access.left = result;
 			result = access;
 			expect(p, .RightBracket);
@@ -1550,7 +1555,7 @@ print_designation :: (builder: *String_Builder, node: *Node_Designation) {
 				append(builder, it.(*Node_Field_Designator).name.view);
 			case Node_Index_Designator;
 				append(builder, "[");
-				print_expr(builder, it.(*Node_Index_Designator).offset);
+				print_expr(builder, it.(*Node_Index_Designator).index);
 				append(builder, "]");
 		}
 	}
@@ -1669,7 +1674,7 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 	case Node_Array_Access;
 		print_expr(builder, node.(*Node_Array_Access).left);
 		append(builder, "[");
-		print_expr(builder, node.(*Node_Array_Access).offset);
+		print_expr(builder, node.(*Node_Array_Access).index);
 		append(builder, "]");
 	case Node_Member_Access;
 		print_expr(builder, node.(*Node_Member_Access).left);
@@ -1790,7 +1795,7 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 				if current(p).type == .LeftBracket {
 					expect(p, .LeftBracket);
 					index := New(Node_Index_Designator);
-					index.offset = parse_expr(p);
+					index.index = parse_expr(p);
 					expect(p, .RightBracket);
 					array_add(*designation.designators, index);
 				} else if current(p).type == .Period {

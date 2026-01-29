@@ -142,7 +142,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
 			
-			compile_expr(compiler, array_access.offset);
+			compile_expr(compiler, array_access.index);
 			offset_register := compiler.register;
 			
 			compiler.register += 1;
@@ -187,7 +187,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			emit(compiler, "add x%, x%, x%", lvalue_register, lvalue_register, compiler.register);
 			emit(compiler, "mov x%, x%", compiler.register, lvalue_register);
 
-	}	
+	}
 }
 
 register :: (reg: int, resolved_type: *Resolved_Type) -> string {
@@ -272,7 +272,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Array_Access; 
 			array_access := expr.(*Node_Array_Access);
 
-			compile_expr(compiler, array_access.offset);
+			compile_expr(compiler, array_access.index);
 			offset_register := compiler.register;
 			
 			compiler.register += 1;
@@ -478,7 +478,11 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, stack_offs
 	} else {
 
 		for init.(*Node_Designated_Initializer).designations {
-			stack_offset = compile_initializer(compiler, it.expr, stack_offset);
+			designation_offset := 0;
+			for designator: it.designators {
+				designation_offset += designator.offset;
+			}
+			compile_initializer(compiler, it.expr, stack_offset + designation_offset);
 		}
 	}
 	return stack_offset;
