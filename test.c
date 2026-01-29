@@ -2,24 +2,6 @@
 // #include <stdlib.h>
 #include <stdio.h>
 
-struct Other {
-	int x, y, z;
-};
-
-struct Global {
-	int a;
-	int b;
-	int c;
-	int d;
-	struct Other e;
-} global = {
-	.a = 10,
-	.b = 20,
-	.c = 30,
-	.d = 40,
-	.e.x = 10,
-};
-
 
 int main() {
 
@@ -31,18 +13,19 @@ int main() {
 	struct A { 
 		int a;
 		int b;
-		int c;
 		struct B the_other;
+		int c;
 	};
 
 	struct A adfadf = {
-		.a = 5,
-		.b = 6,
+		1,
 		.the_other.x = 23,
+		2,
+		3,
 	};
 	// adfadf.b = 10;
 	// adfadf.the_other.x = 10;
-	printf("%d\n", adfadf.the_other.x);
+	printf("%d %d %d\n", adfadf.a, adfadf.b, adfadf.the_other.x);
 }
 
 //#define DO_TEST

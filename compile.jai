@@ -468,24 +468,27 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	}
 }
 
-compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, stack_offset: int) -> int {
-	if !init return stack_offset;
+compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: int) -> int {
+	if !init return cursor;
+	
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		compile_expr(compiler, expr);
-		emit(compiler, "str %, [sp, #%]", register(compiler.register, expr.resolved_type), stack_offset);
-		return stack_offset + expr.resolved_type.size_in_bytes;
-	} else {
-
-		for init.(*Node_Designated_Initializer).designations {
-			designation_offset := 0;
-			for designator: it.designators {
-				designation_offset += designator.offset;
-			}
-			compile_initializer(compiler, it.expr, stack_offset + designation_offset);
-		}
+		emit(compiler, "str %, [sp, #%]", register(compiler.register, expr.resolved_type), cursor);
+		return cursor + expr.resolved_type.size_in_bytes;
 	}
-	return stack_offset;
+	
+	base := cursor;
+	for init.(*Node_Designated_Initializer).designations {
+		if it.designators.count > 0 {
+			cursor = base;
+			for designator: it.designators {
+				cursor += designator.offset;
+			}
+		}
+		cursor = compile_initializer(compiler, it.expr, cursor);
+	}
+	return cursor;
 }
 
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
