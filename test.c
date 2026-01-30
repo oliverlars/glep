@@ -3,6 +3,17 @@
 #include <stdio.h>
 
 
+struct Foo {
+	int a;
+	int b;
+	int c;
+} foo = {
+	.a = 5,
+	.b = 10,
+	.c = 15,
+};
+
+
 int main() {
 
 	struct B {

@@ -1,3 +1,5 @@
+#import "Sort";
+
 
 Stack_Slot :: struct {
 	name: string;
@@ -210,6 +212,285 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 	}
 	assert(false);
 	return "";
+}
+
+Constant :: union {
+	kind: enum { F64; U64; S64; };
+	as_f64: float64;
+	#overlay(as_f64) as_u64: u64;
+	#overlay(as_f64) as_s64: s64;
+}
+
+operator - :: (v: Constant) -> Constant {
+	if v.kind == {
+		case .S64; return .{ kind = .S64, as_s64 = -v.as_s64 };
+		case .U64; return .{ kind = .U64, as_u64 = 0 - v.as_u64 };
+		case .F64; return .{ kind = .F64, as_f64 = -v.as_f64 };
+	}
+	assert(false);
+	return .{};
+}
+
+operator + :: (v: Constant) -> Constant {
+	return v;
+}
+
+operator ~ :: (v: Constant) -> Constant {
+	if v.kind == {
+		case .S64; return .{ kind = .S64, as_s64 = ~v.as_s64 };
+		case .U64; return .{ kind = .U64, as_u64 = ~v.as_u64 };
+		case; assert(false); return .{};
+	}
+}
+
+operator ! :: (v: Constant) -> Constant {
+	if v.kind == {
+		case .S64; return .{ kind = .S64, as_s64 = (v.as_s64 == 0).(s64) };
+		case .U64; return .{ kind = .U64, as_u64 = (v.as_u64 == 0).(u64) };
+		case .F64; return .{ kind = .S64, as_s64 = (v.as_f64 == 0).(s64) };
+	}
+	assert(false);
+	return .{};
+}
+
+operator + :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .F64, as_f64 = to_f64(a) + to_f64(b) };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) + to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 + b.as_s64 };
+	}
+}
+
+operator - :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .F64, as_f64 = to_f64(a) - to_f64(b) };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) - to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 - b.as_s64 };
+	}
+}
+
+operator * :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .F64, as_f64 = to_f64(a) * to_f64(b) };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) * to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 * b.as_s64 };
+	}
+}
+
+operator / :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .F64, as_f64 = to_f64(a) / to_f64(b) };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) / to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 / b.as_s64 };
+	}
+}
+
+operator % :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) % to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 % b.as_s64 };
+	}
+}
+
+operator << :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 {
+		return .{ kind = .U64, as_u64 = a.as_u64 << to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 << to_u64(b) };
+	}
+}
+
+operator >> :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 {
+		return .{ kind = .U64, as_u64 = a.as_u64 >> to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 >> to_u64(b) };
+	}
+}
+
+operator & :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) & to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 & b.as_s64 };
+	}
+}
+
+operator | :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) | to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 | b.as_s64 };
+	}
+}
+
+operator ^ :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .U64, as_u64 = to_u64(a) ^ to_u64(b) };
+	} else {
+		return .{ kind = .S64, as_s64 = a.as_s64 ^ b.as_s64 };
+	}
+}
+
+operator == :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) == to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) == to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 == b.as_s64 then 1 else 0 };
+	}
+}
+
+operator != :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) != to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) != to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 != b.as_s64 then 1 else 0 };
+	}
+}
+
+operator < :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) < to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) < to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 < b.as_s64 then 1 else 0 };
+	}
+}
+
+operator > :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) > to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) > to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 > b.as_s64 then 1 else 0 };
+	}
+}
+
+operator <= :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) <= to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) <= to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 <= b.as_s64 then 1 else 0 };
+	}
+}
+
+operator >= :: (a: Constant, b: Constant) -> Constant {
+	if a.kind == .F64 || b.kind == .F64 {
+		return .{ kind = .S64, as_s64 = ifx to_f64(a) >= to_f64(b) then 1 else 0 };
+	} else if a.kind == .U64 || b.kind == .U64 {
+		return .{ kind = .S64, as_s64 = ifx to_u64(a) >= to_u64(b) then 1 else 0 };
+	} else {
+		return .{ kind = .S64, as_s64 = ifx a.as_s64 >= b.as_s64 then 1 else 0 };
+	}
+}
+
+to_f64 :: (v: Constant) -> float64 {
+	if v.kind == {
+		case .F64; return v.as_f64;
+		case .S64; return cast(float64) v.as_s64;
+		case .U64; return cast(float64) v.as_u64;
+	}
+}
+
+to_u64 :: (v: Constant) -> u64 {
+	if v.kind == {
+		case .U64; return v.as_u64;
+		case .S64; return cast(u64) v.as_s64;
+		case .F64; return cast(u64) v.as_f64;
+	}
+	assert(false);
+	return 0;
+}
+
+to_s64 :: (v: Constant) -> s64 {
+	if v.kind == {
+		case .S64; return v.as_s64;
+		case .U64; return cast(s64) v.as_u64;
+		case .F64; return cast(s64) v.as_f64;
+	}
+	assert(false);
+	return 0;
+}
+
+convert_constant :: (v: Constant, target: *Resolved_Type) -> Constant {
+	if target.kind == .Floating {
+		return .{ kind = .F64, as_f64 = to_f64(v) };
+	} else if target.unsigned {
+		return .{ kind = .U64, as_u64 = to_u64(v) };
+	} else {
+		return .{ kind = .S64, as_s64 = to_s64(v) };
+	}
+}
+
+eval_constant_expr :: (compiler: *Compiler, expr: *Node_Expr) -> Constant {
+	if !expr return .{};
+	if expr.expr_type == {
+		case Node_Unary;
+			op := expr.(*Node_Unary).op;
+			if op.type == {
+				case .Minus;
+					return -eval_constant_expr(compiler, expr);
+				case .Plus;
+					return ~eval_constant_expr(compiler, expr);
+				case .Bang;
+					return !eval_constant_expr(compiler, expr);
+				case .Tilde;
+					return ~eval_constant_expr(compiler, expr);
+			}
+		case Node_Binary;
+			op := expr.(*Node_Binary).op;
+			left  := eval_constant_expr(compiler, expr.(*Node_Binary).left);
+			right := eval_constant_expr(compiler, expr.(*Node_Binary).right);
+
+			if op.type == {
+				case .Equals;
+				case .Plus;
+					return left + right;
+				case .Minus;
+					return left - right;
+				case .Asterisk;
+					return left * right;
+				case .ForwardSlash;
+					return left / right;
+			}
+		case Node_Number;
+			number := expr.(*Node_Number);
+			if number.kind == .FLOAT  {
+				return .{ kind = .F64, as_f64 = number.as_f64 };
+			} else {
+				return .{ kind = .U64, as_u64 = number.as_u64 };
+			}
+		case Node_Cast;
+			c := expr.(*Node_Cast);
+			return convert_constant(eval_constant_expr(compiler, c.expr), c.resolved_type);
+		case Node_Char;
+			value := 0;
+			for expr.(*Node_Char).token.view {
+				value += it;
+			}
+			return .{ kind = .U64, as_u64 = value.(u64) };
+		case Node_Identifier;
+			// TODO(Oliver): Enums
+			assert(false);
+	}
+	return .{};
 }
 
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
@@ -621,6 +902,7 @@ is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> b
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	emit(compiler, ".globl _main"); // Set _main to be the entry point
 	emit(compiler, ".p2align 2"); // Align to 4 bytes, power of 2: 2^2
+	
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
 			if is_function_definition(decl, declarator) {
@@ -704,6 +986,70 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		}
 	}
 
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor := 0) -> int {
+		if !init return cursor;
+		
+		if init.initializer_type == Node_Scalar_Initializer {
+			expr := init.(*Node_Scalar_Initializer).expr;
+			value := eval_constant_expr(compiler, expr);
+			if expr.resolved_type.kind == .Floating {
+				if expr.resolved_type.size_in_bytes == {
+					case 4;
+						emit(compiler, ".float %", value.as_f64.(float));
+					case 8;
+						emit(compiler, ".double", value.as_f64);
+				}
+			} else if expr.resolved_type.kind == .Integral ||
+					  expr.resolved_type.kind == .Pointer {
+				if expr.resolved_type.size_in_bytes == {
+					case 1;
+						emit(compiler, ".byte %", value.as_u64.(u8));
+					case 2;
+						emit(compiler, ".short %", value.as_u64.(u16));
+					case 4;
+						emit(compiler, ".long %", value.as_u64.(u32));
+					case 8;
+						emit(compiler, ".quad %", value.as_u64.(u64));
+				}
+			}
+			return cursor + expr.resolved_type.size_in_bytes;
+		} else {
+			base := cursor;
+			// NOTE(Oliver): Sorting designations makes the most sense here
+			// because you can specify members out of order which means emitting
+			// globals becomes complex as we cant random access those bytes.
+			// By definition we need to emit in order so sorting is necessary.
+			designation_compare :: (a: *Node_Designation, b: *Node_Designation) -> int {
+				a_offset := 0;
+				b_offset := 0;
+				for a.designators {
+					a_offset += it.offset;
+				}
+
+				for b.designators {
+					b_offset += it.offset;
+				}
+
+				return a_offset - b_offset;
+			}
+			sorted_designations := quick_sort(init.(*Node_Designated_Initializer).designations, designation_compare);
+			for sorted_designations {
+				start := cursor;
+				if it.designators.count > 0 {
+					cursor = base;
+					for designator: it.designators {
+						cursor += designator.offset;
+					}
+				}
+				if cursor - start > 0 {
+					emit(compiler, ".zero %", cursor - start);
+				}
+				cursor = compile_global_initializer(compiler, it.expr, cursor);
+			}
+		}
+		return cursor;
+	}
+
 	for tu.declarations {
 		for declarator: it.declarators {
 			if is_variable_declaration(it, declarator) { 
@@ -713,28 +1059,27 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				if declarator.init &&
 					declarator.init.initializer_type == Node_Scalar_Initializer {
 					init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
+					assert(declarator.resolved_type != null);
+					if declarator.resolved_type.size_in_bytes == {
+						case 1;
+							emit(compiler, ".p2align %", 0);
+							emit(compiler, "_%:", name);
+							emit(compiler, ".byte %", eval_expr(init_expr));
+						case 2;
+							emit(compiler, ".p2align %", 1);
+							emit(compiler, "_%:", name);
+							emit(compiler, ".short %", eval_expr(init_expr));
+						case 4;
+							emit(compiler, ".p2align %", 2);
+							emit(compiler, "_%:", name);
+							emit(compiler, ".long %", eval_expr(init_expr));
+						case 8;
+							emit(compiler, ".p2align %", 3);
+							emit(compiler, "_%:", name);
+							emit(compiler, ".quad %", eval_expr(init_expr));
+					}
 				} else if declarator.init {
-					// TODO(Oliver): handle aggregate initialzirs
-					continue;
-				}
-				assert(declarator.resolved_type != null);
-				if declarator.resolved_type.size_in_bytes == {
-					case 1;
-						emit(compiler, ".p2align %", 0);
-						emit(compiler, "_%:", name);
-						emit(compiler, ".byte %", eval_expr(init_expr));
-					case 2;
-						emit(compiler, ".p2align %", 1);
-						emit(compiler, "_%:", name);
-						emit(compiler, ".short %", eval_expr(init_expr));
-					case 4;
-						emit(compiler, ".p2align %", 2);
-						emit(compiler, "_%:", name);
-						emit(compiler, ".long %", eval_expr(init_expr));
-					case 8;
-						emit(compiler, ".p2align %", 3);
-						emit(compiler, "_%:", name);
-						emit(compiler, ".quad %", eval_expr(init_expr));
+					compile_global_initializer(compiler, declarator.init, 0);
 				}
 			}
 		}

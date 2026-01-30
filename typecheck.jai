@@ -285,7 +285,7 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 		scale.resolved_type = New(Resolved_Type);
 
 		size_number := New(Node_Number);
-		size_number.is = .Decimal;
+		size_number.kind = .INTEGER;
 		size_number.as_u64 = xx size_in_bytes;
 		size_number.resolved_type = resolve_number(size_number);
 
@@ -309,7 +309,7 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 		div.resolved_type = New(Resolved_Type);
 
 		size_number := New(Node_Number);
-		size_number.is = .Decimal;
+		size_number.kind = .INTEGER;
 		size_number.as_u64 = xx size_in_bytes;
 		size_number.resolved_type = resolve_number(size_number);
 
@@ -374,30 +374,29 @@ split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	info := New(Resolved_Type);
 	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
-	if number_node.is == {
-		case .Float;
-			info.kind = .Floating;
-			info.size_in_bytes = 8;
-			if suffix == "f" {
-				info.size_in_bytes = 4;
-			} else {
-				info.size_in_bytes = 8;
-			}
-		case;
-			info.kind = .Integral;
+	if number_node.kind == .FLOAT {
+		info.kind = .Floating;
+		info.size_in_bytes = 8;
+		if suffix == "f" {
 			info.size_in_bytes = 4;
-			if suffix == "ll" {
-				info.size_in_bytes = 8;
-			} else if suffix == "llu" {
-				info.size_in_bytes = 8;
-				info.unsigned = true;
-			} else if suffix == "ull" {
-				info.size_in_bytes = 8;
-				info.unsigned = true;
-			} else if suffix == "u" {
-				info.size_in_bytes = 4;
-				info.unsigned = true;
-			}
+		} else {
+			info.size_in_bytes = 8;
+		}
+	} else {
+		info.kind = .Integral;
+		info.size_in_bytes = 4;
+		if suffix == "ll" {
+			info.size_in_bytes = 8;
+		} else if suffix == "llu" {
+			info.size_in_bytes = 8;
+			info.unsigned = true;
+		} else if suffix == "ull" {
+			info.size_in_bytes = 8;
+			info.unsigned = true;
+		} else if suffix == "u" {
+			info.size_in_bytes = 4;
+			info.unsigned = true;
+		}
 	}
 	return info;
 }

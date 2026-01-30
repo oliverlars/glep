@@ -68,6 +68,15 @@ Token_Type :: enum {
 	Question;
 }
 
+Number_Type :: enum {
+	Invalid;
+	Hexadecimal;
+	Decimal;
+	Binary;
+	Octal;
+	Float;
+}
+
 Token :: struct {
 	view: string;
 	type: Token_Type;
@@ -272,19 +281,10 @@ Node_Identifier :: struct {
 	expr_type = #this;
 }
 
-Number_Type :: enum {
-	Invalid;
-	Hexadecimal;
-	Decimal;
-	Binary;
-	Octal;
-	Float;
-}
-
 Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
-	is:     Number_Type;
+	kind: enum { FLOAT; INTEGER; };
 	as_u64: u64;
 	as_f64: float64;
 	token_with_suffix: Token;
@@ -1458,11 +1458,11 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	if current(p).type == .Number {
 		result = New(Node_Number);
 		token := current(p);
-		result.(*Node_Number).is = token.number_type;
 		result.(*Node_Number).token_with_suffix = token;
-	// HACK(Oliver): This could include apostrophes, remove them
+		// HACK(Oliver): This could include apostrophes, remove them
 		// This will ignore any trailing letters, which is what we want but
 		// might seem confusing
+		result.(*Node_Number).kind = .INTEGER;
 		if token.number_type == {
 			case .Invalid;
 				assert(false);
@@ -1475,6 +1475,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 			case .Hexadecimal;
 				result.(*Node_Number).as_u64 = string_to_int(token.view, 16, u64);
 			case .Float;
+				result.(*Node_Number).kind = .FLOAT;
 				result.(*Node_Number).as_f64 = string_to_float(token.view);
 		}
 		skip(p);
@@ -1534,11 +1535,10 @@ eval_expr :: (node: *Node_Expr) -> int {
 		case .Minus; return -right;
 		}
 	case Node_Number;
-		if node.(*Node_Number).is == {
-			case .Float;
-				return node.(*Node_Number).as_f64.(int);
-			case;
-				return node.(*Node_Number).as_u64.(int);
+		if node.(*Node_Number).kind == .FLOAT {
+			return node.(*Node_Number).as_f64.(int);
+		} else {	
+			return node.(*Node_Number).as_u64.(int);
 		}
 	case;
 		return 0;
@@ -1649,13 +1649,12 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, " : ");
 		print_expr(builder, node.(*Node_Ternary).on_false, precedence_of(.Question));
 	case Node_Number;
-		if node.(*Node_Number).is == {
-			case .Float;
-				f := node.(*Node_Number).as_f64;
-				// NOTE(Oliver): Not using remove zeroes results in some weirdness
-				append(builder, tprint("%", FormatFloat.{value=f, zero_removal=.NO}));
-			case;
-				append(builder, tprint("%", node.(*Node_Number).as_u64));
+		if node.(*Node_Number).kind == .FLOAT {
+			f := node.(*Node_Number).as_f64;
+			// NOTE(Oliver): Not using remove zeroes results in some weirdness
+			append(builder, tprint("%", FormatFloat.{value=f, zero_removal=.NO}));
+		} else {
+			append(builder, tprint("%", node.(*Node_Number).as_u64));
 		}
 	case Node_String;
 		append(builder, sprint("\"%\"", node.(*Node_String).token.view));
