@@ -486,6 +486,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
+			
 			assert(found);
 			expr.(*Node_Identifier).resolved_type = decl.declarator.resolved_type;
 			return decl.declarator.resolved_type, true;
@@ -636,6 +637,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		pop_scope(tc);
 	} else {
 		for declarator: decl.declarators {
+			push_decl(tc, decl.base, declarator);
 			decl_type := resolve_decl(tc, decl, declarator);
 			name := identifier_from_declarator(declarator);
 			print("typechecking: %\n", name);
@@ -646,7 +648,9 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 }
 
 typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) {
+	push_scope(tc);
 	for decl: tu.declarations {
 		typecheck_decl(tc, decl);
 	}
+	pop_scope(tc);
 }

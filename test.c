@@ -16,27 +16,7 @@ struct Foo {
 
 int main() {
 
-	struct B {
-		int x;
-		int y;
-		int z;
-	};
-	struct A { 
-		int a;
-		int b;
-		struct B the_other;
-		int c;
-	};
-
-	struct A adfadf = {
-		1,
-		.the_other.x = 23,
-		2,
-		3,
-	};
-	// adfadf.b = 10;
-	// adfadf.the_other.x = 10;
-	printf("%d %d %d\n", adfadf.a, adfadf.b, adfadf.the_other.x);
+	printf("%d %d %d\n", foo.a, foo.b, foo.c);
 }
 
 //#define DO_TEST
