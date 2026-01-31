@@ -2,21 +2,31 @@
 // #include <stdlib.h>
 #include <stdio.h>
 
+typedef struct {
+	float x, y, z;
+} v3;
 
-struct Foo {
+typedef struct {
 	int a;
-	int b;
-	int c;
-} foo = {
-	.a = 5,
-	.b = 10,
-	.c = 15,
-};
+	float c;
+	v3 v;
+} BigBoy;
 
+BigBoy big_boys[] = {
+	{1e5,  10.0, {1e5+1, 40.8, 81.6} }, 
+	{1e5,  10.0, {-1e5+99, 40.8, 81.6} },
+	{1e5,  10.0, {50, 40.8, 1e5} }, 
+	{1e5,  10.0, {50, 40.8, -1e5+170} },
+	{1e5,  10.0, {50, 1e5, 81.6} },
+	{1e5,  10.0, {50, -1e5+81.6, 81.6} },
+	{10,   10.0, {27, 16.5, 47} },
+	{10,   10.0, {73, 16.5, 78} },
+	{600,  10.0, {50, 681.6-.27, 81.6}},
+};
 
 int main() {
 
-	printf("%d %d %d\n", foo.a, foo.b, foo.c);
+	printf("%d %f %f\n", big_boys[0].a, big_boys[3].c, big_boys[2].v.y);
 }
 
 //#define DO_TEST

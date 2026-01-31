@@ -222,13 +222,13 @@ Constant :: union {
 }
 
 operator - :: (v: Constant) -> Constant {
+	result: Constant = ---;
 	if v.kind == {
-		case .S64; return .{ kind = .S64, as_s64 = -v.as_s64 };
-		case .U64; return .{ kind = .U64, as_u64 = 0 - v.as_u64 };
-		case .F64; return .{ kind = .F64, as_f64 = -v.as_f64 };
+		case .S64; result = .{ kind = .S64, as_s64 = -v.as_s64 };
+		case .U64; result = .{ kind = .U64, as_u64 = 0 - v.as_u64 };
+		case .F64; result = .{ kind = .F64, as_f64 = -v.as_f64 };
 	}
-	assert(false);
-	return .{};
+	return result;
 }
 
 operator + :: (v: Constant) -> Constant {
@@ -443,16 +443,17 @@ eval_constant_expr :: (compiler: *Compiler, expr: *Node_Expr) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
 		case Node_Unary;
-			op := expr.(*Node_Unary).op;
+			unary := expr.(*Node_Unary);
+			op := unary.op;
 			if op.type == {
 				case .Minus;
-					return -eval_constant_expr(compiler, expr);
+					return -eval_constant_expr(compiler, unary.expr);
 				case .Plus;
-					return ~eval_constant_expr(compiler, expr);
+					return ~eval_constant_expr(compiler, unary.expr);
 				case .Bang;
-					return !eval_constant_expr(compiler, expr);
+					return !eval_constant_expr(compiler, unary.expr);
 				case .Tilde;
-					return ~eval_constant_expr(compiler, expr);
+					return ~eval_constant_expr(compiler, unary.expr);
 			}
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
@@ -997,7 +998,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					case 4;
 						emit(compiler, ".float %", value.as_f64.(float));
 					case 8;
-						emit(compiler, ".double", value.as_f64);
+						emit(compiler, ".double %", value.as_f64);
 				}
 			} else if expr.resolved_type.kind == .Integral ||
 					  expr.resolved_type.kind == .Pointer {
@@ -1055,31 +1056,36 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			if is_variable_declaration(it, declarator) { 
 				name := identifier_from_declarator(declarator);
 				emit(compiler, ".globl _%", name);
+				if name == "big_boys" {
+					a := 5;
+				}
 				init_expr: *Node_Expr;
-				if declarator.init &&
-					declarator.init.initializer_type == Node_Scalar_Initializer {
-					init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
-					assert(declarator.resolved_type != null);
-					if declarator.resolved_type.size_in_bytes == {
-						case 1;
-							emit(compiler, ".p2align %", 0);
-							emit(compiler, "_%:", name);
-							emit(compiler, ".byte %", eval_expr(init_expr));
-						case 2;
-							emit(compiler, ".p2align %", 1);
-							emit(compiler, "_%:", name);
-							emit(compiler, ".short %", eval_expr(init_expr));
-						case 4;
-							emit(compiler, ".p2align %", 2);
-							emit(compiler, "_%:", name);
-							emit(compiler, ".long %", eval_expr(init_expr));
-						case 8;
-							emit(compiler, ".p2align %", 3);
-							emit(compiler, "_%:", name);
-							emit(compiler, ".quad %", eval_expr(init_expr));
+				if declarator.init {
+					emit(compiler, "_%:", name);
+					if declarator.init.initializer_type == Node_Scalar_Initializer {
+						init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
+						assert(declarator.resolved_type != null);
+						if declarator.resolved_type.size_in_bytes == {
+							case 1;
+								emit(compiler, ".p2align %", 0);
+								emit(compiler, "_%:", name);
+								emit(compiler, ".byte %", eval_expr(init_expr));
+							case 2;
+								emit(compiler, ".p2align %", 1);
+								emit(compiler, "_%:", name);
+								emit(compiler, ".short %", eval_expr(init_expr));
+							case 4;
+								emit(compiler, ".p2align %", 2);
+								emit(compiler, "_%:", name);
+								emit(compiler, ".long %", eval_expr(init_expr));
+							case 8;
+								emit(compiler, ".p2align %", 3);
+								emit(compiler, "_%:", name);
+								emit(compiler, ".quad %", eval_expr(init_expr));
+						}
+					} else {
+						compile_global_initializer(compiler, declarator.init, 0);
 					}
-				} else if declarator.init {
-					compile_global_initializer(compiler, declarator.init, 0);
 				}
 			}
 		}

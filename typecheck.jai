@@ -559,53 +559,65 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 	}
 }
 
-resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
+type_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: string) -> *Resolved_Type {
+	for member: _struct.members {
+		for member.declarators {
+			member_name := identifier_from_declarator(it);
+			if member_name == name {
+				return it.resolved_type;
+			}
+		}
+	}
+	assert(false);
+	return null;
+}
+
+// TODO(Oliver): This won't work with mixed designations
+// e.g. Foo foo = { .a = 5, 10, .b = 20};
+// where Foo is struct Foo { int c, b, a; };
+// We don't correctly account for what part of the struct we are currently
+// designating
+resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer, index := 0) -> *Resolved_Type, int {
 	resolved := New(Resolved_Type);
 	if !init {
 		resolved.* = target.*;
-		return resolved;
+		return resolved, 0;
 	}
 	if init.initializer_type == Node_Designated_Initializer {
 		for init.(*Node_Designated_Initializer).designations {
-			assert(target.composite != null);
-			_struct := target.composite.(*Node_Struct);
-			type: *Resolved_Type;
-			for designator: it.designators {
-				if designator.designator_type == Node_Field_Designator {
-					field := designator.(*Node_Field_Designator);
-					member_offset := 0;
-					for member: _struct.members {
-						for declarator: member.declarators {
-							member_name := identifier_from_declarator(declarator);
-							if member_name == field.name.view {
-								type = declarator.resolved_type;
-								field.resolved_type = type;
-								field.offset = member_offset;
-								_struct = type.composite.(*Node_Struct);
-								break member;
-							}
-							member_offset += declarator.resolved_type.size_in_bytes;
-						}
+			type := target;
+			if it.designators.count > 0 {
+				for designator: it.designators {
+					if designator.designator_type == Node_Field_Designator {
+						_struct := type.composite.(*Node_Struct);
+						field := designator.(*Node_Field_Designator);
+						member_offset := 0;
+						type = type_from_struct_member(tc, _struct, field.name.view);
+					} else {
+						array := designator.(*Node_Index_Designator);
+						array.offset = type.inner.size_in_bytes * eval_expr(array.index);
+						type = type.inner;
 					}
-				} else {
-					array := designator.(*Node_Index_Designator);
-					type = type.inner;
-					array.resolved_type = type;
-					array.offset = type.size_in_bytes * eval_expr(array.index);
 				}
+				expr_type: *Resolved_Type;
+				expr_type, index = resolve_initializer(tc, type, it.expr, index);
+				it.resolved_type = expr_type;
+			} else {
+				it.resolved_type = resolved;
+				resolved.* = target.*;
+				expr_type, index := resolve_initializer(tc, type, it.expr, index);
 			}
-			expr_type := resolve_initializer(tc, type, it.expr);
 		}
-		resolved.* = target.*;
 	} else {
 		// Scalar
-		print("INITIALIZER TYPE: %", init.initializer_type);
+		print("INITIALIZER TYPE: % ", init.initializer_type);
 		assert(init.initializer_type == Node_Scalar_Initializer);
 		scalar := init.(*Node_Scalar_Initializer);
 		source := resolve_expr(tc, scalar.expr);
 		if !can_coerce_to(target, source) {
+			print("Cannot coerce % to %\n", source.*, target.*);
 			print("Uh oh\n");
-			return null;
+			return null, 0;
 		}
 
 		if !types_equal(target, source) {
@@ -617,7 +629,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 		}
 	}
 
-	return resolved;
+	return resolved, index;
 }
 
 typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
