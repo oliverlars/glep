@@ -126,7 +126,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 				for compiler.globals {
 					if it == name {
 						emit(compiler, "adrp x%, _%@PAGE", compiler.register, name, compiler.register);
-						emit(compiler, "ldr w%, [x%, _%@PAGEOFF]", compiler.register, compiler.register, name, compiler.register, compiler.register);
+						emit(compiler, "add x%, x%, _%@PAGEOFF", compiler.register, compiler.register, name, compiler.register, compiler.register);
 						return;
 					}
 				}
@@ -439,7 +439,7 @@ convert_constant :: (v: Constant, target: *Resolved_Type) -> Constant {
 	}
 }
 
-eval_constant_expr :: (compiler: *Compiler, expr: *Node_Expr) -> Constant {
+eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
 		case Node_Unary;
@@ -447,18 +447,18 @@ eval_constant_expr :: (compiler: *Compiler, expr: *Node_Expr) -> Constant {
 			op := unary.op;
 			if op.type == {
 				case .Minus;
-					return -eval_constant_expr(compiler, unary.expr);
+					return -eval_constant_expr(unary.expr);
 				case .Plus;
-					return ~eval_constant_expr(compiler, unary.expr);
+					return ~eval_constant_expr(unary.expr);
 				case .Bang;
-					return !eval_constant_expr(compiler, unary.expr);
+					return !eval_constant_expr(unary.expr);
 				case .Tilde;
-					return ~eval_constant_expr(compiler, unary.expr);
+					return ~eval_constant_expr(unary.expr);
 			}
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
-			left  := eval_constant_expr(compiler, expr.(*Node_Binary).left);
-			right := eval_constant_expr(compiler, expr.(*Node_Binary).right);
+			left  := eval_constant_expr(expr.(*Node_Binary).left);
+			right := eval_constant_expr(expr.(*Node_Binary).right);
 
 			if op.type == {
 				case .Equals;
@@ -480,7 +480,7 @@ eval_constant_expr :: (compiler: *Compiler, expr: *Node_Expr) -> Constant {
 			}
 		case Node_Cast;
 			c := expr.(*Node_Cast);
-			return convert_constant(eval_constant_expr(compiler, c.expr), c.resolved_type);
+			return convert_constant(eval_constant_expr(c.expr), c.resolved_type);
 		case Node_Char;
 			value := 0;
 			for expr.(*Node_Char).token.view {
@@ -763,10 +763,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	base := cursor;
 	for init.(*Node_Designated_Initializer).designations {
 		if it.designators.count > 0 {
-			cursor = base;
-			for designator: it.designators {
-				cursor += designator.offset;
-			}
+			cursor = it.offset;
 		}
 		cursor = compile_initializer(compiler, it.expr, cursor);
 	}
@@ -992,7 +989,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
-			value := eval_constant_expr(compiler, expr);
+			value := eval_constant_expr(expr);
 			if expr.resolved_type.kind == .Floating {
 				if expr.resolved_type.size_in_bytes == {
 					case 4;
@@ -1021,29 +1018,16 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			// globals becomes complex as we cant random access those bytes.
 			// By definition we need to emit in order so sorting is necessary.
 			designation_compare :: (a: *Node_Designation, b: *Node_Designation) -> int {
-				a_offset := 0;
-				b_offset := 0;
-				for a.designators {
-					a_offset += it.offset;
-				}
-
-				for b.designators {
-					b_offset += it.offset;
-				}
-
-				return a_offset - b_offset;
+				return a.offset - b.offset;
 			}
 			sorted_designations := quick_sort(init.(*Node_Designated_Initializer).designations, designation_compare);
 			for sorted_designations {
 				start := cursor;
+				cursor = it.offset;
 				if it.designators.count > 0 {
-					cursor = base;
-					for designator: it.designators {
-						cursor += designator.offset;
+					if cursor - start == 0 {
+						emit(compiler, ".zero %", cursor - start);
 					}
-				}
-				if cursor - start > 0 {
-					emit(compiler, ".zero %", cursor - start);
 				}
 				cursor = compile_global_initializer(compiler, it.expr, cursor);
 			}
@@ -1056,9 +1040,6 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			if is_variable_declaration(it, declarator) { 
 				name := identifier_from_declarator(declarator);
 				emit(compiler, ".globl _%", name);
-				if name == "big_boys" {
-					a := 5;
-				}
 				init_expr: *Node_Expr;
 				if declarator.init {
 					emit(compiler, "_%:", name);
