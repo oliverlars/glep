@@ -751,7 +751,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 
 compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: int) -> int {
 	if !init return cursor;
-	
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		compile_expr(compiler, expr);
@@ -944,9 +943,6 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if name == "a" {
-						a := 5;
-					}
 					if it.declarators[0].resolved_type.kind == .Integral ||
 					   it.declarators[0].resolved_type.kind == .Pointer {
 						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
@@ -983,50 +979,50 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		}
 	}
 
-	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor := 0) -> int {
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, bytes: []u8, cursor := 0) -> int {
 		if !init return cursor;
 		
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
 			value := eval_constant_expr(expr);
+			size_in_bytes := expr.resolved_type.size_in_bytes;
 			if expr.resolved_type.kind == .Floating {
+
 				if expr.resolved_type.size_in_bytes == {
 					case 4;
-						emit(compiler, ".float %", value.as_f64.(float));
+						to_write: u32;
+						memcpy(*to_write, *value.as_f64.(float32), 4);
+						while size_in_bytes > 0 {
+							bytes[cursor] = (to_write & 255).(u8);
+							size_in_bytes -= 1;
+							cursor += 1;
+							to_write = to_write >> 8;
+						}
 					case 8;
-						emit(compiler, ".double %", value.as_f64);
+						to_write: u64;
+						memcpy(*to_write, *value.as_f64, 8);
+						while size_in_bytes > 0 {
+							bytes[cursor] = (to_write & 255).(u8);
+							size_in_bytes -= 1;
+							cursor += 1;
+							to_write = to_write >> 8;
+						}
 				}
 			} else if expr.resolved_type.kind == .Integral ||
 					  expr.resolved_type.kind == .Pointer {
-				if expr.resolved_type.size_in_bytes == {
-					case 1;
-						emit(compiler, ".byte %", value.as_u64.(u8));
-					case 2;
-						emit(compiler, ".short %", value.as_u64.(u16));
-					case 4;
-						emit(compiler, ".long %", value.as_u64.(u32));
-					case 8;
-						emit(compiler, ".quad %", value.as_u64.(u64));
-				}
+					to_write := value.as_u64;
+					while size_in_bytes > 0 {
+						bytes[cursor] = (to_write & 255).(u8);
+						size_in_bytes -= 1;
+						cursor += 1;
+						to_write = to_write >> 8;
+					}
 			}
-			return cursor + expr.resolved_type.size_in_bytes;
+			return cursor;
 		} else {
-			base := cursor;
-			// NOTE(Oliver): Sorting designations makes the most sense here
-			// because you can specify members out of order which means emitting
-			// globals becomes complex as we cant random access those bytes.
-			// By definition we need to emit in order so sorting is necessary.
-			designation_compare :: (a: *Node_Designation, b: *Node_Designation) -> int {
-				return a.offset - b.offset;
-			}
-			sorted_designations := quick_sort(init.(*Node_Designated_Initializer).designations, designation_compare);
-			for sorted_designations {
-				gap := it.offset - cursor;
-				if gap > 0 {
-					emit(compiler, ".zero %", gap);
-				}
+			for init.(*Node_Designated_Initializer).designations {
 				cursor = it.offset;
-				cursor = compile_global_initializer(compiler, it.expr, cursor);
+				cursor = compile_global_initializer(compiler, it.expr, bytes, cursor);
 			}
 		}
 		return cursor;
@@ -1062,7 +1058,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 								emit(compiler, ".quad %", eval_expr(init_expr));
 						}
 					} else {
-						compile_global_initializer(compiler, declarator.init, 0);
+						bytes := NewArray(declarator.resolved_type.size_in_bytes, u8);
+						compile_global_initializer(compiler, declarator.init, bytes, 0);
+						for bytes {
+							emit(compiler, ".byte %", it);
+						}
 					}
 				}
 			}
