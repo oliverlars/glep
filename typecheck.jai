@@ -36,6 +36,12 @@ Type_Checker :: struct {
 	scopes: [..]Scope;
 
 	ordinary: Table(string, *Node);
+
+	// HACK(Oliver): Although I currently store the resolved_type
+	// on the struct itself, we need a cache to know if we are currently
+	// resolving a struct to avoid any further attempt at resolving it
+	// incase of recursive types.
+	_structs: Table(*Node_Struct, *Resolved_Type);
 }
 
 current_scope :: (tc: *Type_Checker) -> *Scope {
@@ -73,9 +79,9 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 	return false, .{};
 }
 
-resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
+resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type {
 	if decl_info.typedef {
-		return resolve_base(decl_info.typedef.base);
+		return resolve_base(tc, decl_info.typedef.base);
 	}
 	Type_Specifier :: enum {
 		Void;
@@ -151,6 +157,43 @@ resolve_base :: (decl_info: Node_Decl_Info) -> *Resolved_Type {
 	if decl_info._struct {
 		info.kind = .Composite;
 		info.composite = decl_info._struct;
+
+		padding_decl :: (tc: *Type_Checker, size_in_bytes: int) -> *Node_Decl {
+			padding := New(Node_Decl);
+			array_add(*padding.base.qualifiers, "char");
+			declarator := New(Node_Array_Declarator);
+			declarator.count = size_in_bytes / 8;
+			declarator.inner = New(Node_Identifier_Declarator);
+			// HACK(Oliver): the name isnt unique
+			declarator.inner.(*Node_Identifier_Declarator).name = "padding";
+
+			array_add(*padding.base.declarators, declarator);
+			declarator.resolved_type = resolve_decl(tc, padding, declarator);
+			
+			return padding;
+		}
+		_struct := decl_info._struct;
+		if !table_contains(*tc._structs, _struct) {
+			offset := 0;
+			table_add(*tc._structs, _struct, info);
+			for member_decl, member_it: _struct.members {
+				for member_declarator: member_decl.declarators {
+					member_type := resolve_decl(tc, member_decl, member_declarator);
+					if offset % member_type.size_in_bytes != 0 {
+						size := member_type.size_in_bytes;
+						bytes_to_pad := (size - (offset % size)) % size;
+						padding := padding_decl(tc, bytes_to_pad);
+						array_insert_at(*_struct.members, padding, member_it);
+						member_it += 1;
+						offset += bytes_to_pad;
+					}
+					offset += member_type.size_in_bytes;
+					member_declarator.resolved_type = member_type;
+				}
+			}
+			info.size_in_bytes = (offset + 3) & ~3;
+		}
+		print("This struct is % bytes\n", info.size_in_bytes);
 	}
 
 	return info;
@@ -186,45 +229,9 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 		return base;
 	}
 
-	base_info := resolve_base(decl.base);
+	base_info := resolve_base(tc, decl.base);
 	base_info = resolve_declarator(base_info, declarator);
 
-	padding_decl :: (tc: *Type_Checker, size_in_bytes: int) -> *Node_Decl {
-		padding := New(Node_Decl);
-		array_add(*padding.base.qualifiers, "char");
-		declarator := New(Node_Array_Declarator);
-		declarator.count = size_in_bytes / 8;
-		declarator.inner = New(Node_Identifier_Declarator);
-		// HACK(Oliver): the name isnt unique
-		declarator.inner.(*Node_Identifier_Declarator).name = "padding";
-
-		array_add(*padding.base.declarators, declarator);
-		declarator.resolved_type = resolve_decl(tc, padding, declarator);
-		
-		return padding;
-	}
-
-	if base_info.composite && base_info.composite.type == Node_Struct {
-		_struct := base_info.composite.(*Node_Struct);
-		offset := 0;
-		for member_decl, member_it: _struct.members {
-			for member_declarator: member_decl.declarators {
-				member_type := resolve_decl(tc, member_decl, member_declarator);
-				if offset % member_type.size_in_bytes != 0 {
-					size := member_type.size_in_bytes;
-					bytes_to_pad := (size - (offset % size)) % size;
-					padding := padding_decl(tc, bytes_to_pad);
-					array_insert_at(*_struct.members, padding, member_it);
-					member_it += 1;
-					offset += bytes_to_pad;
-				}
-				offset += member_type.size_in_bytes;
-				member_declarator.resolved_type = member_type;
-			}
-		}
-		base_info.size_in_bytes = (offset + 3) & ~3;
-		print("This struct is % bytes\n", base_info.size_in_bytes);
-	}
 
 	return base_info;
 }
@@ -505,7 +512,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			return info, info.kind != .Composite;
 		case Node_Cast;
 			source := resolve_expr(tc, expr.(*Node_Cast).expr);
-			target := resolve_base(expr.(*Node_Cast).base);
+			target := resolve_base(tc, expr.(*Node_Cast).base);
 			expr.(*Node_Cast).resolved_type = target;
 			expr.(*Node_Cast).expr.resolved_type = source;
 			return target, can_coerce_to(target, source);
@@ -662,11 +669,6 @@ flatten_initializer :: (tc: *Type_Checker, init: *Node_Initializer) -> [..]Initi
 	return result;
 }
 
-// TODO(Oliver): This won't work with mixed designations
-// e.g. Foo foo = { .a = 5, 10, .b = 20};
-// where Foo is struct Foo { int c, b, a; };
-// We don't correctly account for what part of the struct we are currently
-// designating
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer, base_offset := 0) -> *Resolved_Type {
 	if !init return null;
 
@@ -707,10 +709,12 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 					} else if type.kind == .Array {
 						offset = index * type.inner.size_in_bytes;
 						type = type.inner;
+						print("array inner offset: %\n", offset);
 					}
 				}
 				
 				designation.offset = base_offset + offset;
+				print("designation offset: %\n", designation.offset);
 				resolve_initializer(tc, type, designation.expr, designation.offset);
 				index += 1;
 			}
@@ -746,9 +750,12 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	} else {
 		for declarator: decl.declarators {
 			push_decl(tc, decl.base, declarator);
-			decl_type := resolve_decl(tc, decl, declarator);
 			name := identifier_from_declarator(declarator);
 			print("typechecking: %\n", name);
+			if name == "__darwin_pthread_t" {
+				a := 5;
+			}
+			decl_type := resolve_decl(tc, decl, declarator);
 			declarator.resolved_type = decl_type;
 			resolve_initializer(tc, decl_type, declarator.init);
 		}

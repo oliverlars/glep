@@ -1731,7 +1731,16 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			}
 			if current(p).type == .Asterisk then skip(p);
 			expr := parse_expr(p);
-			array.count = eval_expr(expr);
+			constant := eval_constant_expr(expr);
+			count := 0;
+			if constant.kind == .S64 {
+				count = constant.as_s64.(s64);
+			} else if constant.kind == .U64 {
+				count = constant.as_u64.(s64);
+			} else {
+				count = constant.as_f64.(s64);
+			}
+			array.count = count;
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);

@@ -1,26 +1,26 @@
 #include <stdio.h>
 
-typedef struct {
+struct BigBoy {
 	int b;
 	float a;
 	int values[5];
-} BigBoy;
+};
 
-BigBoy big_boy[] = {
+struct BigBoy big_boy[2] = {
 	{
 		.a = 1,
 		.b = 1,
 		.values = { 1, 1, 1, 1, 1}
 	},
 	{
-		.a = 0,
-		.b = 0,
-		.values = { 0, 0, 0, 0, 0}
+		.a = 2,
+		.b = 2,
+		.values = { 2, 2, 2, 2, 2 }
 	},
 };
 
 int main() {
-	printf("a: %d\n", big_boy[0].b);
+	printf("a[0]: %f | a[1]: %f\n", big_boy[0].a, big_boy[1].a);
 }
 
 //#define DO_TEST

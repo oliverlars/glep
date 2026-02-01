@@ -130,7 +130,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 						return;
 					}
 				}
-				assert(false);
+				assert(false); 
 			} else {
 				emit(compiler, "add x%, sp, #%", compiler.register, stack_slot.offset);
 			}
@@ -156,6 +156,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			
 			size_in_bytes := array_access.left.resolved_type.size_in_bytes;
 			count := array_access.left.resolved_type.array_count;
+			assert(count > 0);
 			bytes_per_element := size_in_bytes / count;
 			
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
@@ -1022,13 +1023,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			}
 			sorted_designations := quick_sort(init.(*Node_Designated_Initializer).designations, designation_compare);
 			for sorted_designations {
-				start := cursor;
-				cursor = it.offset;
-				if it.designators.count > 0 {
-					if cursor - start == 0 {
-						emit(compiler, ".zero %", cursor - start);
-					}
+				gap := it.offset - cursor;
+				if gap > 0 {
+					emit(compiler, ".zero %", gap);
 				}
+				cursor = it.offset;
 				cursor = compile_global_initializer(compiler, it.expr, cursor);
 			}
 		}
