@@ -931,7 +931,9 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 			if current(p).type == .Identifier {
 				name := current(p);
 				skip(p);
-
+				if name.view == "BigBoy" {
+					a := 5;
+				}
 				defined, defined_struct := table_find(*p.structs, name.view);
 				if current(p).type == .LeftBrace {
 					if defined {
@@ -1733,6 +1735,9 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			expr := parse_expr(p);
 			constant := eval_constant_expr(expr);
 			count := 0;
+			// TODO(Oliver): If delcaring array has no count
+			// then we can derive it from the number of initialzers
+			// in certain cases
 			if constant.kind == .S64 {
 				count = constant.as_s64.(s64);
 			} else if constant.kind == .U64 {
@@ -1981,6 +1986,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
 		name := identifier_from_declarator(declarator);
+		print("declarator: %\n", name);
 		if name != "" {
 			if name == "test" {
 				a := 5;

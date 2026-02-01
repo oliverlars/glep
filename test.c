@@ -6,6 +6,7 @@ struct BigBoy {
 	int values[5];
 };
 
+
 struct BigBoy big_boy[2] = {
 	{
 		.a = 1,

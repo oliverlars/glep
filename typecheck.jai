@@ -192,6 +192,8 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 				}
 			}
 			info.size_in_bytes = (offset + 3) & ~3;
+		} else {
+			_, info = table_find(*tc._structs, _struct);
 		}
 		print("This struct is % bytes\n", info.size_in_bytes);
 	}

@@ -154,10 +154,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			compiler.register += 1;
 			scale_register := compiler.register;
 			
-			size_in_bytes := array_access.left.resolved_type.size_in_bytes;
-			count := array_access.left.resolved_type.array_count;
-			assert(count > 0);
-			bytes_per_element := size_in_bytes / count;
+			bytes_per_element := array_access.left.resolved_type.size_in_bytes;
 			
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
 			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
@@ -215,7 +212,7 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 	return "";
 }
 
-Constant :: union {
+Constant :: struct {
 	kind: enum { F64; U64; S64; };
 	as_f64: float64;
 	#overlay(as_f64) as_u64: u64;
