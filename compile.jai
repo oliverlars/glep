@@ -125,8 +125,8 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			if !found {
 				for compiler.globals {
 					if it == name {
-						emit(compiler, "adrp x%, _%@PAGE", compiler.register, name, compiler.register);
-						emit(compiler, "add x%, x%, _%@PAGEOFF", compiler.register, compiler.register, name, compiler.register, compiler.register);
+						emit(compiler, "adrp x%, _%@PAGE", compiler.register, name);
+						emit(compiler, "add x%, x%, _%@PAGEOFF", compiler.register, compiler.register, name);
 						return;
 					}
 				}
@@ -153,8 +153,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			
 			compiler.register += 1;
 			scale_register := compiler.register;
-			
-			bytes_per_element := array_access.left.resolved_type.size_in_bytes;
+			// Inner type points to the thing it's an array of, you could also divide
+			// by count in the array but this also seems fine.
+			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 			
 			emit(compiler, "mov x%, #%", scale_register, bytes_per_element);
 			emit(compiler, "mul x%, x%, x%", offset_register, offset_register, scale_register);
