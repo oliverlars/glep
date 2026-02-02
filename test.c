@@ -1,10 +1,13 @@
 #include <stdio.h>
-
-#include <math.h>
-
 int main() {
-	printf("sqrt(4) = %f\n", sqrtf(4.0));
-}
+	struct A {
+		float x;
+	};
+	struct A lots_of_a[1] = {
+		{ .x = 1.0f},
+	};
+	printf("sqrt(a[0]) = %f\n", (lots_of_a[0].x));
+} 
 
 //#define DO_TEST
 

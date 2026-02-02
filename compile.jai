@@ -132,7 +132,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 						return;
 					}
 				}
-				assert(false); 
+				assert(false);
 			} else {
 				emit(compiler, "add x9, sp, #%", stack_slot.offset);
 			}
@@ -150,11 +150,13 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			offset := push_intermediate(compiler, array_access.index.resolved_type);
 
 			compile_lvalue(compiler, array_access.left);
-			pop_intermediate(compiler, array_access.left.resolved_type, offset);
+			pop_intermediate(compiler, array_access.index.resolved_type, offset);
 
 			// Inner type points to the thing it's an array of, you could also divide
 			// by count in the array but this also seems fine.
-			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
+			size_in_bytes := array_access.left.resolved_type.inner.size_in_bytes;
+			count := array_access.left.resolved_type.array_count;
+			bytes_per_element := size_in_bytes / count;
 			
 			emit(compiler, "mov x11, #%", bytes_per_element);
 			emit(compiler, "mul x10, x10, x11");
@@ -517,7 +519,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			offset := push_intermediate(compiler, assign.right.resolved_type);
 			
 			compile_lvalue(compiler, assign.left);
-			pop_intermediate(compiler, assign.left.resolved_type, offset);
+			pop_intermediate(compiler, assign.right.resolved_type, offset);
 			if expr.(*Node_Assign).op.type == {
 				case .Equals;
 					emit(compiler, "str %, [x9]", register(10, assign.right.resolved_type));
@@ -844,7 +846,7 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 		}
 	}
 }
- 
+
 push_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type) -> int {
 	offset := compiler.intermediate_stack_offset;
 	emit(compiler, "str %, [sp, #%]", register(9, resolved_type), offset);
