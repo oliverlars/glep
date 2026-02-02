@@ -1,15 +1,18 @@
 #include <stdio.h>
+#include <math.h>
+
 struct A {
 	int x;
+	float y;
 };
 struct A lots_of_a[2] = {
-	{ 5 },
-	{ 4 },
+	{ .y = 11.5f, .x = 5},
 };
 
 int main() {
-	struct A a2 = lots_of_a[1];
-	printf("sqrt(a[0]) = %d\n", a2.x);
+	int a = 0;
+	struct A a2 = lots_of_a[a];
+	printf("sqrt(a[0]) = %f\n", a2.y);
 } 
 
 //#define DO_TEST

@@ -1027,10 +1027,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				if expr.resolved_type.size_in_bytes == {
 					case 4;
 						to_write: u32;
-						memcpy(*to_write, *value.as_f64.(float32), 4);
+						value_as_f32 := value.as_f64.(float32);
+						memcpy(*to_write, *value_as_f32, 4);
 						while size_in_bytes > 0 {
 							bytes[cursor] = (to_write & 255).(u8);
-							size_in_bytes -= 8;
+							size_in_bytes -= 1;
 							cursor += 1;
 							to_write = to_write >> 8;
 						}
