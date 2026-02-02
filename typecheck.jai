@@ -524,17 +524,33 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			info.kind = .Pointer;
 			return info, true;
 		case Node_Call;
-			for expr.(*Node_Call).args {
-				arg_type := resolve_expr(tc, it);
-				it.resolved_type = arg_type;
-			}
-			name := expr.(*Node_Call).id.(*Node_Identifier).id.view;
-			print("\nTYPECHECKING CALL: %\n", name);
+			call := expr.(*Node_Call);
+			name := call.id.(*Node_Identifier).id.view;
 			found, decl := table_find(*tc.ordinary, name);
 			assert(found);
 			function := function_declarator(decl.(*Node_Decl).declarators[0]);
+			
+			for call.args {
+				arg_type := resolve_expr(tc, it);
+				it.resolved_type = arg_type;
+				
+				if it_index < function.params.count {
+					param := function.params[it_index];
+					param_type: *Resolved_Type;
+					if param.declarators.count > 0{
+						param_type = param.declarators[0].resolved_type;
+					} else {
+						param_type = resolve_base(tc, param.base);
+					}
+					if param_type && !types_equal(arg_type, param_type) {
+						call.args[it_index] = insert_cast(tc, it, param_type);
+						call.args[it_index].resolved_type = param_type;
+					}
+				}
+			}
+			
 			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
-			expr.(*Node_Call).resolved_type = ret_type;
+			call.resolved_type = ret_type;
 			return ret_type, true;
 	}
 

@@ -1,27 +1,9 @@
 #include <stdio.h>
 
-struct BigBoy {
-	int b;
-	float a;
-	int values[5];
-};
-
-
-struct BigBoy big_boy[2] = {
-	{
-		.a = 1,
-		.b = 1,
-		.values = { 1, 1, 1, 1, 1}
-	},
-	{
-		.a = 2,
-		.b = 2,
-		.values = { 2, 2, 2, 2, 2 }
-	},
-};
+#include <math.h>
 
 int main() {
-	printf("a[0]: %f | a[1]: %f\n", big_boy[0].a, big_boy[1].a);
+	printf("sqrt(4) = %f\n", sqrtf(4.0));
 }
 
 //#define DO_TEST
