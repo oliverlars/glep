@@ -1,6 +1,7 @@
 #import "Basic";
 #import "File";
 #import "File_Utilities";
+#import "Process";
 
 #import "Hash_Table";
 #import "Hash";
@@ -2324,6 +2325,10 @@ main :: () {
 		append(*builder, "\n");
 	}
 
-	write_entire_file("smallpt_generated.c", builder_to_string(*builder));
-	print("it took HOW long to parse % lines? %ms\n", total_newlines, ms);
+	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
+
+	print("\nCompiling assembly...\n\n");
+	run_command("clang", "out.s", "-oout");
+	print("Running program...\n\n");
+	run_command("./out");
 }
