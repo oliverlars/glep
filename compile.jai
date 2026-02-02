@@ -154,9 +154,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			// Inner type points to the thing it's an array of, you could also divide
 			// by count in the array but this also seems fine.
-			size_in_bytes := array_access.left.resolved_type.inner.size_in_bytes;
-			count := array_access.left.resolved_type.array_count;
-			bytes_per_element := size_in_bytes / count;
+			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 			
 			emit(compiler, "mov x11, #%", bytes_per_element);
 			emit(compiler, "mul x10, x10, x11");
@@ -555,9 +553,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compile_lvalue(compiler, array_access.left);
 			pop_intermediate(compiler, array_access.index.resolved_type, offset);
 			
-			size_in_bytes := array_access.left.resolved_type.size_in_bytes;
-			count := array_access.left.resolved_type.array_count;
-			bytes_per_element := size_in_bytes / count;
+			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
 			emit(compiler, "mov x11, #%", bytes_per_element);
 			emit(compiler, "mul x10, x10, x11");
@@ -756,8 +752,10 @@ emit_copy_struct :: (compiler: *Compiler, _struct: *Node_Struct, start_offset: i
 		for it.declarators {
 			if it.resolved_type.kind == .Composite {
 				emit_copy_struct(compiler, it.resolved_type.composite.(*Node_Struct), offset);
+			} else {
+				
+				emit(compiler, "str %, [sp, #%]", register(9, it.resolved_type), offset);
 			}
-			emit(compiler, "str %, [sp, #%]", register(9, it.resolved_type), offset);
 			offset += it.resolved_type.size_in_bytes;
 		}
 	}
@@ -767,10 +765,14 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	if !init return cursor;
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
-		compile_expr(compiler, expr);
 		if expr.resolved_type.kind == .Composite {
-			emit_copy_struct(compiler, expr.resolved_type.composite.(*Node_Struct), cursor);
+			compile_lvalue(compiler, expr);
+			emit(compiler, "add x0, sp, #%", cursor);
+			emit(compiler, "mov x1, x9");
+			emit(compiler, "mov x2, #%", expr.resolved_type.size_in_bytes);
+			emit(compiler, "bl _memcpy");
 		} else {
+			compile_expr(compiler, expr);
 			emit(compiler, "str %, [sp, #%]", register(9, expr.resolved_type), cursor);
 		}
 		return cursor + expr.resolved_type.size_in_bytes;
@@ -1028,7 +1030,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						memcpy(*to_write, *value.as_f64.(float32), 4);
 						while size_in_bytes > 0 {
 							bytes[cursor] = (to_write & 255).(u8);
-							size_in_bytes -= 1;
+							size_in_bytes -= 8;
 							cursor += 1;
 							to_write = to_write >> 8;
 						}
@@ -1048,10 +1050,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					while size_in_bytes > 0 {
 						bytes[cursor] = (to_write & 255).(u8);
 						size_in_bytes -= 1;
-						cursor += 1;
 						to_write = to_write >> 8;
+						cursor += 1;
 					}
 			}
+			//cursor += expr.resolved_type.size_in_bytes/8;
 			return cursor;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
