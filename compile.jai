@@ -121,6 +121,16 @@ emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
+		case Node_Compound;
+			compound := expr.(*Node_Compound);
+			
+			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
+			literal_offset := compiler.stack_offset;
+			compiler.stack_offset += size;
+			
+			compile_initializer(compiler, compound.init, literal_offset);
+			
+			emit(compiler, "add x9, sp, #%", literal_offset);
 		case Node_Identifier;
 			name := expr.(*Node_Identifier).id.view;
 			found, stack_slot := find_decl_on_stack(compiler, name);
@@ -201,7 +211,7 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 				return tprint("s%", reg);
 		}
 	} else if resolved_type.kind == .Composite {
-
+		return tprint("x%", reg);
 	}
 	assert(false);
 	return "";
@@ -490,6 +500,8 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
+		case Node_Compound;
+			compile_lvalue(compiler, expr);
 		case Node_Unary;
 			op := expr.(*Node_Unary).op;
 			if op.type == {
@@ -513,16 +525,30 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// the lvalue in, we just evaluate the expression first then load the
 			// lvalue address
 			assign := expr.(*Node_Assign);
-			compile_expr(compiler, assign.right);
-			offset := push_intermediate(compiler, assign.right.resolved_type);
-			
-			compile_lvalue(compiler, assign.left);
-			pop_intermediate(compiler, assign.right.resolved_type, offset);
-			if expr.(*Node_Assign).op.type == {
-				case .Equals;
-					emit(compiler, "str %, [x9]", register(10, assign.right.resolved_type));
-			}
+			if assign.right.resolved_type.kind == .Composite {
+				
+				compile_lvalue(compiler, assign.right);
+				offset := push_intermediate(compiler, assign.right.resolved_type);
+				
 
+				compile_lvalue(compiler, assign.left);
+				pop_intermediate(compiler, assign.right.resolved_type, offset);
+
+				emit(compiler, "mov x0, x9");
+				emit(compiler, "mov x1, x10");
+				emit(compiler, "mov x2, #%", assign.right.resolved_type.size_in_bytes);
+				emit(compiler, "bl _memcpy");
+			} else {
+				compile_expr(compiler, assign.right);
+				offset := push_intermediate(compiler, assign.right.resolved_type);
+				
+				compile_lvalue(compiler, assign.left);
+				pop_intermediate(compiler, assign.right.resolved_type, offset);
+				if expr.(*Node_Assign).op.type == {
+					case .Equals;
+						emit(compiler, "str %, [x9]", register(10, assign.right.resolved_type));
+				}
+			}
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 
@@ -745,22 +771,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	}
 }
 
-emit_copy_struct :: (compiler: *Compiler, _struct: *Node_Struct, start_offset: int) {
-	if !_struct return;
-	offset := start_offset;
-	for _struct.members {
-		for it.declarators {
-			if it.resolved_type.kind == .Composite {
-				emit_copy_struct(compiler, it.resolved_type.composite.(*Node_Struct), offset);
-			} else {
-				
-				emit(compiler, "str %, [sp, #%]", register(9, it.resolved_type), offset);
-			}
-			offset += it.resolved_type.size_in_bytes;
-		}
-	}
-}
-
 compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: int) -> int {
 	if !init return cursor;
 	if init.initializer_type == Node_Scalar_Initializer {
@@ -800,6 +810,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 		case Node_Return;
 			compile_expr(compiler, stmt.(*Node_Return).expr);
 			t := stmt.(*Node_Return).expr.resolved_type;
+			assert(t != null);
 			print("RETURN TYPE: %\n", t.*);
 			if t.kind == .Floating {
 				emit(compiler, "fmov d0, d%", 9);
@@ -874,6 +885,12 @@ stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
 				if declarator.resolved_type {
 					stack_size += (declarator.resolved_type.size_in_bytes + 7) & ~7;
 				}
+			}
+		} else if it.statement_type == Node_Expr_Statement {
+			expr_stmt := it.(*Node_Expr_Statement);
+			if expr_stmt.expr.expr_type == Node_Compound {
+				compound := expr_stmt.expr.(*Node_Compound);
+				stack_size += (compound.resolved_type.size_in_bytes + 7) & ~7;
 			}
 		}
 		print("Statement Type: %\n", it.statement_type);

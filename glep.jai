@@ -932,9 +932,6 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 			if current(p).type == .Identifier {
 				name := current(p);
 				skip(p);
-				if name.view == "BigBoy" {
-					a := 5;
-				}
 				defined, defined_struct := table_find(*p.structs, name.view);
 				if current(p).type == .LeftBrace {
 					if defined {
@@ -2329,6 +2326,8 @@ main :: () {
 
 	print("\nCompiling assembly...\n\n");
 	run_command("clang", "out.s", "-oout");
+	print("Compile same program with clang...\n");
+	run_command("clang", "-S", "test.c", "-oclang_out.s");
 	print("Running program...\n\n");
 	run_command("./out");
 }

@@ -201,37 +201,47 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	return info;
 }
 
+resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
+	if !declarator return base;
+
+	if declarator.declarator_type == {
+		case Node_Pointer_Declarator;
+			ptr := New(Resolved_Type);
+			ptr.kind = .Pointer;
+			ptr.size_in_bytes = 8;
+			ptr.inner = base;
+			return resolve_declarator(ptr, declarator.inner);
+		case Node_Array_Declarator;
+			inner := resolve_declarator(base, declarator.inner);
+			array := New(Resolved_Type);
+			array.kind = .Array;
+			array.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
+			array.inner = inner;
+			array.array_count = declarator.(*Node_Array_Declarator).count;
+			return array;
+		case Node_Identifier_Declarator;
+			return base;
+	}
+
+	return base;
+}
+
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
 resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
-	if !decl || !declarator return null;
-
-	resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
-		if !declarator return base;
-
-		if declarator.declarator_type == {
-			case Node_Pointer_Declarator;
-				ptr := New(Resolved_Type);
-				ptr.kind = .Pointer;
-				ptr.size_in_bytes = 8;
-				ptr.inner = base;
-				return resolve_declarator(ptr, declarator.inner);
-			case Node_Array_Declarator;
-				inner := resolve_declarator(base, declarator.inner);
-				array := New(Resolved_Type);
-				array.kind = .Array;
-				array.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
-				array.inner = inner;
-				array.array_count = declarator.(*Node_Array_Declarator).count;
-				return array;
-			case Node_Identifier_Declarator;
-				return base;
-		}
-
-		return base;
-	}
+	if !decl return null;
 
 	base_info := resolve_base(tc, decl.base);
+	base_info = resolve_declarator(base_info, declarator);
+
+
+	return base_info;
+}
+
+resolve_decl :: (tc: *Type_Checker, base: *Node_Decl_Info, declarator: *Node_Declarator) -> *Resolved_Type {
+	if !base return null;
+
+	base_info := resolve_base(tc, base);
 	base_info = resolve_declarator(base_info, declarator);
 
 
@@ -422,6 +432,11 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
+		case Node_Compound;
+			compound := expr.(*Node_Compound);
+			compound.resolved_type = resolve_decl(tc, *compound.base_info, compound.declarator);
+			resolve_initializer(tc, compound.resolved_type, compound.init);
+			return compound.resolved_type, true;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
 			left_info := resolve_expr(tc, assign.left);
@@ -569,7 +584,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Expr_Statement;
 			resolve_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
-			resolve_expr(tc, stmt.(*Node_Return).expr);
+			stmt.(*Node_Return).expr.resolved_type = resolve_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			print("TYPECHECKING DECL: %\n", decl.*);
@@ -656,35 +671,6 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 	}
 	assert(false);
 	return null;
-}
-
-Initializer_Entry :: struct {
-	designators: [..]*Node_Designator;
-	init: *Node_Initializer;
-}
-
-flatten_initializer :: (tc: *Type_Checker, init: *Node_Initializer) -> [..]Initializer_Entry {
-
-	result: [..]Initializer_Entry;
-	flatten_initializer :: (tc: *Type_Checker, init: *Node_Initializer, result: *[..]Initializer_Entry) {
-		if !init return;
-		if init.initializer_type == {
-			case Node_Designated_Initializer;
-				designated := init.(*Node_Designated_Initializer);
-				for designated.designations {
-					flatten_initializer(tc, it.expr, result);
-					entry := Initializer_Entry.{ it.designators, it.expr };
-					array_add(result, entry);
-				}
-			case Node_Scalar_Initializer;
-				entry: Initializer_Entry;
-				entry.init = init;
-				array_add(result, entry);
-		}
-	}
-
-	flatten_initializer(tc, init, *result);
-	return result;
 }
 
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer, base_offset := 0) -> *Resolved_Type {

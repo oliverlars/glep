@@ -1,19 +1,25 @@
 #include <stdio.h>
 #include <math.h>
 
-struct A {
-	int x;
-	float y;
-};
-struct A lots_of_a[2] = {
-	{ .y = 11.5f, .x = 5},
-};
+typedef struct { double x, y, z; } Vec;
+
+Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
+Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
+Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
+Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
+Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
+double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
+Vec vnorm(Vec v)          { return vmul(v, 1.0/sqrt(vdot(v,v))); }
 
 int main() {
-	int a = 0;
-	struct A a2 = lots_of_a[a];
-	printf("sqrt(a[0]) = %f\n", a2.y);
-} 
+	Vec a = (Vec){ 1, 2, 3 };
+	a = (Vec) { 2, 4, 6 };
+	//a = vadd(a, vec(1, 2, 3));
+	printf("a = [%f, %f, %f]\n", a.x, a.y, a.z);
+
+	return 0;
+}
 
 //#define DO_TEST
 
