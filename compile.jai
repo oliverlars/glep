@@ -99,7 +99,7 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 		for compiler.globals {
 			if it == name {
 				emit(compiler, "adrp x9, _%@PAGE", name);
-				emit(compiler, "ldr w9, [x%, _%@PAGEOFF]", name);
+				emit(compiler, "ldr x9, [x%, _%@PAGEOFF]", name);
 				return;
 			}
 		}
@@ -181,9 +181,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 				for declarator: it.declarators {
 					name := identifier_from_declarator(declarator);
 					if name == member_access.right.view {
+						offset = left_type.layout.members[it_index].offset;
 						break it;
 					}
-					offset += declarator.resolved_type.size_in_bytes;
 				}
 			}
 
@@ -526,7 +526,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// lvalue address
 			assign := expr.(*Node_Assign);
 			if assign.right.resolved_type.kind == .Composite {
-				
+
 				compile_lvalue(compiler, assign.right);
 				offset := push_intermediate(compiler, assign.right.resolved_type);
 				
@@ -798,6 +798,33 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	return cursor;
 }
 
+flatten_struct_member_types :: (_struct: *Node_Struct) -> [..]*Resolved_Type {
+	
+	result: [..]*Resolved_Type;
+	flatten_struct_member_types :: (_struct: *Node_Struct, members: *[..]*Resolved_Type) {
+		for _struct.members {
+			for it.declarators {
+				array_add(members, it.resolved_type);
+			}
+		}
+	}
+
+	flatten_struct_member_types(_struct, *result);
+	return result;
+}
+
+is_hfa :: (_struct: *Node_Struct) -> bool, count: int, size: int {
+	member_types := flatten_struct_member_types(_struct);
+	if member_types.count > 4 return false, 0, 0;
+	if member_types[0].kind != .Floating return false, 0, 0;
+	size := member_types[0].size_in_bytes;
+	for member_types {
+		if it.kind != .Floating return false, 0, 0;
+		if it.size_in_bytes != size return false, 0, 0;
+	}
+	return true, member_types.count, size;
+}
+
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	if !stmt return;
 	if stmt.statement_type == {
@@ -814,8 +841,20 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			print("RETURN TYPE: %\n", t.*);
 			if t.kind == .Floating {
 				emit(compiler, "fmov d0, d%", 9);
-			} else {
+			} else if t.kind == .Integral || t.kind == .Pointer {
 				emit(compiler, "mov x0, x%", 9);
+			} else if t.kind == .Composite {
+				_struct := t.composite.(*Node_Struct);
+				hfa, count, size := is_hfa(_struct);
+				if hfa {
+					if size == 4 {
+						for 0..count-1 {
+							emit(compiler, "ldr s%, [x9, #%]", it, );
+						}
+					} else {
+
+					}
+				}
 			}
 		case Node_Expr_Statement;
 			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);

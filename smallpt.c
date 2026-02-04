@@ -19,7 +19,9 @@ Vec vnorm(Vec v)          { return vmul(v, 1.0/sqrt(vdot(v,v))); }
 
 typedef struct { Vec o, d; } Ray;
 
-enum { DIFF, SPEC, REFR };
+#define DIFF 0
+#define SPEC 1
+#define REFR 2
 
 typedef struct {
 	double rad;
@@ -127,7 +129,7 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
                                       vmul(radiance((Ray){x, tdir}, depth, seed), Tr))));
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     int w = 256, h = 192;
     int samps = argc > 1 ? atoi(argv[1])/4 : 1;
     
@@ -137,7 +139,6 @@ int main(int argc, char *argv[]) {
     Vec *c = calloc(w * h, sizeof(Vec));
 
     for (int y = 0; y < h; y++) {
-        fprintf(stderr, "\rRendering (%d spp) %5.2f%%", samps*4, 100.*y/(h-1));
         for (int x = 0; x < w; x++) {
             int i = (h - y - 1) * w + x;
             unsigned seed = y*y*y + x;

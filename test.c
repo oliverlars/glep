@@ -1,7 +1,6 @@
 #include <stdio.h>
-#include <math.h>
 
-typedef struct { double x, y, z; } Vec;
+typedef struct { double x, y, z; double extra[2]; } Vec;
 
 Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
 Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
@@ -10,12 +9,9 @@ Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
 Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
 double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
-Vec vnorm(Vec v)          { return vmul(v, 1.0/sqrt(vdot(v,v))); }
 
 int main() {
-	Vec a = (Vec){ 1, 2, 3 };
-	a = (Vec) { 2, 4, 6 };
-	//a = vadd(a, vec(1, 2, 3));
+	Vec a = vec(1, 2, 3);
 	printf("a = [%f, %f, %f]\n", a.x, a.y, a.z);
 
 	return 0;

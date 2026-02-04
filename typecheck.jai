@@ -1,3 +1,13 @@
+Struct_Member :: struct {
+	offset: int;
+	alignment: int;
+	size: int;
+}
+
+Struct_Layout :: struct {
+	members: [..]Struct_Member;
+}
+
 Resolved_Type :: struct {
 	kind: enum {
 		Integral;
@@ -14,6 +24,7 @@ Resolved_Type :: struct {
 	atomic: bool;
 
 	composite: *Node_Composite;
+	layout: Struct_Layout;
 
 	// For pointers and stuff
 	inner: *Resolved_Type;
@@ -158,20 +169,6 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		info.kind = .Composite;
 		info.composite = decl_info._struct;
 
-		padding_decl :: (tc: *Type_Checker, size_in_bytes: int) -> *Node_Decl {
-			padding := New(Node_Decl);
-			array_add(*padding.base.qualifiers, "char");
-			declarator := New(Node_Array_Declarator);
-			declarator.count = size_in_bytes / 8;
-			declarator.inner = New(Node_Identifier_Declarator);
-			// HACK(Oliver): the name isnt unique
-			declarator.inner.(*Node_Identifier_Declarator).name = "padding";
-
-			array_add(*padding.base.declarators, declarator);
-			declarator.resolved_type = resolve_decl(tc, padding, declarator);
-			
-			return padding;
-		}
 		_struct := decl_info._struct;
 		if !table_contains(*tc._structs, _struct) {
 			offset := 0;
@@ -182,11 +179,11 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 					if offset % member_type.size_in_bytes != 0 {
 						size := member_type.size_in_bytes;
 						bytes_to_pad := (size - (offset % size)) % size;
-						padding := padding_decl(tc, bytes_to_pad);
-						array_insert_at(*_struct.members, padding, member_it);
+						//array_insert_at(*_struct.members, padding, member_it);
 						member_it += 1;
 						offset += bytes_to_pad;
 					}
+					array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
 					offset += member_type.size_in_bytes;
 					member_declarator.resolved_type = member_type;
 				}
