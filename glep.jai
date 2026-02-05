@@ -326,11 +326,9 @@ Node_Designation :: struct {
 	type = #this;
 	resolved_type: *Resolved_Type;
 	designators: [..]*Node_Designator;
-	// HACK(Oliver): This is a weird hack that lets me determine
-	// what the offset is in the initializer without manually
-	// summing all the members' sizes
-	offset: int;
 	expr: *Node_Initializer;
+	// HACK(Oliver): This just feels weird
+	member_index: int;
 }
 
 Node_Designator :: struct {

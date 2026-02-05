@@ -128,7 +128,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			literal_offset := compiler.stack_offset;
 			compiler.stack_offset += size;
 			
-			compile_initializer(compiler, compound.init, literal_offset);
+			compile_initializer(compiler, compound.init, compound.resolved_type.layout, literal_offset);
 			
 			emit(compiler, "add x9, sp, #%", literal_offset);
 		case Node_Identifier;
@@ -177,13 +177,15 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			left_type := member_access.left.resolved_type;
 			offset := 0;
+			index := 0;
 			for left_type.composite.(*Node_Struct).members {
 				for declarator: it.declarators {
 					name := identifier_from_declarator(declarator);
 					if name == member_access.right.view {
-						offset = left_type.layout.members[it_index].offset;
+						offset = left_type.layout.members[index].offset;
 						break it;
 					}
+					index += 1;
 				}
 			}
 
@@ -557,14 +559,16 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			left_type := member_access.left.resolved_type;
 			offset := 0;
+			index := 0;
 			for left_type.composite.(*Node_Struct).members {
 				for declarator: it.declarators {
 					name := identifier_from_declarator(declarator);
 					if name == member_access.right.view {
+						offset = left_type.layout.members[index].offset;
 						break it;
 					}
-					offset += declarator.resolved_type.size_in_bytes;
 				}
+				index += 1;
 			}
 
 			emit(compiler, "mov x10, #%", offset);
@@ -771,7 +775,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	}
 }
 
-compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: int) -> int {
+compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, layout: Struct_Layout, cursor: int) -> int {
 	if !init return cursor;
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
@@ -791,9 +795,9 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	base := cursor;
 	for init.(*Node_Designated_Initializer).designations {
 		if it.designators.count > 0 {
-			cursor = it.offset;
+			cursor = layout.members[it_index].offset;
 		}
-		cursor = compile_initializer(compiler, it.expr, cursor);
+		cursor = compile_initializer(compiler, it.expr, layout, cursor);
 	}
 	return cursor;
 }
@@ -867,7 +871,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 				if it.resolved_type {
 					stack_slot = push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
 				}
-				compile_initializer(compiler, it.init, stack_slot.offset);
+				compile_initializer(compiler, it.init, it.resolved_type.layout, stack_slot.offset);
 			}
 	}
 }
@@ -1071,7 +1075,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		}
 	}
 
-	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, bytes: []u8, cursor := 0) -> int {
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, layout: Struct_Layout, bytes: []u8, cursor := 0) -> int {
 		if !init return cursor;
 		
 		if init.initializer_type == Node_Scalar_Initializer {
@@ -1115,8 +1119,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			return cursor;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
-				cursor = it.offset;
-				cursor = compile_global_initializer(compiler, it.expr, bytes, cursor);
+				if it.designators.count > 0 {
+					cursor = layout.members[it_index].offset;
+				}
+				cursor = compile_global_initializer(compiler, it.expr, layout, bytes, cursor);
 			}
 		}
 		return cursor;
@@ -1153,7 +1159,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						}
 					} else {
 						bytes := NewArray(declarator.resolved_type.size_in_bytes, u8);
-						compile_global_initializer(compiler, declarator.init, bytes, 0);
+						compile_global_initializer(compiler, declarator.init, declarator.resolved_type.layout, bytes, 0);
 						for bytes {
 							emit(compiler, ".byte %", it);
 						}

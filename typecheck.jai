@@ -179,8 +179,6 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 					if offset % member_type.size_in_bytes != 0 {
 						size := member_type.size_in_bytes;
 						bytes_to_pad := (size - (offset % size)) % size;
-						//array_insert_at(*_struct.members, padding, member_it);
-						member_it += 1;
 						offset += bytes_to_pad;
 					}
 					array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
@@ -624,31 +622,32 @@ index_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: str
 	return index;
 }
 
-offset_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: string) -> int {
+offset_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
 	offset := 0;
+	index := 0;
 	for member: _struct.members {
 		for member.declarators {
 			member_name := identifier_from_declarator(it);
 			if member_name == name {
 				return offset;
 			}
-			offset += it.resolved_type.size_in_bytes;
+			offset = layout.members[index].offset;
+			index += 1;
 		}
 	}
 	assert(false);
 	return offset;
 }
 
-offset_from_struct_member_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int) -> int {
+offset_from_struct_member_index :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, index: int) -> int {
 	offset := 0;
 	current_index := 0;
 	for member: _struct.members {
 		for member.declarators {
-			member_name := identifier_from_declarator(it);
 			if current_index == index {
 				return offset;
 			}
-			offset += it.resolved_type.size_in_bytes;
+			offset = layout.members[current_index].offset;
 			current_index += 1;
 		}
 	}
@@ -670,7 +669,7 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 	return null;
 }
 
-resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer, base_offset := 0) -> *Resolved_Type {
+resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
 	if !init return null;
 
 	if init.initializer_type == {
@@ -687,7 +686,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 							case Node_Field_Designator;
 								field := it.(*Node_Field_Designator);
 								index = index_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
-								offset += offset_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
+								offset += offset_from_struct_member(tc, type.composite.(*Node_Struct), type.layout, field.name.view);
 								type = type_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
 							case Node_Index_Designator;
 								array := it.(*Node_Index_Designator);
@@ -705,7 +704,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 					}
 				} else {
 					if type.kind == .Composite {
-						offset = offset_from_struct_member_index(tc, type.composite.(*Node_Struct), index);
+						offset = offset_from_struct_member_index(tc, type.composite.(*Node_Struct), type.layout, index);
 						type = member_type_from_index(tc, type.composite.(*Node_Struct), index);
 					} else if type.kind == .Array {
 						offset = index * type.inner.size_in_bytes;
@@ -713,10 +712,8 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 						print("array inner offset: %\n", offset);
 					}
 				}
-				
-				designation.offset = base_offset + offset;
-				print("designation offset: %\n", designation.offset);
-				resolve_initializer(tc, type, designation.expr, designation.offset);
+				designation.byte_offset = offset;
+				resolve_initializer(tc, type, designation.expr);
 				index += 1;
 			}
 		case Node_Scalar_Initializer;
