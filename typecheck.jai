@@ -622,35 +622,6 @@ index_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: str
 	return index;
 }
 
-offset_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
-	index := 0;
-	for member: _struct.members {
-		for member.declarators {
-			member_name := identifier_from_declarator(it);
-			if member_name == name {
-				return layout.members[index].offset;
-			}
-			index += 1;
-		}
-	}
-	assert(false);
-	return 0;
-}
-
-offset_from_struct_member_index :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, index: int) -> int {
-	current_index := 0;
-	for member: _struct.members {
-		for member.declarators {
-			if current_index == index {
-				return layout.members[current_index].offset;
-			}
-			current_index += 1;
-		}
-	}
-	assert(false);
-	return 0;
-}
-
 member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int) -> *Resolved_Type {
 	current_index := 0;
 	for member: _struct.members {
@@ -682,7 +653,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 							case Node_Field_Designator;
 								field := it.(*Node_Field_Designator);
 								index = index_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
-								offset += offset_from_struct_member(tc, type.composite.(*Node_Struct), type.layout, field.name.view);
+								offset += type.layout.members[index].offset;
 								type = type_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
 							case Node_Index_Designator;
 								array := it.(*Node_Index_Designator);
@@ -700,7 +671,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 					}
 				} else {
 					if type.kind == .Composite {
-						offset = offset_from_struct_member_index(tc, type.composite.(*Node_Struct), type.layout, index);
+						offset = type.layout.members[index].offset;
 						type = member_type_from_index(tc, type.composite.(*Node_Struct), index);
 					} else if type.kind == .Array {
 						offset = index * type.inner.size_in_bytes;
