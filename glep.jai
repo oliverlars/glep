@@ -328,7 +328,7 @@ Node_Designation :: struct {
 	designators: [..]*Node_Designator;
 	expr: *Node_Initializer;
 	// HACK(Oliver): This just feels weird
-	member_index: int;
+	byte_offset: int;
 }
 
 Node_Designator :: struct {

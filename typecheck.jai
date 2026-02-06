@@ -623,36 +623,32 @@ index_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: str
 }
 
 offset_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
-	offset := 0;
 	index := 0;
 	for member: _struct.members {
 		for member.declarators {
 			member_name := identifier_from_declarator(it);
 			if member_name == name {
-				return offset;
+				return layout.members[index].offset;
 			}
-			offset = layout.members[index].offset;
 			index += 1;
 		}
 	}
 	assert(false);
-	return offset;
+	return 0;
 }
 
 offset_from_struct_member_index :: (tc: *Type_Checker, _struct: *Node_Struct, layout: Struct_Layout, index: int) -> int {
-	offset := 0;
 	current_index := 0;
 	for member: _struct.members {
 		for member.declarators {
 			if current_index == index {
-				return offset;
+				return layout.members[current_index].offset;
 			}
-			offset = layout.members[current_index].offset;
 			current_index += 1;
 		}
 	}
 	assert(false);
-	return offset;
+	return 0;
 }
 
 member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int) -> *Resolved_Type {

@@ -567,8 +567,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						offset = left_type.layout.members[index].offset;
 						break it;
 					}
+					index += 1;
 				}
-				index += 1;
 			}
 
 			emit(compiler, "mov x10, #%", offset);
@@ -794,9 +794,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, layout: St
 	
 	base := cursor;
 	for init.(*Node_Designated_Initializer).designations {
-		if it.designators.count > 0 {
-			cursor = layout.members[it_index].offset;
-		}
+		cursor = base + it.byte_offset;
 		cursor = compile_initializer(compiler, it.expr, layout, cursor);
 	}
 	return cursor;
@@ -1119,9 +1117,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			return cursor;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
-				if it.designators.count > 0 {
-					cursor = layout.members[it_index].offset;
-				}
+				cursor = it.byte_offset;
 				cursor = compile_global_initializer(compiler, it.expr, layout, bytes, cursor);
 			}
 		}
