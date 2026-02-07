@@ -132,28 +132,34 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 
 	if counts[Type_Specifier.Char] > 0 {
 		info.size_in_bytes = 1;
+		info.alignment = 1;
 	}
 
 	if counts[Type_Specifier.Short] > 0 {
 		info.size_in_bytes = 2;
+		info.alignment = 2;
 	}
 
 	if counts[Type_Specifier.Long] == 2 {
 		info.size_in_bytes = 8;
+		info.alignment = 8;
 	}
 
 	if counts[Type_Specifier.Float] {
 		info.size_in_bytes = 4;
 		info.kind = .Floating;
+		info.alignment = 4;
 	}
 
 	if counts[Type_Specifier.Double] {
 		info.size_in_bytes = 8;
 		info.kind = .Floating;
+		info.alignment = 8;
 	}
 
 	if counts[Type_Specifier.Int] {
 		info.size_in_bytes = 4;
+		info.alignment = 4;
 	}
 
 	for decl_info.qualifiers {
@@ -173,20 +179,22 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		if !table_contains(*tc._structs, _struct) {
 			offset := 0;
 			table_add(*tc._structs, _struct, info);
+			max_alignment := 0;
 			for member_decl, member_it: _struct.members {
 				for member_declarator: member_decl.declarators {
 					member_type := resolve_decl(tc, member_decl, member_declarator);
-					if offset % member_type.size_in_bytes != 0 {
-						size := member_type.size_in_bytes;
-						bytes_to_pad := (size - (offset % size)) % size;
+					if offset % member_type.alignment != 0 {
+						align := member_type.alignment;
+						bytes_to_pad := (align - (offset % align)) % align;
 						offset += bytes_to_pad;
 					}
+					max_alignment = max(max_alignment, member_type.alignment);
 					array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
 					offset += member_type.size_in_bytes;
 					member_declarator.resolved_type = member_type;
 				}
 			}
-			info.size_in_bytes = (offset + 3) & ~3;
+			info.size_in_bytes = (offset + max_alignment - 1) & ~(max_alignment - 1);
 		} else {
 			_, info = table_find(*tc._structs, _struct);
 		}
@@ -205,6 +213,7 @@ resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *R
 			ptr.kind = .Pointer;
 			ptr.size_in_bytes = 8;
 			ptr.inner = base;
+			ptr.alignment = 8;
 			return resolve_declarator(ptr, declarator.inner);
 		case Node_Array_Declarator;
 			inner := resolve_declarator(base, declarator.inner);
@@ -213,6 +222,7 @@ resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *R
 			array.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
 			array.inner = inner;
 			array.array_count = declarator.(*Node_Array_Declarator).count;
+			array.alignment = inner.alignment;
 			return array;
 		case Node_Identifier_Declarator;
 			return base;

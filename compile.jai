@@ -553,26 +553,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
-
-
-			compile_lvalue(compiler, member_access.left);
-
-			left_type := member_access.left.resolved_type;
-			offset := 0;
-			index := 0;
-			for left_type.composite.(*Node_Struct).members {
-				for declarator: it.declarators {
-					name := identifier_from_declarator(declarator);
-					if name == member_access.right.view {
-						offset = left_type.layout.members[index].offset;
-						break it;
-					}
-					index += 1;
-				}
-			}
-
-			emit(compiler, "mov x10, #%", offset);
-			emit(compiler, "add x9, x9, x10");
+			compile_lvalue(compiler, member_access);
 			emit(compiler, "ldr %, [x9]", register(9, member_access.resolved_type));
 		case Node_Array_Access; 
 			array_access := expr.(*Node_Array_Access);
