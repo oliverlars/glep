@@ -16,7 +16,8 @@ int main() {
 	};
 
 	Vec b = vec(10, 20, 30);
-	printf("a = [%f, %f, %f]\n", b.x, b.y, b.z);
+	Vec c = vadd(a, b);
+	printf("a = [%f, %f, %f]\n", c.x, c.y, c.z);
 
 	return 0;
 }

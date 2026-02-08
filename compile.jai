@@ -693,10 +693,29 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			variadic := function.variadic;
 
 			arg_offsets: [..]int;
+			arg_sizes: [..]int;
 			for call.args {
-				compile_expr(compiler, it);
-				offset := push_intermediate(compiler, it.resolved_type);
-				array_add(*arg_offsets, offset);
+				if it.resolved_type.kind == .Composite {
+					if it.expr_type == Node_Call {
+						compile_expr(compiler, it);
+					} else {
+						compile_lvalue(compiler, it);
+					}
+					size := (it.resolved_type.size_in_bytes + 7) & ~7;
+					offset := compiler.intermediate_stack_offset;
+					compiler.intermediate_stack_offset += size;
+					emit(compiler, "add x0, sp, #%", offset);
+					emit(compiler, "mov x1, x9");
+					emit(compiler, "mov x2, #%", it.resolved_type.size_in_bytes);
+					emit(compiler, "bl _memcpy");
+					array_add(*arg_offsets, offset);
+					array_add(*arg_sizes, size);
+				} else {
+					compile_expr(compiler, it);
+					offset := push_intermediate(compiler, it.resolved_type);
+					array_add(*arg_offsets, offset);
+					array_add(*arg_sizes, 8);
+				}
 			}
 			
 			vararg_offset := 0;
@@ -720,7 +739,23 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					}
 					vararg_offset += 8;
 				} else {
-					if it.resolved_type.kind == .Floating {
+					if it.resolved_type.kind == .Composite {
+						_struct := it.resolved_type.composite.(*Node_Struct);
+						hfa, count, size := is_hfa(_struct);
+						if hfa {
+							if size == 4 {
+								for 0..count-1 {
+									emit(compiler, "ldr s%, [sp, #%]", reg_float, offset + it*4);
+									reg_float += 1;
+								}
+							} else {
+								for 0..count-1 {
+									emit(compiler, "ldr d%, [sp, #%]", reg_float, offset + it*8);
+									reg_float += 1;
+								}
+							}
+						}
+					} else if it.resolved_type.kind == .Floating {
 						emit(compiler, "ldr %, [sp, #%]", register(reg_float, it.resolved_type), offset);
 						reg_float += 1;
 					} else {
@@ -730,7 +765,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 			
-			compiler.intermediate_stack_offset -= call.args.count * 8;
+			for arg_sizes {
+				compiler.intermediate_stack_offset -= it;
+			}
 
 			emit(compiler, "bl _%", name);
 			
@@ -1036,17 +1073,37 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add x29, sp, #0");
 
+				reg_float := 0;
+				reg_integer := 0;
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					if it.declarators[0].resolved_type.kind == .Integral ||
+					if it.declarators[0].resolved_type.kind == .Composite {
+						_struct := it.declarators[0].resolved_type.composite.(*Node_Struct);
+						hfa, count, size := is_hfa(_struct);
+						if hfa {
+							if size == 4 {
+								for 0..count-1 {
+									emit(compiler, "str s%, [sp, #%]", reg_float, compiler.stack_offset + it*4);
+									reg_float += 1;
+								}
+							} else {
+								for 0..count-1 {
+									emit(compiler, "str d%, [sp, #%]", reg_float, compiler.stack_offset + it*8);
+									reg_float += 1;
+								}
+							}
+						}
+					} else if it.declarators[0].resolved_type.kind == .Integral ||
 					   it.declarators[0].resolved_type.kind == .Pointer {
-						emit(compiler, "str x%, [sp, #%]", it_index, compiler.stack_offset);
+						emit(compiler, "str x%, [sp, #%]", reg_integer, compiler.stack_offset);
+						reg_integer += 1;
 					} else if it.declarators[0].resolved_type.kind == .Floating {
 						if it.declarators[0].resolved_type.size_in_bytes == 8 {
-							emit(compiler, "str d%, [sp, #%]", it_index, compiler.stack_offset);
+							emit(compiler, "str d%, [sp, #%]", reg_float, compiler.stack_offset);
 						} else {
-							emit(compiler, "str s%, [sp, #%]", it_index, compiler.stack_offset);
+							emit(compiler, "str s%, [sp, #%]", reg_float, compiler.stack_offset);
 						}
+						reg_float += 1;
 					}
 					push_decl(compiler, name, it.declarators[0].resolved_type.size_in_bytes, it.declarators[0]);
 				}
