@@ -739,7 +739,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			} else if call.resolved_type.kind == .Integral || call.resolved_type.kind == .Pointer {
 				emit(compiler, "mov %, %", register(9, call.resolved_type), register(0, call.resolved_type));
 			} else {
-				// TODO(Oliver): Emit struct return
+				_struct := call.resolved_type.composite.(*Node_Struct);
+				hfa, count, size := is_hfa(_struct);
+				ret_offset := compiler.intermediate_stack_offset;
+				compiler.intermediate_stack_offset += call.resolved_type.size_in_bytes;
+				if hfa {
+					if size == 4 {
+						for 0..count-1 {
+							emit(compiler, "str s%, [sp, #%]", it, ret_offset + it*4);
+						}
+					} else {
+						for 0..count-1 {
+							emit(compiler, "str d%, [sp, #%]", it, ret_offset + it * 8);
+						}
+					}
+				}
+				emit(compiler, "add x9, sp, #%", ret_offset);
 			}
 		case Node_String;
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
@@ -761,7 +776,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		if expr.resolved_type.kind == .Composite {
-			compile_lvalue(compiler, expr);
+			compile_expr(compiler, expr);
 			emit(compiler, "add x0, sp, #%", cursor);
 			emit(compiler, "mov x1, x9");
 			emit(compiler, "mov x2, #%", expr.resolved_type.size_in_bytes);
@@ -832,10 +847,12 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 				if hfa {
 					if size == 4 {
 						for 0..count-1 {
-							emit(compiler, "ldr s%, [x9, #%]", it, );
+							emit(compiler, "ldr s%, [x9, #%]", it, it*4);
 						}
 					} else {
-
+						for 0..count-1 {
+							emit(compiler, "ldr d%, [x9, #%]", it, it * 8);
+						}
 					}
 				}
 			}
@@ -913,6 +930,9 @@ stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
 			if expr_stmt.expr.expr_type == Node_Compound {
 				compound := expr_stmt.expr.(*Node_Compound);
 				stack_size += (compound.resolved_type.size_in_bytes + 7) & ~7;
+			} else if expr_stmt.expr.expr_type == Node_Call {
+				call := expr_stmt.expr.(*Node_Call);
+				stack_size += (call.resolved_type.size_in_bytes + 7) & ~7;
 			}
 		}
 		print("Statement Type: %\n", it.statement_type);

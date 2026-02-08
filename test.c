@@ -14,7 +14,9 @@ int main() {
 	Vec a = (Vec) {
 		1, .z = 2,
 	};
-	printf("a = [%f, %f, %f]\n", a.x, a.y, a.z);
+
+	Vec b = vec(10, 20, 30);
+	printf("a = [%f, %f, %f]\n", b.x, b.y, b.z);
 
 	return 0;
 }
