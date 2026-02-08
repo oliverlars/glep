@@ -2,6 +2,13 @@
 
 typedef struct { double x, y, z; } Vec;
 
+typedef struct { int a, b, c, d; } BigStruct;
+
+int big_struct(BigStruct bs) {
+	printf("Big Struct is: [%d, %d, %d, %d]\n", bs.a, bs.b, bs.c, bs.d);
+	return 0;
+}
+
 Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
 Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
 Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
@@ -11,13 +18,12 @@ double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
 
 int main() {
-	Vec a = (Vec) {
-		1, .z = 2,
+
+	BigStruct bs = (BigStruct){
+		1, 2, 3, 4
 	};
 
-	Vec b = vec(10, 20, 30);
-	Vec c = vadd(a, b);
-	printf("a = [%f, %f, %f]\n", c.x, c.y, c.z);
+	big_struct(bs);
 
 	return 0;
 }

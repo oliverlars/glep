@@ -754,6 +754,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 									reg_float += 1;
 								}
 							}
+						} else {
+							compile_lvalue(compiler, it);
+							emit(compiler, "mov x%, x9", reg_integer);
+							reg_integer += 1;
 						}
 					} else if it.resolved_type.kind == .Floating {
 						emit(compiler, "ldr %, [sp, #%]", register(reg_float, it.resolved_type), offset);
@@ -1078,7 +1082,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
 					if it.declarators[0].resolved_type.kind == .Composite {
-						_struct := it.declarators[0].resolved_type.composite.(*Node_Struct);
+						type_struct := it.declarators[0].resolved_type;
+						_struct := type_struct.composite.(*Node_Struct);
 						hfa, count, size := is_hfa(_struct);
 						if hfa {
 							if size == 4 {
@@ -1092,6 +1097,21 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 									reg_float += 1;
 								}
 							}
+						} else if type_struct.size_in_bytes >= 16 {
+							if reg_integer < 2 {
+								emit(compiler, "mov x12, x0");
+								emit(compiler, "mov x13, x1");
+							}
+							emit(compiler, "mov x1, x%", reg_integer);
+							emit(compiler, "mov x0, sp");
+							emit(compiler, "add x0, x0, #%", compiler.stack_offset);
+							emit(compiler, "mov x2, #%", type_struct.size_in_bytes);
+							emit(compiler, "bl _memcpy");
+							if reg_integer < 2 {
+								emit(compiler, "mov x0, x12");
+								emit(compiler, "mov x1, x13");
+							}
+							reg_integer += 1;
 						}
 					} else if it.declarators[0].resolved_type.kind == .Integral ||
 					   it.declarators[0].resolved_type.kind == .Pointer {
