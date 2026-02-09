@@ -2,10 +2,11 @@
 
 typedef struct { double x, y, z; } Vec;
 
-typedef struct { int a, b, c, d; } BigStruct;
+typedef struct { int a, b, c, d, e, f; } BigStruct;
 
-int big_struct(BigStruct bs) {
-	printf("Big Struct is: [%d, %d, %d, %d]\n", bs.a, bs.b, bs.c, bs.d);
+int big_struct(BigStruct x, BigStruct y) {
+	printf("Big Struct x is: [%d, %d, %d, %d, %d, %d]\n", x.a, x.b, x.c, x.d, x.e, x.f);
+	printf("Big Struct y is: [%d, %d, %d, %d, %d, %d]\n", y.a, y.b, y.c, y.d, y.e, y.f);
 	return 0;
 }
 
@@ -23,7 +24,11 @@ int main() {
 		1, 2, 3, 4
 	};
 
-	big_struct(bs);
+	BigStruct bs2 = (BigStruct){
+		2, 4, 6, 8
+	};
+
+	big_struct(bs, bs2);
 
 	return 0;
 }

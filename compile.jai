@@ -1099,8 +1099,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 							}
 						} else if type_struct.size_in_bytes >= 16 {
 							if reg_integer < 2 {
-								emit(compiler, "mov x12, x0");
-								emit(compiler, "mov x13, x1");
+								emit(compiler, "mov x19, x0");
+								emit(compiler, "mov x20, x1");
 							}
 							emit(compiler, "mov x1, x%", reg_integer);
 							emit(compiler, "mov x0, sp");
@@ -1108,8 +1108,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 							emit(compiler, "mov x2, #%", type_struct.size_in_bytes);
 							emit(compiler, "bl _memcpy");
 							if reg_integer < 2 {
-								emit(compiler, "mov x0, x12");
-								emit(compiler, "mov x1, x13");
+								emit(compiler, "mov x0, x19");
+								emit(compiler, "mov x1, x20");
 							}
 							reg_integer += 1;
 						}
