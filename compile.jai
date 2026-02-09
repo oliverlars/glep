@@ -127,6 +127,13 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
 			literal_offset := compiler.stack_offset;
 			compiler.stack_offset += size;
+
+
+			// Zero initialise!
+			emit(compiler, "add x0, sp, #%", literal_offset);
+			emit(compiler, "mov x1, #0");
+			emit(compiler, "mov x2, #%", compound.resolved_type.size_in_bytes);
+			emit(compiler, "bl _memset");
 			
 			compile_initializer(compiler, compound.init, literal_offset);
 			
@@ -755,8 +762,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 								}
 							}
 						} else {
-							compile_lvalue(compiler, it);
-							emit(compiler, "mov x%, x9", reg_integer);
+							emit(compiler, "add x%, sp, #%", reg_integer, offset);
 							reg_integer += 1;
 						}
 					} else if it.resolved_type.kind == .Floating {
@@ -964,6 +970,12 @@ stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
 			for declarator: decl.declarators {
 				if declarator.resolved_type {
 					stack_size += (declarator.resolved_type.size_in_bytes + 7) & ~7;
+				}
+				if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
+					init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
+					if init_expr.expr_type == Node_Compound {
+						stack_size += (init_expr.resolved_type.size_in_bytes + 7) & ~7;
+					}
 				}
 			}
 		} else if it.statement_type == Node_Expr_Statement {
