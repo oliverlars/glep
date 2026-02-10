@@ -496,7 +496,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			member_access.left.resolved_type = resolve_expr(tc, member_access.left);
 			left_type := member_access.left.resolved_type;
 			id := member_access.right.view;
-			assert(left_type.composite != null);
+			if left_type.composite == null {
+				left_type = left_type.inner;
+			}
 			assert(left_type.composite.type == Node_Struct);
 			for left_type.composite.(*Node_Struct).members {
 				for declarator: it.declarators {

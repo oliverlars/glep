@@ -118,6 +118,22 @@ emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	append(*compiler.builder, "\n");
 }
 
+offset_from_member_name :: (_struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
+	offset := 0;
+	index := 0;
+	for _struct.members {
+		for declarator: it.declarators {
+			member_name := identifier_from_declarator(declarator);
+			if name == member_name {
+				offset = layout.members[index].offset;
+				break it;
+			}
+			index += 1;
+		}
+	}
+	return offset;
+}
+
 compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
@@ -179,22 +195,19 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 
-			compile_lvalue(compiler, member_access.left);
+			if member_access.left.resolved_type.kind == .Pointer {
+				compile_expr(compiler, member_access.left);
+			} else {
+				compile_lvalue(compiler, member_access.left);
+			}
 
 
 			left_type := member_access.left.resolved_type;
-			offset := 0;
-			index := 0;
-			for left_type.composite.(*Node_Struct).members {
-				for declarator: it.declarators {
-					name := identifier_from_declarator(declarator);
-					if name == member_access.right.view {
-						offset = left_type.layout.members[index].offset;
-						break it;
-					}
-					index += 1;
-				}
+			if left_type.composite == null {
+				left_type = left_type.inner;
 			}
+
+			offset := offset_from_member_name(xx left_type.composite, left_type.layout, member_access.right.view);
 
 			emit(compiler, "mov x10, #%", offset);
 			emit(compiler, "add x9, x9, x10");
