@@ -38,6 +38,8 @@ Compiler :: struct {
 	intermediate_stack_offset: int;
 
 	variadic_stack_size: int;
+
+	label_for_count: int;
 }
 
 push_scope :: (compiler: *Compiler) {
@@ -178,11 +180,14 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
-			
+
 			compile_expr(compiler, array_access.index);
 			offset := push_intermediate(compiler, array_access.index.resolved_type);
 
 			compile_lvalue(compiler, array_access.left);
+			if array_access.left.resolved_type.kind == .Pointer {
+				emit(compiler, "ldr x9, [x9]");
+			}
 			pop_intermediate(compiler, array_access.index.resolved_type, offset);
 
 			// Inner type points to the thing it's an array of, you could also divide
@@ -195,10 +200,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 
+			compile_lvalue(compiler, member_access.left);
 			if member_access.left.resolved_type.kind == .Pointer {
-				compile_expr(compiler, member_access.left);
-			} else {
-				compile_lvalue(compiler, member_access.left);
+				emit(compiler, "ldr x9, [x9]");
 			}
 
 
@@ -886,6 +890,12 @@ is_hfa :: (_struct: *Node_Struct) -> bool, count: int, size: int {
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	if !stmt return;
 	if stmt.statement_type == {
+		case Node_For;
+			_for := stmt.(*Node_For);
+			push_scope(compiler);
+			compile_decl(compiler, _for.init);
+			compile_expr(compiler, _for.cond);
+			pop_scope(compiler);
 		case Node_Block;
 			push_scope(compiler);
 			for stmt.(*Node_Block).statements {
@@ -920,15 +930,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
-			for decl.declarators {
-				name := identifier_from_declarator(it);
-				// FIXME(Oliver): Enums won't work yet
-				stack_slot: Stack_Slot;
-				if it.resolved_type {
-					stack_slot = push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
-				}
-				compile_initializer(compiler, it.init, stack_slot.offset);
-			}
+			compile_decl(compiler, decl);
 	}
 }
 
@@ -942,20 +944,14 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 }
 
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
-	if !decl return;
 	for decl.declarators {
 		name := identifier_from_declarator(it);
 		// FIXME(Oliver): Enums won't work yet
+		stack_slot: Stack_Slot;
 		if it.resolved_type {
-			print("DECL %: %\n", name, decl.*);
-			push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
+			stack_slot = push_decl(compiler, name, it.resolved_type.size_in_bytes, it);
 		}
-		if it.init {
-			if it.init.initializer_type == Node_Scalar_Initializer {
-				compile_expr(compiler, it.init.(*Node_Scalar_Initializer).expr);
-				emit(compiler, "str %, [sp, #%]", register(9, it.resolved_type), compiler.stack_offset);
-			}
-		}
+		compile_initializer(compiler, it.init, stack_slot.offset);
 	}
 }
 
@@ -1086,12 +1082,12 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
 					if it.declarators[0].resolved_type {
-						locals_stack_size += it.declarators[0].resolved_type.size_in_bytes;
+						locals_stack_size += (it.declarators[0].resolved_type.size_in_bytes + 7) & ~7;
 					}
 				}
 				// We should only need to resize the final total here
 				total_stack_space_needed := locals_stack_size + variadic_stack_size + link_and_return_stack_size + temporaries_stack_size;
-				total_stack_space_needed = (total_stack_space_needed + 15) & ~15; 
+				total_stack_space_needed = (total_stack_space_needed + 15) & ~15;
 				// We have to align the stack offsets and size to be a multiple of 16
 				variadic_offset := 0;
 				locals_offset := variadic_stack_size;
@@ -1123,18 +1119,31 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 								}
 							}
 						} else if type_struct.size_in_bytes >= 16 {
-							if reg_integer < 2 {
-								emit(compiler, "mov x19, x0");
-								emit(compiler, "mov x20, x1");
+							// Inline copy from pointer in x[reg_integer] to local stack slot.
+							// No memcpy call, so no registers get clobbered.
+							bytes_remaining := type_struct.size_in_bytes;
+							copy_offset := 0;
+							while bytes_remaining >= 8 {
+								emit(compiler, "ldr x9, [x%, #%]", reg_integer, copy_offset);
+								emit(compiler, "str x9, [sp, #%]", compiler.stack_offset + copy_offset);
+								copy_offset += 8;
+								bytes_remaining -= 8;
 							}
-							emit(compiler, "mov x1, x%", reg_integer);
-							emit(compiler, "mov x0, sp");
-							emit(compiler, "add x0, x0, #%", compiler.stack_offset);
-							emit(compiler, "mov x2, #%", type_struct.size_in_bytes);
-							emit(compiler, "bl _memcpy");
-							if reg_integer < 2 {
-								emit(compiler, "mov x0, x19");
-								emit(compiler, "mov x1, x20");
+							if bytes_remaining >= 4 {
+								emit(compiler, "ldr w9, [x%, #%]", reg_integer, copy_offset);
+								emit(compiler, "str w9, [sp, #%]", compiler.stack_offset + copy_offset);
+								copy_offset += 4;
+								bytes_remaining -= 4;
+							}
+							if bytes_remaining >= 2 {
+								emit(compiler, "ldrh w9, [x%, #%]", reg_integer, copy_offset);
+								emit(compiler, "strh w9, [sp, #%]", compiler.stack_offset + copy_offset);
+								copy_offset += 2;
+								bytes_remaining -= 2;
+							}
+							if bytes_remaining >= 1 {
+								emit(compiler, "ldrb w9, [x%, #%]", reg_integer, copy_offset);
+								emit(compiler, "strb w9, [sp, #%]", compiler.stack_offset + copy_offset);
 							}
 							reg_integer += 1;
 						}

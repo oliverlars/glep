@@ -4,19 +4,30 @@ typedef struct { double x, y, z; } Vec;
 
 typedef struct { int a, b, c, d, e, f; } BigStruct;
 
-int big_struct(BigStruct x, BigStruct *y) {
-	printf("Big Struct x is: [%d, %d, %d, %d, %d, %d]\n", x.a, x.b, x.c, x.d, x.e, x.f);
-	printf("Big Struct y is: [%d, %d, %d, %d, %d, %d]\n", y->a, y->b, y->c, y->d, y->e, y->f);
+int big_struct(BigStruct x, BigStruct *y, int *out_param) {
+	//printf("Big Struct x is: [%d, %d, %d, %d, %d, %d]\n", x.a, x.b, x.c, x.d, x.e, x.f);
+	//y->a = 10;
+	//printf("Big Struct y is: [%d, %d, %d, %d, %d, %d]\n", y->a, y->b, y->c, y->d, y->e, y->f);
+	out_param[0] = 200;
 	return 0;
 }
 
-Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
-Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
-Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
-Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
-Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
-double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
-Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
+int foo(int a, int *out_param) {
+	out_param[0] = a;
+	return 0;
+}
+
+int bar(int a, int b, int c) {
+	return a + b + c;
+}
+
+// Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
+// Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
+// Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
+// Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
+// Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
+// double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+// Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
 
 int main() {
 
@@ -28,7 +39,14 @@ int main() {
 		2, 4, 6, 8
 	};
 
-	big_struct(bs, &bs2);
+	int rinky_dinky = 0;
+	big_struct(bs, &bs2, &rinky_dinky);
+
+	foo(bar( 1, 1, 1), &rinky_dinky);
+
+	printf("RINKY DINKY IS WHAT?: %d", rinky_dinky);
+
+
 
 	return 0;
 }
