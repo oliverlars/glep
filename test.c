@@ -29,6 +29,12 @@ int bar(int a, int b, int c) {
 // double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 // Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
 
+double rng(unsigned int *seed) {
+	*seed = *seed * 1103515245 + 12345;
+	unsigned int c = 0x7fffffff;
+	return (*seed & c) / (double)c;
+}
+
 int main() {
 
 	BigStruct bs = (BigStruct){
@@ -43,6 +49,9 @@ int main() {
 	big_struct(bs, &bs2, &rinky_dinky);
 
 	foo(1 < 2, &rinky_dinky);
+
+	unsigned int seed = 10;
+	double value = rng(&seed);
 
 	printf("RINKY DINKY IS WHAT?: %d", rinky_dinky);
 

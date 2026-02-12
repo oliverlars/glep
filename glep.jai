@@ -2273,12 +2273,6 @@ main :: () {
 		}
 	}
 
-	output: string;
-	for tokens {
-		output = join(output, sprint("% ", it.view));
-	}
-	write_entire_file("processed.c", output);
-
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;
 	for tokens {
@@ -2298,6 +2292,16 @@ main :: () {
 	typechecker.ordinary = parser.ordinary;
 	typecheck(*typechecker, tu);
 
+	builder: String_Builder;
+	for tu.declarations {
+		print_decl(*builder, it);
+		if !it.body {
+			append(*builder, ";");
+		}
+		append(*builder, "\n");
+	}
+	write_entire_file("out.c", builder_to_string(*builder));
+
 	compiler: Compiler;
 	compiler.strings = parser.strings;
 	compiler.ordinary = parser.ordinary;
@@ -2311,14 +2315,6 @@ main :: () {
 	dt := t1 - t0;
 	ms := 1000*to_float64_seconds(dt);
 
-	builder: String_Builder;
-	for tu.declarations {
-		print_decl(*builder, it);
-		if !it.body {
-			append(*builder, ";");
-		}
-		append(*builder, "\n");
-	}
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 

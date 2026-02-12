@@ -426,10 +426,44 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	return info;
 }
 
+decl_info_from_resolved_type :: (target: *Resolved_Type) -> Node_Decl_Info {
+	info: Node_Decl_Info;
+	if target.kind == {
+		case .Floating;
+			if target.size_in_bytes == 4  array_add(*info.specifiers, "float");
+			else                          array_add(*info.specifiers, "double");
+		case .Integral;
+			if target.unsigned  array_add(*info.specifiers, "unsigned");
+			if target.size_in_bytes == {
+				case 1; array_add(*info.specifiers, "char");
+				case 2; array_add(*info.specifiers, "short");
+				case 4; array_add(*info.specifiers, "int");
+				case 8; array_add(*info.specifiers, "long");
+			}
+		case .Composite;
+			_struct := target.composite.(*Node_Struct);
+			info._struct = _struct;
+			info.reference = true;
+		case .Pointer;
+			inner_info := decl_info_from_resolved_type(target.inner);
+			ptr_decl := New(Node_Declarator);
+			ptr_decl.declarator_type = Node_Pointer_Declarator;
+			if inner_info.declarators.count > 0 {
+				ptr_decl.inner = inner_info.declarators[0];
+				inner_info.declarators[0] = ptr_decl;
+			} else {
+				array_add(*inner_info.declarators, ptr_decl);
+			}
+			info = inner_info;
+	}
+	return info;
+}
+
 insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
 	c := New(Node_Cast);
 	c.expr = at;
 	c.resolved_type = target;
+	c.base = decl_info_from_resolved_type(target);
 	assert(c.resolved_type != null);
 	assert(c.expr.resolved_type != null);
 	return c;
@@ -534,6 +568,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				case .Asterisk;
 					info = info.inner;
 			}
+			expr.resolved_type = info;
 			return info, info.kind != .Composite;
 		case Node_Cast;
 			source := resolve_expr(tc, expr.(*Node_Cast).expr);
