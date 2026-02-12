@@ -398,6 +398,7 @@ split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	info := New(Resolved_Type);
 	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
+	print("SUFFIX: %\n", suffix);
 	if number_node.kind == .FLOAT {
 		info.kind = .Floating;
 		info.size_in_bytes = 8;

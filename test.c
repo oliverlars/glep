@@ -13,7 +13,7 @@ int big_struct(BigStruct x, BigStruct *y, int *out_param) {
 }
 
 int foo(int a, int *out_param) {
-	out_param[0] = a;
+	*out_param = 1 < 2u;
 	return 0;
 }
 
@@ -42,7 +42,7 @@ int main() {
 	int rinky_dinky = 0;
 	big_struct(bs, &bs2, &rinky_dinky);
 
-	foo(bar( 1, 1, 1), &rinky_dinky);
+	foo(1 < 2, &rinky_dinky);
 
 	printf("RINKY DINKY IS WHAT?: %d", rinky_dinky);
 

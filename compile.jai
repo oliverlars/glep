@@ -629,6 +629,28 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						div = "fdiv";
 					}
 					emit(compiler, "% %, %, %", div, register(9, t), register(10, t), register(9, t));
+				case .Less;
+					cmp := ifx t.unsigned then "lo" else "lt";
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, %", register(9, t), cmp);
+				case .Greater;
+					cmp := ifx t.unsigned then "hi" else "gt";
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, %", register(9, t), cmp);
+				case .GreaterEqual;
+					cmp := ifx t.unsigned then "hs" else "ge";
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, %", register(9, t), cmp);
+				case .LessEqual;
+					cmp := ifx t.unsigned then "ls" else "le";
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, %", register(9, t), cmp);
+				case .EqualEqual;
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, eq", register(10, t));
+				case .BangEqual;
+					emit(compiler, "cmp %, %", register(10, t), register(9, t));
+					emit(compiler, "cset %, ne", register(10, t));
 			}
 		case Node_Number;
 			number := expr.(*Node_Number);
