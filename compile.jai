@@ -33,9 +33,7 @@ Compiler :: struct {
 	// entered so we can restore it on exit
 	scopes: [..]Scope_Frame;
 	stack_offset: int;
-
-	// Where intermediate values get stored on the 
-	intermediate_stack_offset: int;
+	max_stack_offset: int;
 
 	variadic_stack_size: int;
 
@@ -72,6 +70,7 @@ push_decl :: (compiler: *Compiler, name: string, size_in_bytes: int, declarator:
 	// TODO(Oliver): Derive from decl?
 	// Nearest 8 bytes because alignment
 	compiler.stack_offset += (size_in_bytes + 7) & ~7;
+	if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 	return stack_slot;
 }
 
@@ -141,10 +140,11 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 	if expr.expr_type == {
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
-			
+
 			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
 			literal_offset := compiler.stack_offset;
 			compiler.stack_offset += size;
+			if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 
 
 			// Zero initialise!
@@ -726,8 +726,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						compile_lvalue(compiler, it);
 					}
 					size := (it.resolved_type.size_in_bytes + 7) & ~7;
-					offset := compiler.intermediate_stack_offset;
-					compiler.intermediate_stack_offset += size;
+					offset := compiler.stack_offset;
+					compiler.stack_offset += size;
+					if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 					emit(compiler, "add x0, sp, #%", offset);
 					emit(compiler, "mov x1, x9");
 					emit(compiler, "mov x2, #%", it.resolved_type.size_in_bytes);
@@ -793,7 +794,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 			
 			for arg_sizes {
-				compiler.intermediate_stack_offset -= it;
+				compiler.stack_offset -= it;
 			}
 
 			emit(compiler, "bl _%", name);
@@ -805,8 +806,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			} else {
 				_struct := call.resolved_type.composite.(*Node_Struct);
 				hfa, count, size := is_hfa(_struct);
-				ret_offset := compiler.intermediate_stack_offset;
-				compiler.intermediate_stack_offset += call.resolved_type.size_in_bytes;
+				ret_offset := compiler.stack_offset;
+				compiler.stack_offset += call.resolved_type.size_in_bytes;
+				if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 				if hfa {
 					if size == 4 {
 						for 0..count-1 {
@@ -956,51 +958,19 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 }
 
 push_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type) -> int {
-	offset := compiler.intermediate_stack_offset;
+	offset := compiler.stack_offset;
 	emit(compiler, "str %, [sp, #%]", register(9, resolved_type), offset);
-	compiler.intermediate_stack_offset += 8;
+	compiler.stack_offset += 8;
+	if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 	return offset;
 }
 
 pop_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type, offset: int) {
 	emit(compiler, "ldr %, [sp, #%]", register(10, resolved_type), offset);
-	compiler.intermediate_stack_offset -= 8;
+	compiler.stack_offset -= 8;
 }
 
-stack_space_needed_for_variables :: (block: *Node_Statement) -> int {
-	if !block return 0;
-	assert(block.statement_type == Node_Block);
-	stack_size := 0;
-	for block.(*Node_Block).statements {
-		if it.statement_type == Node_Block {
-			stack_size = max(stack_size, stack_space_needed_for_variables(it));
-		} else if it.statement_type == Node_Decl_Statement {
-			decl := it.(*Node_Decl_Statement).decl;
-			for declarator: decl.declarators {
-				if declarator.resolved_type {
-					stack_size += (declarator.resolved_type.size_in_bytes + 7) & ~7;
-				}
-				if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
-					init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
-					if init_expr.expr_type == Node_Compound {
-						stack_size += (init_expr.resolved_type.size_in_bytes + 7) & ~7;
-					}
-				}
-			}
-		} else if it.statement_type == Node_Expr_Statement {
-			expr_stmt := it.(*Node_Expr_Statement);
-			if expr_stmt.expr.expr_type == Node_Compound {
-				compound := expr_stmt.expr.(*Node_Compound);
-				stack_size += (compound.resolved_type.size_in_bytes + 7) & ~7;
-			} else if expr_stmt.expr.expr_type == Node_Call {
-				call := expr_stmt.expr.(*Node_Call);
-				stack_size += (call.resolved_type.size_in_bytes + 7) & ~7;
-			}
-		}
-		print("Statement Type: %\n", it.statement_type);
-	}
-	return stack_size;
-}
+
 
 stack_space_needed_for_variadic_functions :: (compiler: *Compiler, block: *Node_Statement) -> int {
 	if !block return 0;
@@ -1069,35 +1039,20 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				*/
 				push_scope(compiler);
-				// NOTE(Oliver): All C symbols need underscores? what the hell?
 				name := identifier_from_declarator(declarator);
 				emit(compiler, "_%:", name);
-				link_and_return_stack_size := 16;
-				locals_stack_size := stack_space_needed_for_variables(decl.body);
+
 				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
-				// HACK(Oliver): If you need more than this you got some brain damage
-				temporaries_stack_size := 128;
+				compiler.stack_offset = variadic_stack_size;
+				compiler.max_stack_offset = variadic_stack_size;
+
+				// Compile params and body into a separate builder.
+				// We don't know the total stack size yet, that's determined
+				// by how much stack_offset grows during compilation.
+				saved_builder := compiler.builder;
+				compiler.builder = .{};
 
 				function := function_declarator(declarator);
-				for function.params {
-					name := identifier_from_declarator(it.declarators[0]);
-					if it.declarators[0].resolved_type {
-						locals_stack_size += (it.declarators[0].resolved_type.size_in_bytes + 7) & ~7;
-					}
-				}
-				// We should only need to resize the final total here
-				total_stack_space_needed := locals_stack_size + variadic_stack_size + link_and_return_stack_size + temporaries_stack_size;
-				total_stack_space_needed = (total_stack_space_needed + 15) & ~15;
-				// We have to align the stack offsets and size to be a multiple of 16
-				variadic_offset := 0;
-				locals_offset := variadic_stack_size;
-				link_and_return_offset := total_stack_space_needed - link_and_return_stack_size;
-				compiler.stack_offset = locals_offset;
-				compiler.intermediate_stack_offset = locals_offset + locals_stack_size;
-				emit(compiler, "sub sp, sp, #%", total_stack_space_needed);
-				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
-				emit(compiler, "add x29, sp, #0");
-
 				reg_float := 0;
 				reg_integer := 0;
 				for function.params {
@@ -1119,8 +1074,6 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 								}
 							}
 						} else if type_struct.size_in_bytes >= 16 {
-							// Inline copy from pointer in x[reg_integer] to local stack slot.
-							// No memcpy call, so no registers get clobbered.
 							bytes_remaining := type_struct.size_in_bytes;
 							copy_offset := 0;
 							while bytes_remaining >= 8 {
@@ -1161,10 +1114,27 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 					push_decl(compiler, name, it.declarators[0].resolved_type.size_in_bytes, it.declarators[0]);
 				}
-				// FIXME(Oliver): This could be better
+
 				compile_statement(compiler, decl.body);
+
+				body_builder := compiler.builder;
+				compiler.builder = saved_builder;
+
+				// Now we know the final stack usage. Emit the real prologue.
+				link_and_return_stack_size := 16;
+				total_stack_space := (compiler.max_stack_offset + link_and_return_stack_size + 15) & ~15;
+				link_and_return_offset := total_stack_space - link_and_return_stack_size;
+
+				emit(compiler, "sub sp, sp, #%", total_stack_space);
+				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "add x29, sp, #0");
+
+				// Append the compiled body
+				append(*compiler.builder, builder_to_string(*body_builder));
+
+				// Epilogue
 				emit(compiler, "ldp x29, x30, [sp, #%]", link_and_return_offset);
-				emit(compiler, "add sp, sp, #%", total_stack_space_needed);
+				emit(compiler, "add sp, sp, #%", total_stack_space);
 				emit(compiler, "ret");
 				pop_scope(compiler);
 			} else if is_variable_declaration(decl, declarator) {
