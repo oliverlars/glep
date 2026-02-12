@@ -121,6 +121,7 @@ Node_Decl_Info :: struct {
 	atomic: *Node_Decl_Info;
 	declarators: [..]*Node_Declarator;
 	typedef: *Node_Decl;
+	typedef_name: string;
 }
 
 Node_Composite :: struct {
@@ -1049,6 +1050,9 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 				_, info._enum   = table_find(*p.enums, current(p).view);
 				_, typedef_decl := table_find(*p.typedefs, current(p).view);
 				info.typedef = typedef_decl;
+				if typedef_decl {
+					info.typedef_name = current(p).view;
+				}
 				if info._enum || info._struct {
 					info.reference = true;
 				} else {
@@ -1063,6 +1067,7 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 			_, info._enum   = table_find(*p.enums, current(p).view);
 			found, typedef_decl := table_find(*p.typedefs, current(p).view);
 			info.typedef = typedef_decl;
+			info.typedef_name = current(p).view;
 			skip(p);
 		}
 	}
@@ -1595,11 +1600,12 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 			append(builder, ")");
 		}
 	case Node_Cast;
+		_cast := node.(*Node_Cast);
 		append(builder, "(");
-		print_type(builder, node.(*Node_Cast).base);
+		print_type(builder, _cast.base);
 		append(builder, ")");
 		append(builder, "(");
-		print_expr(builder, node.(*Node_Cast).expr);
+		print_expr(builder, _cast.expr);
 		append(builder, ")");
 	case Node_Sizeof_Type;
 		append(builder, "sizeof");
@@ -2042,13 +2048,15 @@ print_type :: (builder: *String_Builder, info: Node_Decl_Info) {
 	if info.storage_class {
 		append(builder, " ");
 	}
-	
-	if info._struct {
+	if info.typedef {
+
+	} else if info._struct {
 		if info._struct.is_union {
 			append(builder, "union ");
 		} else {
 			append(builder, "struct ");
 		}
+
 		append(builder, info._struct.name.view);
 		if !info.reference {
 			append(builder, " {\n");

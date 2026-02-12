@@ -23,6 +23,8 @@ Resolved_Type :: struct {
 	unsigned: bool;
 	atomic: bool;
 
+	// Only needed for printing
+	symbol_name: string;
 	composite: *Node_Composite;
 	layout: Struct_Layout;
 
@@ -92,7 +94,11 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 
 resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type {
 	if decl_info.typedef {
-		return resolve_base(tc, decl_info.typedef.base);
+		typedef := resolve_base(tc, decl_info.typedef.base);
+		if decl_info.typedef_name {
+			typedef.symbol_name = decl_info.typedef_name;
+		}
+		return typedef;
 	}
 	Type_Specifier :: enum {
 		Void;
@@ -441,9 +447,13 @@ decl_info_from_resolved_type :: (target: *Resolved_Type) -> Node_Decl_Info {
 				case 8; array_add(*info.specifiers, "long");
 			}
 		case .Composite;
-			_struct := target.composite.(*Node_Struct);
-			info._struct = _struct;
-			info.reference = true;
+			if target.symbol_name {
+				array_add(*info.specifiers, target.symbol_name);
+			} else {
+				_struct := target.composite.(*Node_Struct);
+				info._struct = _struct;
+				info.reference = true;
+			}
 		case .Pointer;
 			inner_info := decl_info_from_resolved_type(target.inner);
 			ptr_decl := New(Node_Declarator);
