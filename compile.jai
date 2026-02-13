@@ -38,6 +38,8 @@ Compiler :: struct {
 	variadic_stack_size: int;
 
 	label_for_count: int;
+
+	indent_level: int;
 }
 
 push_scope :: (compiler: *Compiler) {
@@ -114,19 +116,28 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	to_append := tprint(fmt, ..args);
-	is_label := to_append.count > 0 && (to_append[to_append.count - 1] == #char ":" || begins_with(to_append, "."));
-	if !is_label {
-		append(*compiler.builder, "    ");
-	}
+	for 0..compiler.indent_level-1  append(*compiler.builder, "    ");
 	append(*compiler.builder, to_append);
 	append(*compiler.builder, "\n");
 }
 
 emit_comment :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	to_append := tprint(fmt, ..args);
+	for 0..compiler.indent_level-1  append(*compiler.builder, "    ");
 	append(*compiler.builder, "; ");
 	append(*compiler.builder, to_append);
 	append(*compiler.builder, "\n");
+}
+
+emit_label :: (compiler: *Compiler, fmt: string, args: ..Any) {
+	to_append := tprint(fmt, ..args);
+	append(*compiler.builder, to_append);
+	append(*compiler.builder, ":\n");
+	compiler.indent_level += 1;
+}
+
+emit_label_end :: (compiler: *Compiler) {
+	if compiler.indent_level > 0  compiler.indent_level -= 1;
 }
 
 emit_blank_line :: (compiler: *Compiler) {
@@ -1113,7 +1124,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				name := identifier_from_declarator(declarator);
 				emit_blank_line(compiler);
 				emit_comment(compiler, "======== function: %() ========", name);
-				emit(compiler, "_%:", name);
+				emit_label(compiler, "_%", name);
 
 				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
 				compiler.stack_offset = variadic_stack_size;
@@ -1218,6 +1229,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit(compiler, "ldp x29, x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add sp, sp, #%", total_stack_space);
 				emit(compiler, "ret");
+				emit_label_end(compiler);
 				pop_scope(compiler);
 			} else if is_variable_declaration(decl, declarator) {
 				if declarator.init {
@@ -1229,11 +1241,13 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 	for value, key: compiler.strings {
 		if value == 0 {
-			emit(compiler, "l_.str:");
-			emit(compiler, "	.asciz \"%\"", key);
+			emit_label(compiler, "l_.str");
+			emit(compiler, ".asciz \"%\"", key);
+			emit_label_end(compiler);
 		} else {
-			emit(compiler, "l_.str.%:", value);
-			emit(compiler, "	.asciz \"%\"", key);
+			emit_label(compiler, "l_.str.%", value);
+			emit(compiler, ".asciz \"%\"", key);
+			emit_label_end(compiler);
 		}
 	}
 
@@ -1295,34 +1309,39 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit(compiler, ".globl _%", name);
 				init_expr: *Node_Expr;
 				if declarator.init {
-					emit(compiler, "_%:", name);
 					if declarator.init.initializer_type == Node_Scalar_Initializer {
 						init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
 						assert(declarator.resolved_type != null);
 						if declarator.resolved_type.size_in_bytes == {
 							case 1;
 								emit(compiler, ".p2align %", 0);
-								emit(compiler, "_%:", name);
+								emit_label(compiler, "_%", name);
 								emit(compiler, ".byte %", eval_expr(init_expr));
+								emit_label_end(compiler);
 							case 2;
 								emit(compiler, ".p2align %", 1);
-								emit(compiler, "_%:", name);
+								emit_label(compiler, "_%", name);
 								emit(compiler, ".short %", eval_expr(init_expr));
+								emit_label_end(compiler);
 							case 4;
 								emit(compiler, ".p2align %", 2);
-								emit(compiler, "_%:", name);
+								emit_label(compiler, "_%", name);
 								emit(compiler, ".long %", eval_expr(init_expr));
+								emit_label_end(compiler);
 							case 8;
 								emit(compiler, ".p2align %", 3);
-								emit(compiler, "_%:", name);
+								emit_label(compiler, "_%", name);
 								emit(compiler, ".quad %", eval_expr(init_expr));
+								emit_label_end(compiler);
 						}
 					} else {
+						emit_label(compiler, "_%", name);
 						bytes := NewArray(declarator.resolved_type.size_in_bytes, u8);
 						compile_global_initializer(compiler, declarator.init, bytes, 0);
 						for bytes {
 							emit(compiler, ".byte %", it);
 						}
+						emit_label_end(compiler);
 					}
 				}
 			}
