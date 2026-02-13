@@ -114,17 +114,17 @@ load_variable_into_register :: (compiler: *Compiler, name: string) {
 
 emit :: (compiler: *Compiler, fmt: string, args: ..Any) {
 	to_append := tprint(fmt, ..args);
-	//print("%\n", to_append);
 	is_label := to_append.count > 0 && (to_append[to_append.count - 1] == #char ":" || begins_with(to_append, "."));
-	if is_label {
-		// labels at column 0
-	} else if begins_with(to_append, "// ---") || begins_with(to_append, "// ===") {
-		// section headers at column 0
-	} else if begins_with(to_append, "//") {
-		append(*compiler.builder, "        ");
-	} else {
+	if !is_label {
 		append(*compiler.builder, "    ");
 	}
+	append(*compiler.builder, to_append);
+	append(*compiler.builder, "\n");
+}
+
+emit_comment :: (compiler: *Compiler, fmt: string, args: ..Any) {
+	to_append := tprint(fmt, ..args);
+	append(*compiler.builder, "; ");
 	append(*compiler.builder, to_append);
 	append(*compiler.builder, "\n");
 }
@@ -154,7 +154,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 	if expr.expr_type == {
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
-			emit(compiler, "// lvalue: compound literal (% bytes)", compound.resolved_type.size_in_bytes);
+			emit_comment(compiler, "lvalue: compound literal (% bytes)", compound.resolved_type.size_in_bytes);
 
 			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
 			literal_offset := compiler.stack_offset;
@@ -163,7 +163,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 
 			// Zero initialise!
-			emit(compiler, "// zero-init compound at sp+%", literal_offset);
+			emit_comment(compiler, "zero-init compound at sp+%", literal_offset);
 			emit(compiler, "add x0, sp, #%", literal_offset);
 			mov_imm_integer(compiler, 0, 1, 8);
 			mov_imm_integer(compiler, xx compound.resolved_type.size_in_bytes, 2, 8);
@@ -171,7 +171,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			compile_initializer(compiler, compound.init, literal_offset);
 
-			emit(compiler, "// result addr of compound -> x9");
+			emit_comment(compiler, "result addr of compound -> x9");
 			emit(compiler, "add x9, sp, #%", literal_offset);
 		case Node_Identifier;
 			name := expr.(*Node_Identifier).id.view;
@@ -179,7 +179,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			if !found {
 				for compiler.globals {
 					if it == name {
-						emit(compiler, "// lvalue: global '%'", name);
+						emit_comment(compiler, "lvalue: global '%'", name);
 						emit(compiler, "adrp x9, _%@PAGE", name);
 						emit(compiler, "add x9, x9, _%@PAGEOFF", name);
 						return;
@@ -187,20 +187,20 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 				assert(false);
 			} else {
-				emit(compiler, "// lvalue: local '%' at sp+%", name, stack_slot.offset);
+				emit_comment(compiler, "lvalue: local '%' at sp+%", name, stack_slot.offset);
 				emit(compiler, "add x9, sp, #%", stack_slot.offset);
 			}
 		case Node_Unary;
 			op := expr.(*Node_Unary).op;
 			if op.type == {
 				case .Asterisk;
-					emit(compiler, "// lvalue: deref *");
+					emit_comment(compiler, "lvalue: deref *");
 					compile_lvalue(compiler, expr.(*Node_Unary).expr);
 					emit(compiler, "ldr x9, [x9]");
 			}
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
-			emit(compiler, "// lvalue: array access");
+			emit_comment(compiler, "lvalue: array access");
 
 			compile_expr(compiler, array_access.index);
 			offset := push_intermediate(compiler, array_access.index.resolved_type);
@@ -215,13 +215,13 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			// by count in the array but this also seems fine.
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
-			emit(compiler, "// element size = %", bytes_per_element);
+			emit_comment(compiler, "element size = %", bytes_per_element);
 			mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
-			emit(compiler, "// lvalue: member access .%", member_access.right.view);
+			emit_comment(compiler, "lvalue: member access .%", member_access.right.view);
 
 			compile_lvalue(compiler, member_access.left);
 			if member_access.left.resolved_type.kind == .Pointer {
@@ -236,7 +236,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			offset := offset_from_member_name(xx left_type.composite, left_type.layout, member_access.right.view);
 
-			emit(compiler, "// member offset = %", offset);
+			emit_comment(compiler, "member offset = %", offset);
 			mov_imm_integer(compiler, xx offset, 10, 8);
 			emit(compiler, "add x9, x9, x10");
 
@@ -584,14 +584,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			op := expr.(*Node_Unary).op;
 			if op.type == {
 				case .Asterisk;
-					emit(compiler, "// expr: deref *");
+					emit_comment(compiler, "expr: deref *");
 					compile_expr(compiler, expr.(*Node_Unary).expr);
 					emit(compiler, "ldr x9, [x9]");
 				case .Ampersand;
 					rhs := expr.(*Node_Unary).expr;
 					assert(rhs.expr_type == Node_Identifier);
 					id := rhs.(*Node_Identifier).id.view;
-					emit(compiler, "// expr: addr-of &%", id);
+					emit_comment(compiler, "expr: addr-of &%", id);
 					// TODO(Oliver): handle globals for addresses
 					found, stack_slot := find_decl_on_stack(compiler, id);
 					if !found {
@@ -605,10 +605,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			// the lvalue in, we just evaluate the expression first then load the
 			// lvalue address
 			assign := expr.(*Node_Assign);
-			emit(compiler, "// expr: assign (op: %)", assign.op.view);
+			emit_comment(compiler, "expr: assign (op: %)", assign.op.view);
 			if assign.right.resolved_type.kind == .Composite {
 
-				emit(compiler, "// assign: composite memcpy (% bytes)", assign.right.resolved_type.size_in_bytes);
+				emit_comment(compiler, "assign: composite memcpy (% bytes)", assign.right.resolved_type.size_in_bytes);
 				compile_lvalue(compiler, assign.right);
 				offset := push_intermediate(compiler, assign.right.resolved_type);
 
@@ -627,18 +627,18 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				pop_intermediate(compiler, assign.right.resolved_type, offset);
 				if expr.(*Node_Assign).op.type == {
 					case .Equals;
-						emit(compiler, "// assign: store to [x9]");
+						emit_comment(compiler, "assign: store to [x9]");
 						emit(compiler, "str %, [x9]", register(10, assign.right.resolved_type));
 				}
 			}
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
-			emit(compiler, "// expr: load member .%", member_access.right.view);
+			emit_comment(compiler, "expr: load member .%", member_access.right.view);
 			compile_lvalue(compiler, member_access);
 			emit(compiler, "ldr %, [x9]", register(9, member_access.resolved_type));
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
-			emit(compiler, "// expr: array access");
+			emit_comment(compiler, "expr: array access");
 
 			compile_expr(compiler, array_access.index);
 			offset := push_intermediate(compiler, array_access.index.resolved_type);
@@ -648,18 +648,18 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
-			emit(compiler, "// element size = %", bytes_per_element);
+			emit_comment(compiler, "element size = %", bytes_per_element);
 			mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
 
-			emit(compiler, "// load element");
+			emit_comment(compiler, "load element");
 			emit(compiler, "ldr %, [x9]", register(9, array_access.left.resolved_type.inner));
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
 			op := expr.(*Node_Binary).op;
 			t := expr.resolved_type;
-			emit(compiler, "// expr: binary '%'", op.view);
+			emit_comment(compiler, "expr: binary '%'", op.view);
 			compile_expr(compiler, binary.left);
 			offset := push_intermediate(compiler, binary.left.resolved_type);
 
@@ -716,11 +716,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Number;
 			number := expr.(*Node_Number);
 			t := number.resolved_type;
-			emit(compiler, "// expr: number literal %", number.as_u64);
+			emit_comment(compiler, "expr: number literal %", number.as_u64);
 			mov_imm(compiler, number.as_u64, 9, t);
 		case Node_Cast;
 			cast_node := expr.(*Node_Cast);
-			emit(compiler, "// expr: cast (% -> %)", cast_node.expr.resolved_type.kind, cast_node.resolved_type.kind);
+			emit_comment(compiler, "expr: cast (% -> %)", cast_node.expr.resolved_type.kind, cast_node.resolved_type.kind);
 			compile_expr(compiler, cast_node.expr);
 
 			source := cast_node.expr.resolved_type;
@@ -759,12 +759,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			for expr.(*Node_Char).token.view {
 				value += it;
 			}
-			emit(compiler, "// expr: char literal '%'", expr.(*Node_Char).token.view);
+			emit_comment(compiler, "expr: char literal '%'", expr.(*Node_Char).token.view);
 			mov_imm_integer(compiler, xx value, 9, 4);
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
-			emit(compiler, "// expr: call %() (% args)", name, call.args.count);
+			emit_comment(compiler, "expr: call %() (% args)", name, call.args.count);
 
 			_, decl := table_find(*compiler.ordinary, name);
 			function := function_declarator(decl.(*Node_Decl).declarators[0]);
@@ -774,7 +774,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			arg_offsets: [..]int;
 			arg_sizes: [..]int;
 			for call.args {
-				emit(compiler, "// arg % eval", it_index);
+				emit_comment(compiler, "arg % eval", it_index);
 				if it.resolved_type.kind == .Composite {
 					if it.expr_type == Node_Call {
 						compile_expr(compiler, it);
@@ -799,7 +799,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 
-			emit(compiler, "// load args into registers");
+			emit_comment(compiler, "load args into registers");
 			vararg_offset := 0;
 			reg_float := 0;
 			reg_integer := 0;
@@ -854,10 +854,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				compiler.stack_offset -= it;
 			}
 
-			emit(compiler, "// call %", name);
+			emit_comment(compiler, "call %", name);
 			emit(compiler, "bl _%", name);
 
-			emit(compiler, "// return value from %", name);
+			emit_comment(compiler, "return value from %", name);
 			if call.resolved_type.kind == .Floating {
 				emit(compiler, "fmov %, %", register(9, call.resolved_type), register(0, call.resolved_type));
 			} else if call.resolved_type.kind == .Integral || call.resolved_type.kind == .Pointer {
@@ -882,7 +882,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				emit(compiler, "add x9, sp, #%", ret_offset);
 			}
 		case Node_String;
-			emit(compiler, "// expr: string literal");
+			emit_comment(compiler, "expr: string literal");
 			ok, count := table_find(*compiler.strings, expr.(*Node_String).token.view);
 			assert(ok);
 			if count == 0 {
@@ -893,7 +893,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				emit(compiler, "add x9, x9, l_.str.%@PAGEOFF", count);
 			}
 		case Node_Identifier;
-			emit(compiler, "// expr: load '%'", expr.(*Node_Identifier).id.view);
+			emit_comment(compiler, "expr: load '%'", expr.(*Node_Identifier).id.view);
 			load_variable_into_register(compiler, expr.(*Node_Identifier).id.view);
 	}
 }
@@ -903,14 +903,14 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		if expr.resolved_type.kind == .Composite {
-			emit(compiler, "// init: scalar composite at sp+% (% bytes)", cursor, expr.resolved_type.size_in_bytes);
+			emit_comment(compiler, "init: scalar composite at sp+% (% bytes)", cursor, expr.resolved_type.size_in_bytes);
 			compile_expr(compiler, expr);
 			emit(compiler, "add x0, sp, #%", cursor);
 			emit(compiler, "mov x1, x9");
 			mov_imm_integer(compiler, xx expr.resolved_type.size_in_bytes, 2, 8);
 			emit(compiler, "bl _memcpy");
 		} else {
-			emit(compiler, "// init: scalar store at sp+%", cursor);
+			emit_comment(compiler, "init: scalar store at sp+%", cursor);
 			compile_expr(compiler, expr);
 			emit(compiler, "str %, [sp, #%]", register(9, expr.resolved_type), cursor);
 		}
@@ -957,7 +957,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	if stmt.statement_type == {
 		case Node_For;
 			emit_blank_line(compiler);
-			emit(compiler, "// stmt: for");
+			emit_comment(compiler, "stmt: for");
 			_for := stmt.(*Node_For);
 			push_scope(compiler);
 			compile_decl(compiler, _for.init);
@@ -969,7 +969,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			}
 		case Node_Return;
 			emit_blank_line(compiler);
-			emit(compiler, "// stmt: return");
+			emit_comment(compiler, "stmt: return");
 			compile_expr(compiler, stmt.(*Node_Return).expr);
 			t := stmt.(*Node_Return).expr.resolved_type;
 			assert(t != null);
@@ -995,7 +995,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			}
 		case Node_Expr_Statement;
 			emit_blank_line(compiler);
-			emit(compiler, "// stmt: expr");
+			emit_comment(compiler, "stmt: expr");
 			compile_expr(compiler, stmt.(*Node_Expr_Statement).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
@@ -1016,7 +1016,7 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 	for decl.declarators {
 		name := identifier_from_declarator(it);
-		emit(compiler, "// decl: '%' (% bytes)", name, ifx it.resolved_type then it.resolved_type.size_in_bytes else 0);
+		emit_comment(compiler, "decl: '%' (% bytes)", name, ifx it.resolved_type then it.resolved_type.size_in_bytes else 0);
 		// FIXME(Oliver): Enums won't work yet
 		stack_slot: Stack_Slot;
 		if it.resolved_type {
@@ -1028,7 +1028,7 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 
 push_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type) -> int {
 	offset := compiler.stack_offset;
-	emit(compiler, "// push intermediate -> sp+%", offset);
+	emit_comment(compiler, "push intermediate -> sp+%", offset);
 	emit(compiler, "str %, [sp, #%]", register(9, resolved_type), offset);
 	compiler.stack_offset += 8;
 	if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
@@ -1036,7 +1036,7 @@ push_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type) -> int
 }
 
 pop_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type, offset: int) {
-	emit(compiler, "// pop intermediate <- sp+%", offset);
+	emit_comment(compiler, "pop intermediate <- sp+%", offset);
 	emit(compiler, "ldr %, [sp, #%]", register(10, resolved_type), offset);
 	compiler.stack_offset -= 8;
 }
@@ -1112,7 +1112,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				push_scope(compiler);
 				name := identifier_from_declarator(declarator);
 				emit_blank_line(compiler);
-				emit(compiler, "// ======== function: %() ========", name);
+				emit_comment(compiler, "======== function: %() ========", name);
 				emit(compiler, "_%:", name);
 
 				variadic_stack_size := stack_space_needed_for_variadic_functions(compiler, decl.body);
@@ -1129,11 +1129,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				reg_float := 0;
 				reg_integer := 0;
 				if function.params.count > 0 {
-					emit(compiler, "// --- params ---");
+					emit_comment(compiler, "--- params ---");
 				}
 				for function.params {
 					name := identifier_from_declarator(it.declarators[0]);
-					emit(compiler, "// param '%'", name);
+					emit_comment(compiler, "param '%'", name);
 					if it.declarators[0].resolved_type.kind == .Composite {
 						type_struct := it.declarators[0].resolved_type;
 						_struct := type_struct.composite.(*Node_Struct);
@@ -1202,19 +1202,19 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				total_stack_space := (compiler.max_stack_offset + link_and_return_stack_size + 15) & ~15;
 				link_and_return_offset := total_stack_space - link_and_return_stack_size;
 
-				emit(compiler, "// --- prologue (stack: % bytes) ---", total_stack_space);
+				emit_comment(compiler, "--- prologue (stack: % bytes) ---", total_stack_space);
 				emit(compiler, "sub sp, sp, #%", total_stack_space);
 				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add x29, sp, #0");
 				emit_blank_line(compiler);
 
 				// Append the compiled body
-				emit(compiler, "// --- body ---");
+				emit_comment(compiler, "--- body ---");
 				append(*compiler.builder, builder_to_string(*body_builder));
 
 				// Epilogue
 				emit_blank_line(compiler);
-				emit(compiler, "// --- epilogue ---");
+				emit_comment(compiler, "--- epilogue ---");
 				emit(compiler, "ldp x29, x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add sp, sp, #%", total_stack_space);
 				emit(compiler, "ret");
