@@ -482,6 +482,32 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
+		case Node_Ternary;
+			ternary := expr.(*Node_Ternary);
+			resolve_expr(tc, ternary.cond);
+			on_true, _ := resolve_expr(tc, ternary.on_true);
+			on_false, _ := resolve_expr(tc, ternary.on_false);
+			if on_true.kind == .Pointer || on_false.kind == .Pointer {
+				if on_true.kind == .Pointer {
+					expr.resolved_type = on_true;
+				} else {
+					expr.resolved_type = on_false;
+				}
+				return expr.resolved_type, expr.resolved_type != null;
+			}
+
+			resolved_type := common_type(on_true, on_false);
+			if !resolved_type return null, false;
+
+			if !types_equal(on_true, resolved_type) {
+				ternary.on_true = insert_cast(tc, ternary.on_true, resolved_type);
+			}
+			if !types_equal(on_false, resolved_type) {
+				ternary.on_false = insert_cast(tc, ternary.on_false, resolved_type);
+			}
+
+			expr.resolved_type = resolved_type;
+			return resolved_type, true;
 		case Node_Sizeof_Expr;
 			sizeof := expr.(*Node_Sizeof_Expr);
 			resolved := New(Resolved_Type);

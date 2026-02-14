@@ -101,7 +101,7 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
     }
 
     // REFR (glass)
-    Ray refl_ray = {x, vsub(r.d, vmul(n, 2*vdot(n, r.d)))};
+    Ray refl_ray = (Ray){x, vsub(r.d, vmul(n, 2*vdot(n, r.d)))};
     int into = vdot(n, nl) > 0;
     double nc = 1, nt = 1.5;
     double nnt = into ? nc/nt : nt/nc;
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
 	int h = 192;
     int samps = argc > 1 ? atoi(argv[1])/4 : 1;
     
-    Ray cam = {{50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
+    Ray cam = (Ray){(Vec){50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
     Vec cx = vec(w * .5135 / h, 0, 0);
     Vec cy = vmul(vnorm(vcross(cx, cam.d)), .5135);
     Vec *c = calloc(w * h, sizeof(Vec));
@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
                         Vec d = vadd(vadd(vmul(cx, ((sx+.5+dx)/2+x)/w - .5),
                                          vmul(cy, ((sy+.5+dy)/2+y)/h - .5)), cam.d);
                         d = vnorm(d);
-                        Ray ray = {vadd(cam.o, vmul(d, 140)), d};
+                        Ray ray = (Ray){vadd(cam.o, vmul(d, 140)), d};
                         r = vadd(r, vmul(radiance(ray, 0, &seed), 1./samps));
                     }
                     c[i] = vadd(c[i], vmul(vec(fmin(1, r.x), fmin(1, r.y), fmin(1, r.z)), .25));
