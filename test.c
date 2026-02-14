@@ -31,7 +31,7 @@ int bar(int a, int b, int c) {
 
 double rng(unsigned int *seed) {
 	*seed = *seed * 1103515245 + 12345;
-	return (*seed & 0x7fffffff) / (double)0x7fffffff;
+	return (double)(*seed & 0x7fffffff) / (double)0x7fffffff;
 }
 
 
@@ -51,11 +51,14 @@ int main() {
 	foo(1 < 2, &rinky_dinky);
 
 	unsigned int seed = 0;
-	double value = rng(&seed);
-	value = rng(&seed);
 
 	printf("RINKY DINKY IS WHAT?: %d\n", rinky_dinky);
-	printf("RANDOM: %f\n", value);
+
+
+	for(int i = 0; i < 10; i = i + 1) {
+		double value = rng(&seed);
+		printf("RANDOM: %f\n", value);
+	}
 
 
 

@@ -649,7 +649,14 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 				resolve_initializer(tc, lhs, it.init);
 				push_decl(tc, decl.base, it);
 			}
+		case Node_For;
+			_for := stmt.(*Node_For);
+			typecheck_decl(tc, _for.init);
+			resolve_expr(tc, _for.cond);
+			resolve_expr(tc, _for.expr);
+			typecheck_statement(tc, _for.body);
 	}
+	
 }
 
 type_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: string) -> *Resolved_Type {

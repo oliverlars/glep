@@ -723,6 +723,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				case .BangEqual;
 					emit(compiler, "cmp %, %", register(10, t), register(9, t));
 					emit(compiler, "cset %, ne", register(10, t));
+				case .Ampersand;
+					emit(compiler, "and %, %, %", register(9, t), register(10, t), register(9, t));
 			}
 		case Node_Number;
 			number := expr.(*Node_Number);
@@ -972,8 +974,15 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			_for := stmt.(*Node_For);
 			push_scope(compiler);
 			compile_decl(compiler, _for.init);
+			emit(compiler, "_FOR_START%:", compiler.label_for_count);
 			compile_expr(compiler, _for.cond);
+			emit(compiler, "cbz %, _FOR_END%", register(9, _for.cond.resolved_type), compiler.label_for_count);
+			compile_statement(compiler, _for.body);
+			compile_expr(compiler, _for.expr);
 			pop_scope(compiler);
+			emit(compiler, "b _FOR_START%", compiler.label_for_count);
+			emit(compiler, "_FOR_END%:", compiler.label_for_count);
+			compiler.label_for_count += 1;
 		case Node_Block;
 			for stmt.(*Node_Block).statements {
 				compile_statement(compiler, it);
