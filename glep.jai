@@ -1312,7 +1312,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 				result = sizeof;
 			} else {
 				sizeof := New(Node_Sizeof_Expr);
-				sizeof.expr = parse_expr(p);
+				sizeof.expr = parse_unary(p);
 				result = sizeof;
 			}
 		} else {
@@ -2259,7 +2259,7 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	minimal := read_entire_file("test.c");
+	minimal := read_entire_file("smallpt.c");
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);

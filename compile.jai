@@ -610,6 +610,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						assert(false);
 					}
 					emit(compiler, "add x9, sp, #%", stack_slot.offset);
+				case .Bang;
+					emit_comment(compiler, "expr: negate");
+					unary := expr.(*Node_Unary);
+					compile_expr(compiler, unary.expr);
+					emit(compiler, "cmp %, #0", register(9, unary.expr.resolved_type));
+					emit(compiler, "cset %, eq", register(9, unary.expr.resolved_type));
 			}
 		case Node_Assign;
 			// To avoid any clobbering of the expression using the register we store
@@ -972,17 +978,18 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			emit_blank_line(compiler);
 			emit_comment(compiler, "stmt: for");
 			_for := stmt.(*Node_For);
+			count := compiler.label_for_count;
+			compiler.label_for_count += 1;
 			push_scope(compiler);
 			compile_decl(compiler, _for.init);
-			emit(compiler, "_FOR_START%:", compiler.label_for_count);
+			emit(compiler, "_FOR_START%:", count);
 			compile_expr(compiler, _for.cond);
-			emit(compiler, "cbz %, _FOR_END%", register(9, _for.cond.resolved_type), compiler.label_for_count);
+			emit(compiler, "cbz %, _FOR_END%", register(9, _for.cond.resolved_type), count);
 			compile_statement(compiler, _for.body);
 			compile_expr(compiler, _for.expr);
 			pop_scope(compiler);
-			emit(compiler, "b _FOR_START%", compiler.label_for_count);
-			emit(compiler, "_FOR_END%:", compiler.label_for_count);
-			compiler.label_for_count += 1;
+			emit(compiler, "b _FOR_START%", count);
+			emit(compiler, "_FOR_END%:", count);
 		case Node_Block;
 			for stmt.(*Node_Block).statements {
 				compile_statement(compiler, it);

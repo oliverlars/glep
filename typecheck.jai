@@ -482,6 +482,26 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
+		case Node_Sizeof_Expr;
+			sizeof := expr.(*Node_Sizeof_Expr);
+			resolved := New(Resolved_Type);
+			resolved.kind = .Integral;
+			resolved.size_in_bytes = 8;
+			resolved.unsigned = true;
+			resolved.alignment = 8;
+			sizeof.resolved_type = resolved;
+			resolve_expr(tc, sizeof.expr);
+			return resolved, true;
+		case Node_Sizeof_Type;
+			sizeof := expr.(*Node_Sizeof_Type);
+			resolved := New(Resolved_Type);
+			resolved.kind = .Integral;
+			resolved.size_in_bytes = 8;
+			resolved.unsigned = true;
+			resolved.alignment = 8;
+			sizeof.resolved_type = resolved;
+			resolve_base(tc, sizeof.base);
+			return resolved, true;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
 			compound.resolved_type = resolve_decl(tc, *compound.base_info, compound.declarator);
@@ -574,6 +594,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					info = New(Resolved_Type);
 					info.kind = .Pointer;
 					info.size_in_bytes = 8;
+					info.alignment = 8;
 					info.inner = inner;
 				case .Asterisk;
 					info = info.inner;
@@ -589,6 +610,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_String;
 			info := New(Resolved_Type);
 			info.size_in_bytes = 8;
+			info.alignment = 8;
 			info.kind = .Pointer;
 			return info, true;
 		case Node_Call;

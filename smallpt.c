@@ -130,7 +130,8 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
 }
 
 int main(int argc, char **argv) {
-    int w = 256, h = 192;
+    int w = 256;
+	int h = 192;
     int samps = argc > 1 ? atoi(argv[1])/4 : 1;
     
     Ray cam = {{50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};

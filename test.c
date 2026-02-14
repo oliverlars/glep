@@ -58,6 +58,9 @@ int main() {
 	for(int i = 0; i < 10; i = i + 1) {
 		double value = rng(&seed);
 		printf("RANDOM: %f\n", value);
+		for (int j = 0; j < 10; j = j + 1) {
+			printf("j is %d i is %d\n", j, i);
+		}
 	}
 
 
