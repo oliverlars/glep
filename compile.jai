@@ -1221,7 +1221,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				emit_comment(compiler, "--- prologue (stack: % bytes) ---", total_stack_space);
 				emit(compiler, "sub sp, sp, #%", total_stack_space);
-				emit(compiler, "stp x29, x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "str x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "str x29, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add x29, sp, #0");
 				emit_blank_line(compiler);
 
@@ -1232,7 +1233,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				// Epilogue
 				emit_blank_line(compiler);
 				emit_comment(compiler, "--- epilogue ---");
-				emit(compiler, "ldp x29, x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "ldr x30, [sp, #%]", link_and_return_offset);
+				emit(compiler, "ldr x29, [sp, #%]", link_and_return_offset);
 				emit(compiler, "add sp, sp, #%", total_stack_space);
 				emit(compiler, "ret");
 				emit_label_end(compiler);
