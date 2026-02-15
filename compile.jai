@@ -176,8 +176,8 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			// Zero initialise!
 			emit_comment(compiler, "zero-init compound at sp+%", literal_offset);
 			emit(compiler, "add x0, sp, #%", literal_offset);
-			mov_imm_integer(compiler, 0, 1, 8);
-			mov_imm_integer(compiler, xx compound.resolved_type.size_in_bytes, 2, 8);
+			emit_mov_imm_integer(compiler, 0, 1, 8);
+			emit_mov_imm_integer(compiler, xx compound.resolved_type.size_in_bytes, 2, 8);
 			emit(compiler, "bl _memset");
 
 			compile_initializer(compiler, compound.init, literal_offset);
@@ -227,7 +227,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
 			emit_comment(compiler, "element size = %", bytes_per_element);
-			mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
+			emit_mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
 		case Node_Member_Access;
@@ -248,7 +248,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 			offset := offset_from_member_name(xx left_type.composite, left_type.layout, member_access.right.view);
 
 			emit_comment(compiler, "member offset = %", offset);
-			mov_imm_integer(compiler, xx offset, 10, 8);
+			emit_mov_imm_integer(compiler, xx offset, 10, 8);
 			emit(compiler, "add x9, x9, x10");
 
 	}
@@ -558,21 +558,20 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 	return .{};
 }
 
-mov_imm :: (compiler: *Compiler, imm: u64, reg: int, rt: *Resolved_Type) {
+emit_mov_imm :: (compiler: *Compiler, imm: u64, reg: int, rt: *Resolved_Type) {
 	if rt.kind == .Floating {
-		// Load the bit pattern as an integer into x{reg}, then fmov to float reg
-		mov_imm_integer(compiler, imm, reg, 8);
+		emit_mov_imm_integer(compiler, imm, reg, 8);
 		if rt.size_in_bytes == 8 {
 			emit(compiler, "fmov d%, x%", reg, reg);
 		} else {
 			emit(compiler, "fmov s%, w%", reg, reg);
 		}
 	} else {
-		mov_imm_integer(compiler, imm, reg, rt.size_in_bytes);
+		emit_mov_imm_integer(compiler, imm, reg, rt.size_in_bytes);
 	}
 }
 
-mov_imm_integer :: (compiler: *Compiler, imm: u64, reg: int, size_in_bytes: int) {
+emit_mov_imm_integer :: (compiler: *Compiler, imm: u64, reg: int, size_in_bytes: int) {
 	if size_in_bytes <= 4 {
 		lo := imm & 0xFFFF;
 		hi := (imm >> 16) & 0xFFFF;
@@ -599,17 +598,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					compile_expr(compiler, expr.(*Node_Unary).expr);
 					emit(compiler, "ldr x9, [x9]");
 				case .Ampersand;
-					rhs := expr.(*Node_Unary).expr;
-					assert(rhs.expr_type == Node_Identifier);
-					id := rhs.(*Node_Identifier).id.view;
-					emit_comment(compiler, "expr: addr-of &%", id);
-					// TODO(Oliver): handle globals for addresses
-					found, stack_slot := find_decl_on_stack(compiler, id);
-					if !found {
-						// Might be a global, handle that
-						assert(false);
-					}
-					emit(compiler, "add x9, sp, #%", stack_slot.offset);
+					emit_comment(compiler, "expr: addr-of &");
+					compile_lvalue(compiler, expr.(*Node_Unary).expr);
 				case .Bang;
 					emit_comment(compiler, "expr: negate");
 					unary := expr.(*Node_Unary);
@@ -634,7 +624,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 
 				emit(compiler, "mov x0, x9");
 				emit(compiler, "mov x1, x10");
-				mov_imm_integer(compiler, xx assign.right.resolved_type.size_in_bytes, 2, 8);
+				emit_mov_imm_integer(compiler, xx assign.right.resolved_type.size_in_bytes, 2, 8);
 				emit(compiler, "bl _memcpy");
 			} else {
 				compile_expr(compiler, assign.right);
@@ -666,7 +656,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
 			emit_comment(compiler, "element size = %", bytes_per_element);
-			mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
+			emit_mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
 
@@ -736,7 +726,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			number := expr.(*Node_Number);
 			t := number.resolved_type;
 			emit_comment(compiler, "expr: number literal %", number.as_u64);
-			mov_imm(compiler, number.as_u64, 9, t);
+			emit_mov_imm(compiler, number.as_u64, 9, t);
 		case Node_Cast;
 			cast_node := expr.(*Node_Cast);
 			emit_comment(compiler, "expr: cast (% -> %)", cast_node.expr.resolved_type.kind, cast_node.resolved_type.kind);
@@ -779,7 +769,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				value += it;
 			}
 			emit_comment(compiler, "expr: char literal '%'", expr.(*Node_Char).token.view);
-			mov_imm_integer(compiler, xx value, 9, 4);
+			emit_mov_imm_integer(compiler, xx value, 9, 4);
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -806,7 +796,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 					emit(compiler, "add x0, sp, #%", offset);
 					emit(compiler, "mov x1, x9");
-					mov_imm_integer(compiler, xx it.resolved_type.size_in_bytes, 2, 8);
+					emit_mov_imm_integer(compiler, xx it.resolved_type.size_in_bytes, 2, 8);
 					emit(compiler, "bl _memcpy");
 					array_add(*arg_offsets, offset);
 					array_add(*arg_sizes, size);
@@ -926,7 +916,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 			compile_expr(compiler, expr);
 			emit(compiler, "add x0, sp, #%", cursor);
 			emit(compiler, "mov x1, x9");
-			mov_imm_integer(compiler, xx expr.resolved_type.size_in_bytes, 2, 8);
+			emit_mov_imm_integer(compiler, xx expr.resolved_type.size_in_bytes, 2, 8);
 			emit(compiler, "bl _memcpy");
 		} else {
 			emit_comment(compiler, "init: scalar store at sp+%", cursor);

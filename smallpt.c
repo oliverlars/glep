@@ -29,7 +29,7 @@ typedef struct {
 	int refl;
 } Sphere;
 
-Sphere spheres[] = {
+Sphere spheres[9] = {
 	{1e5,  {1e5+1, 40.8, 81.6},    {0,0,0}, {.75,.25,.25}, DIFF},  // Left
 	{1e5,  {-1e5+99, 40.8, 81.6},  {0,0,0}, {.25,.25,.75}, DIFF},  // Right
 	{1e5,  {50, 40.8, 1e5},        {0,0,0}, {.75,.75,.75}, DIFF},  // Back
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int i = (h - y - 1) * w + x;
-            unsigned seed = y*y*y + x;
+            unsigned int seed = y*y*y + x;
             for (int sy = 0; sy < 2; sy++) {
                 for (int sx = 0; sx < 2; sx++) {
                     Vec r = {0, 0, 0};

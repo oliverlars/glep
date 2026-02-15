@@ -127,6 +127,8 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	}
 
 	info := New(Resolved_Type);
+
+	info.size_in_bytes = 4;
 	
 	if counts[Type_Specifier.Signed] {
 		info.unsigned = false;
@@ -494,6 +496,12 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					expr.resolved_type = on_false;
 				}
 				return expr.resolved_type, expr.resolved_type != null;
+			}
+
+			if on_true.kind == .Composite && on_false.kind == .Composite {
+				assert(on_true.composite == on_false.composite);
+				expr.resolved_type = on_true;
+				return on_true, true;
 			}
 
 			resolved_type := common_type(on_true, on_false);

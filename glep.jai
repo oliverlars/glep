@@ -85,12 +85,16 @@ Token :: struct {
 	number_type: Number_Type;
 	// Lord have mercy
 	hideset: [..]string;
+	line: int;
+	col: int;
 }
 
 Tokeniser :: struct {
 	at: int;
 	source: string;
 	tokens: [..]Token;
+	line: int = 1;
+	line_start: int;
 }
 
 Parser :: struct {
@@ -109,6 +113,8 @@ Parser :: struct {
 
 Node :: struct {
 	type: Type;
+	line: int;
+	col: int;
 }
 
 Node_Decl_Info :: struct {
@@ -593,6 +599,8 @@ tokenise :: (t: *Tokeniser) {
 		token: Token;
 		token.view.data = t.source.data + t.at;
 		token.view.count = 1;
+		token_line := t.line;
+		token_col  := t.at - t.line_start + 1;
 		if is_ws(t) {
 			gobble_ws(t);
 			continue;
@@ -626,7 +634,11 @@ tokenise :: (t: *Tokeniser) {
 					token.view.count += 1;
 				}
 			case "\n"; #through;
-			case "\r"; t.at += 1; token.type = .Newline;
+			case "\r";
+				t.at += 1;
+				token.type = .Newline;
+				t.line += 1;
+				t.line_start = t.at;
 			case "*";
 				t.at += 1; token.type = .Asterisk;
 				if is_char(t, #char "=") {
@@ -711,6 +723,10 @@ tokenise :: (t: *Tokeniser) {
 							t.at += 2;
 							break;
 						}
+						if t.source[t.at] == #char "\n" || t.source[t.at] == #char "\r" {
+							t.line += 1;
+							t.line_start = t.at + 1;
+						}
 						t.at += 1;
 					}
 					continue;
@@ -719,6 +735,8 @@ tokenise :: (t: *Tokeniser) {
 				t.at += 1;
 				if is_newline(t) {
 					t.at += 1;
+					t.line += 1;
+					t.line_start = t.at;
 				}
 				continue;
 			case ".";
@@ -822,6 +840,8 @@ tokenise :: (t: *Tokeniser) {
 				}
 			}
 		}
+		token.line = token_line;
+		token.col  = token_col;
 		array_add(*t.tokens, token);
 	}
 }
@@ -852,6 +872,14 @@ current :: (p: *Parser) -> Token {
 	at := p.at;
 	assert(p.tokens[at].type != .Newline);
 	return p.tokens[at];
+}
+
+make_node :: (p: *Parser, $T: Type) -> *T {
+	node := New(T);
+	tok := current(p);
+	node.line = tok.line;
+	node.col  = tok.col;
+	return node;
 }
 
 next :: (p: *Parser) -> Token {
