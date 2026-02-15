@@ -2357,7 +2357,7 @@ main :: () {
 	print("\nCompiling assembly...\n\n");
 	run_command("clang", "out.s", "-oout");
 	print("Compile same program with clang...\n");
-	run_command("clang", "-S", "test.c", "-oclang_out.s");
+	run_command("clang", "-S", "smallpt.c", "-oclang_out.s");
 	print("Running program...\n\n");
 	run_command("./out");
 }

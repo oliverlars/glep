@@ -1303,8 +1303,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			return cursor;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
-				cursor = it.byte_offset;
-				cursor = compile_global_initializer(compiler, it.expr, bytes, cursor);
+				compile_global_initializer(compiler, it.expr, bytes, cursor + it.byte_offset);
 			}
 		}
 		return cursor;
