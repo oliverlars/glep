@@ -1,69 +1,45 @@
 #include <stdio.h>
+#include <math.h>
 
 typedef struct { double x, y, z; } Vec;
 
-typedef struct { int a, b, c, d, e, f; } BigStruct;
+Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
+Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
+Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
+Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
+Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
+double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
+Vec vnorm(Vec v)          { return vmul(v, 1.0/sqrt(vdot(v,v))); }
 
-int big_struct(BigStruct x, BigStruct *y, int *out_param) {
-	//printf("Big Struct x is: [%d, %d, %d, %d, %d, %d]\n", x.a, x.b, x.c, x.d, x.e, x.f);
-	//y->a = 10;
-	//printf("Big Struct y is: [%d, %d, %d, %d, %d, %d]\n", y->a, y->b, y->c, y->d, y->e, y->f);
-	out_param[0] = 200;
-	return 0;
-}
+typedef struct { Vec o, d; } Ray;
 
-int foo(int a, int *out_param) {
-	*out_param = 1 < 2u;
-	return 0;
-}
+#define DIFF 0
+#define SPEC 1
+#define REFR 2
 
-int bar(int a, int b, int c) {
-	return a + b + c;
-}
+typedef struct {
+	double rad;
+	Vec p, e, c;
+	int refl;
+} Sphere;
 
-// Vec vec(double x, double y, double z) { return (Vec){x, y, z}; }
-// Vec vadd(Vec a, Vec b)    { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
-// Vec vsub(Vec a, Vec b)    { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
-// Vec vmul(Vec a, double s) { return vec(a.x*s, a.y*s, a.z*s); }
-// Vec vmult(Vec a, Vec b)   { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
-// double vdot(Vec a, Vec b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
-// Vec vcross(Vec a, Vec b)  { return vec(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
-
-double rng(unsigned int *seed) {
-	*seed = *seed * 1103515245 + 12345;
-	return (double)(*seed & 0x7fffffff) / (double)0x7fffffff;
-}
+Sphere spheres[9] = {
+	{1e5,  {1e5+1, 40.8, 81.6},    {0,0,0}, {.75,.25,.25}, DIFF},  // Left
+	{1e5,  {-1e5+99, 40.8, 81.6},  {0,0,0}, {.25,.25,.75}, DIFF},  // Right
+	{1e5,  {50, 40.8, 1e5},        {0,0,0}, {.75,.75,.75}, DIFF},  // Back
+	{1e5,  {50, 40.8, -1e5+170},   {0,0,0}, {0,0,0},       DIFF},  // Front
+	{1e5,  {50, 1e5, 81.6},        {0,0,0}, {.75,.75,.75}, DIFF},  // Bottom
+	{1e5,  {50, -1e5+81.6, 81.6},  {0,0,0}, {.75,.75,.75}, DIFF},  // Top
+	{16.5, {27, 16.5, 47},         {0,0,0}, {.999,.999,.999}, SPEC}, // Mirror
+	{16.5, {73, 16.5, 78},         {0,0,0}, {.999,.999,.999}, REFR}, // Glass
+	{600,  {50, 681.6-.27, 81.6},  {12,12,12}, {0,0,0},    DIFF},  // Light
+};
 
 
 int main() {
 
-	BigStruct bs = (BigStruct){
-		1, 2, 3, 4
-	};
-
-	BigStruct bs2 = (BigStruct){
-		2, 4, 6, 8
-	};
-
-	int rinky_dinky = 0;
-	big_struct(bs, &bs2, &rinky_dinky);
-
-	foo(1 < 2, &rinky_dinky);
-
-	unsigned int seed = 0;
-
-	printf("RINKY DINKY IS WHAT?: %d\n", rinky_dinky);
-
-
-	for(int i = 0; i < 10; i = i + 1) {
-		double value = rng(&seed);
-		printf("RANDOM: %f\n", value);
-		for (int j = 0; j < 10; j = j + 1) {
-			printf("j is %d i is %d\n", j, i);
-		}
-	}
-
-
+	printf("spheres[2].p.x = %f\n", spheres[2].p.x);
 
 	return 0;
 }

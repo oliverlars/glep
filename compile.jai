@@ -591,7 +591,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 		case Node_Compound;
 			compile_lvalue(compiler, expr);
 		case Node_Unary;
-			op := expr.(*Node_Unary).op;
+			unary := expr.(*Node_Unary);
+			op := unary.op;
 			if op.type == {
 				case .Asterisk;
 					emit_comment(compiler, "expr: deref *");
@@ -606,6 +607,21 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					compile_expr(compiler, unary.expr);
 					emit(compiler, "cmp %, #0", register(9, unary.expr.resolved_type));
 					emit(compiler, "cset %, eq", register(9, unary.expr.resolved_type));
+				case .PlusPlus;
+					if unary.postfix {
+						compile_lvalue(compiler, unary.expr);
+						emit(compiler, "mov x10, x9");
+						emit(compiler, "ldr %, [x10]", register(9, unary.expr.resolved_type));
+						emit(compiler, "add %, %, #1", register(11, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
+						emit(compiler, "str %, [x10]", register(11, unary.expr.resolved_type));
+					} else {
+						compile_lvalue(compiler, unary.expr);
+						emit(compiler, "mov x10, x9");
+						emit(compiler, "ldr %, [x10]", register(9, unary.expr.resolved_type));
+						emit(compiler, "add %, %, #1", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
+						emit(compiler, "str %, [x10]", register(9, unary.expr.resolved_type));
+					}
+
 			}
 		case Node_Assign;
 			// To avoid any clobbering of the expression using the register we store
@@ -721,6 +737,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "cset %, ne", register(10, t));
 				case .Ampersand;
 					emit(compiler, "and %, %, %", register(9, t), register(10, t), register(9, t));
+				case .Percent;
+					if t.unsigned {
+						emit(compiler, "udiv %, %, %", register(11, t), register(10, t), register(9, t));
+						emit(compiler, "msub %, %, %, %", register(9, t), register(11, t), register(9, t), register(10, t));
+					} else {
+						emit(compiler, "sdiv %, %, %", register(11, t), register(10, t), register(9, t));
+						emit(compiler, "msub %, %, %, %", register(9, t), register(11, t), register(9, t), register(10, t));
+					}
 			}
 		case Node_Number;
 			number := expr.(*Node_Number);
@@ -1222,7 +1246,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit_comment(compiler, "--- prologue (stack: % bytes) ---", total_stack_space);
 				emit(compiler, "sub sp, sp, #%", total_stack_space);
 				emit(compiler, "str x30, [sp, #%]", link_and_return_offset);
-				emit(compiler, "str x29, [sp, #%]", link_and_return_offset);
+				emit(compiler, "str x29, [sp, #%]", link_and_return_offset + 8);
 				emit(compiler, "add x29, sp, #0");
 				emit_blank_line(compiler);
 
@@ -1234,7 +1258,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit_blank_line(compiler);
 				emit_comment(compiler, "--- epilogue ---");
 				emit(compiler, "ldr x30, [sp, #%]", link_and_return_offset);
-				emit(compiler, "ldr x29, [sp, #%]", link_and_return_offset);
+				emit(compiler, "ldr x29, [sp, #%]", link_and_return_offset + 8);
 				emit(compiler, "add sp, sp, #%", total_stack_space);
 				emit(compiler, "ret");
 				emit_label_end(compiler);
@@ -1309,9 +1333,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		return cursor;
 	}
 
+	emit(compiler, ".data");
+
 	for tu.declarations {
 		for declarator: it.declarators {
-			if is_variable_declaration(it, declarator) { 
+			if is_variable_declaration(it, declarator) {
 				name := identifier_from_declarator(declarator);
 				emit(compiler, ".globl _%", name);
 				init_expr: *Node_Expr;

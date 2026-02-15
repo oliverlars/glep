@@ -2287,7 +2287,8 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	minimal := read_entire_file("smallpt.c");
+	filename := "smallpt.c";
+	minimal := read_entire_file(filename);
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
@@ -2357,7 +2358,7 @@ main :: () {
 	print("\nCompiling assembly...\n\n");
 	run_command("clang", "out.s", "-oout");
 	print("Compile same program with clang...\n");
-	run_command("clang", "-S", "smallpt.c", "-oclang_out.s");
+	run_command("clang", "-S", filename, "-oclang_out.s");
 	print("Running program...\n\n");
 	run_command("./out");
 }

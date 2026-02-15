@@ -203,6 +203,8 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 				}
 			}
 			info.size_in_bytes = (offset + max_alignment - 1) & ~(max_alignment - 1);
+			info.alignment = max_alignment;
+			table_add(*tc._structs, _struct, info);
 		} else {
 			_, info = table_find(*tc._structs, _struct);
 		}

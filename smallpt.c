@@ -139,6 +139,8 @@ int main(int argc, char **argv) {
     Vec cy = vmul(vnorm(vcross(cx, cam.d)), .5135);
     Vec *c = calloc(w * h, sizeof(Vec));
 
+	printf("spheres[2].p.x = %f\n", spheres[2].p.x);
+
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int i = (h - y - 1) * w + x;
@@ -164,8 +166,8 @@ int main(int argc, char **argv) {
     FILE *f = fopen("image.ppm", "w");
     fprintf(f, "P3\n%d %d\n255\n", w, h);
     for (int i = 0; i < w*h; i++)
-        fprintf(f, "%d %d %d ", (int)(pow(fmin(1,c[i].x), 1/2.2)*255+.5),
-                                (int)(pow(fmin(1,c[i].y), 1/2.2)*255+.5),
-                                (int)(pow(fmin(1,c[i].z), 1/2.2)*255+.5));
+        fprintf(f, "%d %d %d ", i % 128, i % 16, i % 8);
+
+	fclose(f);
     return 0;
 }
