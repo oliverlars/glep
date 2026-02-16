@@ -2,10 +2,8 @@
 
 #include <stdio.h>
 
-#define TEST __FILE__
+#define TEST __LINE__
 
 int main(int argc, char **args) {
-	printf("abc: %s", TEST);
-
-	
+	printf("abc: %d", TEST);
 }

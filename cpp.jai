@@ -16,6 +16,7 @@ PRAGMA_ONCED :: #type,distinct bool;
 Preprocessor :: struct {
 	at: int;
 	path_stack: [..]string;
+	line: int;
 	cond_stack: [..]Cond_State;
 	objects: Table(string, Object);
 	functions: Table(string, Function);
@@ -141,6 +142,23 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 	at := 0;
 	while at < body.count {
 		it := body[at];
+
+		if it.view == "__LINE__" {
+			line: Token;
+			line.view = tprint("%", it.line);
+			line.type = .Number;
+			array_add(*result, line);
+			at += 1;
+			continue;
+		} else if it.view == "__FILE__" {
+			file: Token;
+			file.view = peek(cpp.path_stack);
+			file.type = .String;
+			array_add(*result, file);
+			at += 1;
+			continue;
+		}
+
 		if it.type == .Hash {
 			found, index := find_arg(params, args, body[at + 1]);
 			stringed: Token;
@@ -318,9 +336,6 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 				}
 				//print("\n");
 			} else if object && !in_hideset(token.hideset, token.view) {
-				if token.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
-					a := 5;
-				}
 				at += 1;
 				hideset := hideset_union(token.hideset, token.view);
 				
@@ -337,8 +352,9 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 				}
 			} else if token.view == "__LINE__" {
 				line: Token;
-				line.view = tprint("%", token.line);
+				line.view = tprint("%", cpp.line);
 				line.type = .Number;
+				line.number_type = .Decimal;
 				array_add(*result, line);
 				at += 1;
 			} else if token.view == "__FILE__" {
@@ -584,6 +600,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 	}
 
 	while !end(cpp, src_tokens) {
+		cpp.line = current(cpp, src_tokens).line;
 		if current(cpp, src_tokens).type == {
 			case .Hash;
 				skip(cpp, src_tokens);
