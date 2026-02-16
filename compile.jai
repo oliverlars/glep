@@ -38,6 +38,7 @@ Compiler :: struct {
 	variadic_stack_size: int;
 
 	label_for_count: int;
+	label_if_count: int;
 
 	indent_level: int;
 }
@@ -666,12 +667,15 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compile_expr(compiler, array_access.index);
 			offset := push_intermediate(compiler, array_access.index.resolved_type);
 
-			compile_lvalue(compiler, array_access.left);
+			compile_expr(compiler, array_access.left);
 			pop_intermediate(compiler, array_access.index.resolved_type, offset);
 
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
 			emit_comment(compiler, "element size = %", bytes_per_element);
+			if array_access.index.resolved_type.size_in_bytes < 8 {
+				emit(compiler, "sxtw x10, w10");
+			}
 			emit_mov_imm_integer(compiler, xx bytes_per_element, 11, 8);
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
@@ -1004,6 +1008,21 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			pop_scope(compiler);
 			emit(compiler, "b _FOR_START%", count);
 			emit(compiler, "_FOR_END%:", count);
+		case Node_If;
+			emit_blank_line(compiler);
+			emit_comment(compiler, "stmt: if");
+			_if := stmt.(*Node_If);
+			count := compiler.label_if_count;
+			compiler.label_if_count += 1;
+			push_scope(compiler);
+			compile_expr(compiler, _if.cond);
+			emit(compiler, "cbz %, _IF_ON_FALSE%", register(9, _if.cond.resolved_type), count);
+			compile_statement(compiler, _if.on_true);
+			emit(compiler, "b _IF_END%", count);
+			emit(compiler, "_IF_ON_FALSE%:", count);
+			compile_statement(compiler, _if.on_false);
+			pop_scope(compiler);
+			emit(compiler, "_IF_END%:", count);
 		case Node_Block;
 			for stmt.(*Node_Block).statements {
 				compile_statement(compiler, it);

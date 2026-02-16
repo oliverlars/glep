@@ -727,8 +727,13 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
 			typecheck_statement(tc, _for.body);
+		case Node_If;
+			_if := stmt.(*Node_If);
+			resolve_expr(tc, _if.cond);
+			typecheck_statement(tc, _if.on_false);
+			typecheck_statement(tc, _if.on_true);
 	}
-	
+
 }
 
 type_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: string) -> *Resolved_Type {
@@ -776,7 +781,7 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
 	if !init return null;
 
-	if init.initializer_type == {
+if init.initializer_type == {
 		case Node_Designated_Initializer;
 			index := 0;
 			designations := init.(*Node_Designated_Initializer).designations;

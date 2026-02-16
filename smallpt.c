@@ -52,14 +52,15 @@ double sphere_intersect(Sphere *s, Ray *r) {
     double t = b - det;
     if (t > eps) return t;
     t = b + det;
-    return t > eps ? t : 0;
+    if (t > eps) return t;
+    return 0;
 }
 
 int intersect(Ray *r, double *t, int *id) {
     *t = 1e20;
     for (int i = 0; i < NUM_SPHERES; i++) {
         double d = sphere_intersect(&spheres[i], r);
-        if (d && d < *t) { *t = d; *id = i; }
+        if (d != 0.0 && d < *t) { *t = d; *id = i; }
     }
     return *t < 1e20;
 }
@@ -67,6 +68,14 @@ int intersect(Ray *r, double *t, int *id) {
 double rng(unsigned *seed) {
     *seed = *seed * 1103515245 + 12345;
     return (*seed & 0x7fffffff) / (double)0x7fffffff;
+}
+
+int toInt(double x) {
+    double g = pow(x, 1.0/2.2);
+    int v = (int)(g * 255 + 0.5);
+    if (v < 0) return 0;
+    if (v > 255) return 255;
+    return v;
 }
 
 Vec radiance(Ray r, int depth, unsigned *seed) {
@@ -77,19 +86,42 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
     Sphere *obj = &spheres[id];
     Vec x = vadd(r.o, vmul(r.d, t));
     Vec n = vnorm(vsub(x, obj->p));
-    Vec nl = vdot(n, r.d) < 0 ? n : vmul(n, -1);
+
+    Vec nl;
+    if (vdot(n, r.d) < 0) {
+        nl = n;
+    } else {
+        nl = vmul(n, -1);
+    }
+
     Vec f = obj->c;
 
-    double p = f.x > f.y && f.x > f.z ? f.x : (f.y > f.z ? f.y : f.z);
+    double p;
+    if (f.x > f.y && f.x > f.z) {
+        p = f.x;
+    } else if (f.y > f.z) {
+        p = f.y;
+    } else {
+        p = f.z;
+    }
+
     if (++depth > 5) {
-        if (rng(seed) < p) f = vmul(f, 1/p);
-        else return obj->e;
+        if (rng(seed) < p) {
+            f = vmul(f, 1/p);
+        } else {
+            return obj->e;
+        }
     }
 
     if (obj->refl == DIFF) {
         double r1 = 2*M_PI*rng(seed), r2 = rng(seed), r2s = sqrt(r2);
         Vec w = nl;
-        Vec u = vnorm(vcross(fabs(w.x) > .1 ? vec(0,1,0) : vec(1,0,0), w));
+        Vec u;
+        if (fabs(w.x) > .1) {
+            u = vnorm(vcross(vec(0,1,0), w));
+        } else {
+            u = vnorm(vcross(vec(1,0,0), w));
+        }
         Vec v = vcross(w, u);
         Vec d = vnorm(vadd(vadd(vmul(u, cos(r1)*r2s), vmul(v, sin(r1)*r2s)), vmul(w, sqrt(1-r2))));
         return vadd(obj->e, vmult(f, radiance((Ray){x, d}, depth, seed)));
@@ -104,42 +136,67 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
     Ray refl_ray = (Ray){x, vsub(r.d, vmul(n, 2*vdot(n, r.d)))};
     int into = vdot(n, nl) > 0;
     double nc = 1, nt = 1.5;
-    double nnt = into ? nc/nt : nt/nc;
+
+    double nnt;
+    if (into) {
+        nnt = nc / nt;
+    } else {
+        nnt = nt / nc;
+    }
+
     double ddn = vdot(r.d, nl);
     double cos2t = 1 - nnt*nnt*(1 - ddn*ddn);
 
     if (cos2t < 0) // Total internal reflection
         return vadd(obj->e, vmult(f, radiance(refl_ray, depth, seed)));
 
-    Vec tdir = vnorm(vsub(vmul(r.d, nnt), vmul(n, (into ? 1 : -1) * (ddn*nnt + sqrt(cos2t)))));
+    double sign;
+    if (into) {
+        sign = 1;
+    } else {
+        sign = -1;
+    }
+    Vec tdir = vnorm(vsub(vmul(r.d, nnt), vmul(n, sign * (ddn*nnt + sqrt(cos2t)))));
+
     double a = nt - nc, b = nt + nc;
     double R0 = a*a / (b*b);
-    double c = 1 - (into ? -ddn : vdot(tdir, n));
+
+    double c;
+    if (into) {
+        c = 1 - (-ddn);
+    } else {
+        c = 1 - vdot(tdir, n);
+    }
+
     double Re = R0 + (1-R0)*c*c*c*c*c;
     double Tr = 1 - Re;
     double P = .25 + .5*Re;
 
     if (depth > 2) {
-        if (rng(seed) < P)
+        if (rng(seed) < P) {
             return vadd(obj->e, vmult(f, vmul(radiance(refl_ray, depth, seed), Re/P)));
-        else
+        } else {
             return vadd(obj->e, vmult(f, vmul(radiance((Ray){x, tdir}, depth, seed), Tr/(1-P))));
+        }
     }
     return vadd(obj->e, vmult(f, vadd(vmul(radiance(refl_ray, depth, seed), Re),
                                       vmul(radiance((Ray){x, tdir}, depth, seed), Tr))));
 }
 
 int main(int argc, char **argv) {
+
     int w = 256;
-	int h = 192;
-    int samps = argc > 1 ? atoi(argv[1])/4 : 1;
-    
+    int h = 192;
+
+	int samps = 1;
+	if(argc > 1) {
+		samps = atoi(argv[1]);
+	}
+
     Ray cam = (Ray){(Vec){50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
     Vec cx = vec(w * .5135 / h, 0, 0);
     Vec cy = vmul(vnorm(vcross(cx, cam.d)), .5135);
-    Vec *c = calloc(w * h, sizeof(Vec));
-
-	printf("spheres[2].p.x = %f\n", spheres[2].p.x);
+    Vec *c = calloc(w * h, 88);
 
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
@@ -149,8 +206,22 @@ int main(int argc, char **argv) {
                 for (int sx = 0; sx < 2; sx++) {
                     Vec r = {0, 0, 0};
                     for (int s = 0; s < samps; s++) {
-                        double r1 = 2*rng(&seed), dx = r1<1 ? sqrt(r1)-1 : 1-sqrt(2-r1);
-                        double r2 = 2*rng(&seed), dy = r2<1 ? sqrt(r2)-1 : 1-sqrt(2-r2);
+                        double r1 = 2*rng(&seed);
+                        double dx;
+                        if (r1 < 1) {
+                            dx = sqrt(r1) - 1;
+                        } else {
+                            dx = 1 - sqrt(2 - r1);
+                        }
+
+                        double r2 = 2*rng(&seed);
+                        double dy;
+                        if (r2 < 1) {
+                            dy = sqrt(r2) - 1;
+                        } else {
+                            dy = 1 - sqrt(2 - r2);
+                        }
+
                         Vec d = vadd(vadd(vmul(cx, ((sx+.5+dx)/2+x)/w - .5),
                                          vmul(cy, ((sy+.5+dy)/2+y)/h - .5)), cam.d);
                         d = vnorm(d);
@@ -163,11 +234,19 @@ int main(int argc, char **argv) {
         }
     }
 
+	int j = 0;
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			c[j] = (Vec){64, 0, 0};
+			j++;
+		}
+	}
+
     FILE *f = fopen("image.ppm", "w");
     fprintf(f, "P3\n%d %d\n255\n", w, h);
     for (int i = 0; i < w*h; i++)
-        fprintf(f, "%d %d %d ", i % 128, i % 16, i % 8);
+        fprintf(f, "%d %d %d ", (int)(c[i].x/255.99f), (int)(c[i].y/255.99f), (int)(c[i].z/255.99f));
 
-	fclose(f);
+    fclose(f);
     return 0;
 }
