@@ -248,10 +248,6 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 			function := table_find_pointer(*cpp.functions, token.view);
 			object := table_find_pointer(*cpp.objects, token.view);
 
-			if token.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
-				a := 5;
-			}
-
 			if function && !in_hideset(token.hideset, token.view) && 
 			at + 1 < tokens.count && tokens[at + 1].type == .LeftParenthesis {
 				at += 1; // Identifier
@@ -339,6 +335,18 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 				for expanded {
 					array_add(*result, it);
 				}
+			} else if token.view == "__LINE__" {
+				line: Token;
+				line.view = tprint("%", token.line);
+				line.type = .Number;
+				array_add(*result, line);
+				at += 1;
+			} else if token.view == "__FILE__" {
+				file: Token;
+				file.view = peek(cpp.path_stack);
+				file.type = .String;
+				array_add(*result, file);
+				at += 1;
 			} else {
 				array_add(*result, token);
 				at += 1;

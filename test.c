@@ -2,6 +2,10 @@
 
 #include <stdio.h>
 
+#define TEST __FILE__
+
 int main(int argc, char **args) {
-	printf("abc: %s", __FILE__);
+	printf("abc: %s", TEST);
+
+	
 }
