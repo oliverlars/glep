@@ -879,6 +879,20 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							insert(cpp, it, *dst_tokens);
 						}
 					}
+				} else if name.view == "__LINE__" {
+					skip(cpp, src_tokens);
+					token: Token;
+					token.view = tprint("%", name.line);
+					token.type = .Number;
+					insert(cpp, token, *dst_tokens);
+					paste(cpp, src_tokens, *dst_tokens);
+				} else if name.view == "__FILE__" {
+					skip(cpp, src_tokens);
+					token: Token;
+					token.view = peek(cpp.path_stack);
+					token.type = .String;
+					insert(cpp, token, *dst_tokens);
+					paste(cpp, src_tokens, *dst_tokens);
 				} else {
 					paste(cpp, src_tokens, *dst_tokens);
 				}

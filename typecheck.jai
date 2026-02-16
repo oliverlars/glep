@@ -208,7 +208,6 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		} else {
 			_, info = table_find(*tc._structs, _struct);
 		}
-		print("This struct is % bytes\n", info.size_in_bytes);
 	}
 
 	return info;
@@ -408,7 +407,6 @@ split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	info := New(Resolved_Type);
 	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
-	print("SUFFIX: %\n", suffix);
 	if number_node.kind == .FLOAT {
 		info.kind = .Floating;
 		info.size_in_bytes = 8;
@@ -712,10 +710,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			stmt.(*Node_Return).expr.resolved_type = resolve_expr(tc, stmt.(*Node_Return).expr);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
-			print("TYPECHECKING DECL: %\n", decl.*);
 			for decl.declarators {
-				print("TYPECHECKING DECLARATOR: %\n", it.*);
-				print("TYPECHECKING INIT: %\n", it.init.*);
 				lhs := resolve_decl(tc, decl, it);
 				it.resolved_type = lhs;
 				resolve_initializer(tc, lhs, it.init);
@@ -858,10 +853,6 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		for declarator: decl.declarators {
 			push_decl(tc, decl.base, declarator);
 			name := identifier_from_declarator(declarator);
-			print("typechecking: %\n", name);
-			if name == "__darwin_pthread_t" {
-				a := 5;
-			}
 			decl_type := resolve_decl(tc, decl, declarator);
 			declarator.resolved_type = decl_type;
 			resolve_initializer(tc, decl_type, declarator.init);

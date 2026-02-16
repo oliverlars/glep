@@ -1983,6 +1983,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				expect(p, .Semicolon);
 			}
 		} else if current(p).type == .Semicolon {
+			statement = New(Node_Statement);
 			expect(p, .Semicolon);
 		} else {
 			expr_stmt := New(Node_Expr_Statement);
@@ -2016,7 +2017,6 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
 		name := identifier_from_declarator(declarator);
-		print("declarator: %\n", name);
 		if name != "" {
 			if name == "test" {
 				a := 5;
@@ -2287,28 +2287,16 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	filename := "smallpt.c";
+	filename := "test.c";
 	minimal := read_entire_file(filename);
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
 
 	cpp: Preprocessor;
-	array_add(*cpp.path_stack, "/Users/olivercruickshank/Carnage/friday.c");
+	array_add(*cpp.path_stack, get_absolute_path(filename));
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
-
-	for tokens {
-		if it.view == "___POSIX_C_DEPRECATED_STARTING_200112" {
-			print("___POSIX_C_DEPRECATED_STARTING_200112: \n");
-			object := table_find_pointer(*cpp.objects, it.view);
-			if object {
-				for object.tokens {
-					print("% ", it);
-				}
-			}
-		}
-	}
 
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;
@@ -2322,6 +2310,10 @@ main :: () {
 
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
+
+	for tokens_no_newlines {
+		print("% ", it.view);
+	}
 
 	tu := parse_translation_unit(*parser);
 
