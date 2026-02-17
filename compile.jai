@@ -753,10 +753,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "cset %, %", register(9, t), cmp);
 				case .EqualEqual;
 					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, eq", register(10, t));
+					emit(compiler, "cset %, eq", register(9, t));
 				case .BangEqual;
 					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, ne", register(10, t));
+					emit(compiler, "cset %, ne", register(9, t));
 				case .Ampersand;
 					emit(compiler, "and %, %, %", register(9, t), register(10, t), register(9, t));
 				case .Percent;
