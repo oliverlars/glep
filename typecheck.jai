@@ -574,7 +574,16 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				return resolved_type, resolved_type != null;
 			}
 			
-			resolved_type: *Resolved_Type;
+			resolved_type := common_type(left_info, right_info);
+			if !resolved_type return null, false;
+
+			if !types_equal(left_info, resolved_type) {
+				binary.left = insert_cast(tc, binary.left, resolved_type);
+			}
+			if !types_equal(right_info, resolved_type) {
+				binary.right = insert_cast(tc, binary.right, resolved_type);
+			}
+					
 			if binary.op.type == {
 				case .Less; #through;
 				case .Greater; #through;
@@ -582,21 +591,11 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				case .GreaterEqual; #through;
 				case .EqualEqual; #through;
 				case .BangEqual;
-					resolved_type = New(Resolved_Type);
 					resolved_type.kind = .Integral;
 					resolved_type.size_in_bytes = 4;
 					resolved_type.alignment = 4;
 				case;
-					resolved_type = common_type(left_info, right_info);
-					if !resolved_type return null, false;
 
-					if !types_equal(left_info, resolved_type) {
-						binary.left = insert_cast(tc, binary.left, resolved_type);
-					}
-					if !types_equal(right_info, resolved_type) {
-						binary.right = insert_cast(tc, binary.right, resolved_type);
-					}
-					
 			}
 			binary.resolved_type = resolved_type;
 			return resolved_type, true;
