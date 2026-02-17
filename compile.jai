@@ -624,6 +624,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "cmp %, #0", register(9, unary.expr.resolved_type));
 					emit(compiler, "cset %, eq", register(9, unary.expr.resolved_type));
 				case .Minus;
+					compile_expr(compiler, unary.expr);
 					emit(compiler, "neg %, %", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
 				case .PlusPlus;
 					if unary.postfix {

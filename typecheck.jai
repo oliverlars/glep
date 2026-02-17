@@ -594,8 +594,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					resolved_type.kind = .Integral;
 					resolved_type.size_in_bytes = 4;
 					resolved_type.alignment = 4;
-				case;
-
 			}
 			binary.resolved_type = resolved_type;
 			return resolved_type, true;
