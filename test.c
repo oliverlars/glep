@@ -5,5 +5,6 @@
 #define TEST __LINE__
 
 int main(int argc, char **args) {
-	printf("abc: %d", TEST);
+	printf("abc: %d\n", TEST);
+	assert(-1 > 0);
 }

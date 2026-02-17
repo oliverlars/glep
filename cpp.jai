@@ -147,6 +147,7 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			line: Token;
 			line.view = tprint("%", it.line);
 			line.type = .Number;
+			line.number_type = .Decimal;
 			array_add(*result, line);
 			at += 1;
 			continue;
@@ -909,6 +910,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 					token: Token;
 					token.view = tprint("%", name.line);
 					token.type = .Number;
+					token.number_type = .Decimal;
 					insert(cpp, token, *dst_tokens);
 					paste(cpp, src_tokens, *dst_tokens);
 				} else if name.view == "__FILE__" {

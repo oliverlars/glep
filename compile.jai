@@ -591,6 +591,21 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if expr.expr_type == {
 		case Node_Compound;
 			compile_lvalue(compiler, expr);
+		case Node_Ternary;
+			emit_blank_line(compiler);
+			emit_comment(compiler, "stmt: if");
+			ternary := expr.(*Node_Ternary);
+			count := compiler.label_if_count;
+			compiler.label_if_count += 1;
+			push_scope(compiler);
+			compile_expr(compiler, ternary.cond);
+			emit(compiler, "cbz %, _IF_ON_FALSE%", register(9, ternary.cond.resolved_type), count);
+			compile_expr(compiler, ternary.on_true);
+			emit(compiler, "b _IF_END%", count);
+			emit(compiler, "_IF_ON_FALSE%:", count);
+			compile_expr(compiler, ternary.on_false);
+			pop_scope(compiler);
+			emit(compiler, "_IF_END%:", count);
 		case Node_Unary;
 			unary := expr.(*Node_Unary);
 			op := unary.op;
@@ -608,6 +623,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					compile_expr(compiler, unary.expr);
 					emit(compiler, "cmp %, #0", register(9, unary.expr.resolved_type));
 					emit(compiler, "cset %, eq", register(9, unary.expr.resolved_type));
+				case .Minus;
+					emit(compiler, "neg %, %", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
 				case .PlusPlus;
 					if unary.postfix {
 						compile_lvalue(compiler, unary.expr);
