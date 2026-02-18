@@ -228,6 +228,7 @@ Node_Cast :: struct {
 Node_Sizeof_Type :: struct {
 	#as using node: Node_Expr;
 	base: Node_Decl_Info;
+	target_type: *Resolved_Type;
 	expr_type = #this;
 }
 
@@ -840,8 +841,7 @@ tokenise :: (t: *Tokeniser) {
 				}
 			}
 		}
-		token.line = token_line;
-		token.col  = token_col;
+		token.line = t.line;
 		array_add(*t.tokens, token);
 	}
 }

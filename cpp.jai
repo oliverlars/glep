@@ -145,7 +145,7 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 
 		if it.view == "__LINE__" {
 			line: Token;
-			line.view = tprint("%", it.line);
+			line.view = tprint("%", cpp.line);
 			line.type = .Number;
 			line.number_type = .Decimal;
 			array_add(*result, line);
@@ -602,6 +602,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 
 	while !end(cpp, src_tokens) {
 		cpp.line = current(cpp, src_tokens).line;
+		print("LINE: %\n", cpp.line);
 		if current(cpp, src_tokens).type == {
 			case .Hash;
 				skip(cpp, src_tokens);

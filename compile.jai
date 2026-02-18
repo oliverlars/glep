@@ -274,6 +274,8 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 		}
 	} else if resolved_type.kind == .Composite {
 		return tprint("x%", reg);
+	} else if resolved_type.kind == .Array {
+		return tprint("x%", reg);
 	}
 	assert(false);
 	return "";
@@ -586,9 +588,57 @@ emit_mov_imm_integer :: (compiler: *Compiler, imm: u64, reg: int, size_in_bytes:
 	}
 }
 
+emit_load :: (compiler: *Compiler, rt: *Resolved_Type) {
+	if rt.kind == .Floating {
+		if rt.size_in_bytes == 4 {
+			emit(compiler, "ldr s9, [x9]");
+		} else {
+			emit(compiler, "ldr d9, [x9]");
+		}
+	} else if rt.kind == .Integral || rt.kind == .Pointer {
+		if rt.size_in_bytes == 1 {
+			emit(compiler, "ldrb w9, [x9]");
+		} else if rt.size_in_bytes == 2 {
+			emit(compiler, "ldrh w9, [x9]");
+		} else if rt.size_in_bytes == 4 {
+			emit(compiler, "ldr w9, [x9]");
+		} else {
+			emit(compiler, "ldr x9, [x9]");
+		}
+	}
+}
+
+emit_store :: (compiler: *Compiler, rt: *Resolved_Type) {
+	if rt.kind == .Floating {
+		if rt.size_in_bytes == 4 {
+			emit(compiler, "str s10, [x9]");
+		} else {
+			emit(compiler, "str d10, [x9]");
+		}
+	} else if rt.kind == .Integral || rt.kind == .Pointer {
+		if rt.size_in_bytes == 1 {
+			emit(compiler, "strb w10, [x9]");
+		} else if rt.size_in_bytes == 2 {
+			emit(compiler, "strh w10, [x9]");
+		} else if rt.size_in_bytes == 4 {
+			emit(compiler, "str w10, [x9]");
+		} else {
+			emit(compiler, "str x10, [x9]");
+		}
+	}
+}
+
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 	if !expr return;
 	if expr.expr_type == {
+		case Node_Sizeof_Type;
+			sizeof := expr.(*Node_Sizeof_Type);
+			emit_comment(compiler, "expr: sizeof(type) = %", sizeof.target_type.size_in_bytes);
+			emit_mov_imm_integer(compiler, xx sizeof.target_type.size_in_bytes, 9, 8);
+		case Node_Sizeof_Expr;
+			sizeof := expr.(*Node_Sizeof_Expr);
+			emit_comment(compiler, "expr: sizeof(expr) = %", sizeof.expr.resolved_type.size_in_bytes);
+			emit_mov_imm_integer(compiler, xx sizeof.expr.resolved_type.size_in_bytes, 9, 8);
 		case Node_Compound;
 			compile_lvalue(compiler, expr);
 		case Node_Ternary;
@@ -651,7 +701,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			if assign.right.resolved_type.kind == .Composite {
 
 				emit_comment(compiler, "assign: composite memcpy (% bytes)", assign.right.resolved_type.size_in_bytes);
-				compile_lvalue(compiler, assign.right);
+				compile_expr(compiler, assign.right);
 				offset := push_intermediate(compiler, assign.right.resolved_type);
 
 				compile_lvalue(compiler, assign.left);
@@ -670,14 +720,16 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				if expr.(*Node_Assign).op.type == {
 					case .Equals;
 						emit_comment(compiler, "assign: store to [x9]");
-						emit(compiler, "str %, [x9]", register(10, assign.right.resolved_type));
+						emit_store(compiler, assign.right.resolved_type);
 				}
 			}
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 			emit_comment(compiler, "expr: load member .%", member_access.right.view);
 			compile_lvalue(compiler, member_access);
-			emit(compiler, "ldr %, [x9]", register(9, member_access.resolved_type));
+			if member_access.resolved_type.kind != .Composite {
+				emit_load(compiler, member_access.resolved_type);
+			}
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
 			emit_comment(compiler, "expr: array access");
@@ -698,8 +750,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			emit(compiler, "mul x10, x10, x11");
 			emit(compiler, "add x9, x9, x10");
 
-			emit_comment(compiler, "load element");
-			emit(compiler, "ldr %, [x9]", register(9, array_access.left.resolved_type.inner));
+			if array_access.left.resolved_type.inner.kind != .Composite {
+				emit_load(compiler, array_access.left.resolved_type.inner);
+			}
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
 			op := expr.(*Node_Binary).op;
@@ -769,10 +822,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					}
 			}
 		case Node_Number;
-			number := expr.(*Node_Number);
+ 			number := expr.(*Node_Number);
 			t := number.resolved_type;
-			emit_comment(compiler, "expr: number literal %", number.as_u64);
-			emit_mov_imm(compiler, number.as_u64, 9, t);
+			value := number.as_u64;
+			if number.kind == .FLOAT {
+				memcpy(*value, *number.as_f64, 8);
+			}
+			emit_comment(compiler, "expr: number literal %", value);
+			emit_mov_imm(compiler, value, 9, t);
 		case Node_Cast;
 			cast_node := expr.(*Node_Cast);
 			emit_comment(compiler, "expr: cast (% -> %)", cast_node.expr.resolved_type.kind, cast_node.resolved_type.kind);
@@ -949,8 +1006,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			}
 		case Node_Identifier;
 			emit_comment(compiler, "expr: load '%'", expr.(*Node_Identifier).id.view);
-			load_variable_into_register(compiler, expr.(*Node_Identifier).id.view);
-	}
+			compile_lvalue(compiler, expr);
+			if expr.resolved_type.kind != .Composite {
+				emit_load(compiler, expr.resolved_type);
+			}
+		}
 }
 
 compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: int) -> int {

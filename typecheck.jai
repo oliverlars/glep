@@ -534,7 +534,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved.unsigned = true;
 			resolved.alignment = 8;
 			sizeof.resolved_type = resolved;
-			resolve_base(tc, sizeof.base);
+			decl := ifx sizeof.base.declarators.count > 0 then sizeof.base.declarators[0] else null;
+			sizeof.target_type = resolve_decl(tc, *sizeof.base, decl);
 			return resolved, true;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
