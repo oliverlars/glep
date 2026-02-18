@@ -592,9 +592,11 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				case .GreaterEqual; #through;
 				case .EqualEqual; #through;
 				case .BangEqual;
-					resolved_type.kind = .Integral;
-					resolved_type.size_in_bytes = 4;
-					resolved_type.alignment = 4;
+					comparison_result := New(Resolved_Type);
+					comparison_result.kind = .Integral;
+					comparison_result.size_in_bytes = 4;
+					comparison_result.alignment = 4;
+					resolved_type = comparison_result;
 			}
 			binary.resolved_type = resolved_type;
 			return resolved_type, true;

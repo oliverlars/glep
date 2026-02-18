@@ -675,7 +675,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					emit(compiler, "cset %, eq", register(9, unary.expr.resolved_type));
 				case .Minus;
 					compile_expr(compiler, unary.expr);
-					emit(compiler, "neg %, %", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
+					if unary.expr.resolved_type.kind == .Floating {
+						emit(compiler, "fneg %, %", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
+					} else {
+						emit(compiler, "neg %, %", register(9, unary.expr.resolved_type), register(9, unary.expr.resolved_type));
+					}
+					
 				case .PlusPlus;
 					if unary.postfix {
 						compile_lvalue(compiler, unary.expr);
@@ -789,36 +794,56 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 					}
 					emit(compiler, "% %, %, %", div, register(9, t), register(10, t), register(9, t));
 				case .Less;
-					cmp := ifx t.unsigned then "lo" else "lt";
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, %", register(9, t), cmp);
-				case .Greater;
-					cmp := ifx t.unsigned then "hi" else "gt";
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, %", register(9, t), cmp);
-				case .GreaterEqual;
-					cmp := ifx t.unsigned then "hs" else "ge";
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, %", register(9, t), cmp);
-				case .LessEqual;
-					cmp := ifx t.unsigned then "ls" else "le";
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, %", register(9, t), cmp);
-				case .EqualEqual;
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, eq", register(9, t));
-				case .BangEqual;
-					emit(compiler, "cmp %, %", register(10, t), register(9, t));
-					emit(compiler, "cset %, ne", register(9, t));
-				case .Ampersand;
-					emit(compiler, "and %, %, %", register(9, t), register(10, t), register(9, t));
-				case .Percent;
-					if t.unsigned {
-						emit(compiler, "udiv %, %, %", register(11, t), register(10, t), register(9, t));
-						emit(compiler, "msub %, %, %, %", register(9, t), register(11, t), register(9, t), register(10, t));
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, lt");
 					} else {
-						emit(compiler, "sdiv %, %, %", register(11, t), register(10, t), register(9, t));
-						emit(compiler, "msub %, %, %, %", register(9, t), register(11, t), register(9, t), register(10, t));
+						cmp := ifx binary.left.resolved_type.unsigned then "lo" else "lt";
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, %", register(9, t), cmp);
+					}
+				case .Greater;
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, gt");
+					} else {
+						cmp := ifx binary.left.resolved_type.unsigned then "hi" else "gt";
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, %", register(9, t), cmp);
+					}
+				case .GreaterEqual;
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, ge");
+					} else {
+						cmp := ifx binary.left.resolved_type.unsigned then "hs" else "ge";
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, %", register(9, t), cmp);
+					}
+				case .LessEqual;
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, le");
+					} else {
+						cmp := ifx binary.left.resolved_type.unsigned then "ls" else "le";
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, %", register(9, t), cmp);
+					}
+				case .EqualEqual;
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, eq");
+					} else {
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, eq", register(9, t));
+					}
+				case .BangEqual;
+					if binary.left.resolved_type.kind == .Floating {
+						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
+						emit(compiler, "cset w9, ne");
+					} else {
+						emit(compiler, "cmp %, %", register(10, t), register(9, t));
+						emit(compiler, "cset %, ne", register(9, t));
 					}
 			}
 		case Node_Number;
