@@ -40,6 +40,8 @@ Compiler :: struct {
 	label_for_count: int;
 	label_if_count: int;
 
+	current_function_name: string;
+
 	indent_level: int;
 }
 
@@ -200,7 +202,8 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) {
 				assert(false);
 			} else {
 				emit_comment(compiler, "lvalue: local '%' at sp+%", name, stack_slot.offset);
-				emit(compiler, "add x9, sp, #%", stack_slot.offset);
+				emit(compiler, "mov x12, #%", stack_slot.offset);
+				emit(compiler, "add x9, sp, x12", stack_slot.offset);
 			}
 		case Node_Unary;
 			op := expr.(*Node_Unary).op;
@@ -262,7 +265,8 @@ register :: (reg: int, resolved_type: *Resolved_Type) -> string {
 			case 8;
 				return tprint("x%", reg);
 			case 4; #through;
-			case 2;
+			case 2; #through;
+			case 1;
 				return tprint("w%", reg);
 		}
 	} else if resolved_type.kind == .Floating {
@@ -506,6 +510,27 @@ convert_constant :: (v: Constant, target: *Resolved_Type) -> Constant {
 	}
 }
 
+eval_char_literal :: (view: string) -> int {
+	if view.count >= 2 && view[0] == #char "\\" {
+		if view[1] == {
+			case #char "n";  return 10;
+			case #char "t";  return 9;
+			case #char "r";  return 13;
+			case #char "0";  return 0;
+			case #char "\\"; return 92;
+			case #char "'";  return 39;
+			case #char "\""; return 34;
+			case #char "a";  return 7;
+			case #char "b";  return 8;
+			case #char "f";  return 12;
+			case #char "v";  return 11;
+		}
+	}
+	if view.count == 1 return view[0];
+	// Multi-char constant: just use the last byte
+	return view[view.count - 1];
+}
+
 eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
@@ -549,10 +574,7 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 			c := expr.(*Node_Cast);
 			return convert_constant(eval_constant_expr(c.expr), c.resolved_type);
 		case Node_Char;
-			value := 0;
-			for expr.(*Node_Char).token.view {
-				value += it;
-			}
+			value := eval_char_literal(expr.(*Node_Char).token.view);
 			return .{ kind = .U64, as_u64 = value.(u64) };
 		case Node_Identifier;
 			// TODO(Oliver): Enums
@@ -563,10 +585,17 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 
 emit_mov_imm :: (compiler: *Compiler, imm: u64, reg: int, rt: *Resolved_Type) {
 	if rt.kind == .Floating {
-		emit_mov_imm_integer(compiler, imm, reg, 8);
 		if rt.size_in_bytes == 8 {
+			emit_mov_imm_integer(compiler, imm, reg, 8);
 			emit(compiler, "fmov d%, x%", reg, reg);
 		} else {
+			// imm contains f64 bits; convert to f32 bits for the s register
+			f64_val: float64;
+			memcpy(*f64_val, *imm, 8);
+			f32_val := cast(float32) f64_val;
+			f32_bits: u32;
+			memcpy(*f32_bits, *f32_val, 4);
+			emit_mov_imm_integer(compiler, cast(u64) f32_bits, reg, 4);
 			emit(compiler, "fmov s%, w%", reg, reg);
 		}
 	} else {
@@ -663,7 +692,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				case .Asterisk;
 					emit_comment(compiler, "expr: deref *");
 					compile_expr(compiler, expr.(*Node_Unary).expr);
-					emit(compiler, "ldr x9, [x9]");
+					emit_load(compiler, expr.resolved_type);
 				case .Ampersand;
 					emit_comment(compiler, "expr: addr-of &");
 					compile_lvalue(compiler, expr.(*Node_Unary).expr);
@@ -766,15 +795,33 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			compile_expr(compiler, binary.left);
 			offset := push_intermediate(compiler, binary.left.resolved_type);
 
+
+			count := compiler.label_if_count;
+			if op.type == .AmpersandAmpersand {
+				compiler.label_if_count += 1;
+				emit(compiler, "cbz %, _IF_ON_FALSE%", register(9, binary.left.resolved_type), count);
+				
+
+			}
+
 			compile_expr(compiler, binary.right);
 			pop_intermediate(compiler, binary.left.resolved_type, offset);
+
+			if op.type == .AmpersandAmpersand {
+				emit(compiler, "cmp w9, #0");
+				emit(compiler, "cset w9, ne");
+				emit(compiler, "b _IF_END%", count);
+				emit(compiler, "_IF_ON_FALSE%:", count);
+				emit(compiler, "mov %, #0", register(9, binary.right.resolved_type));
+				emit(compiler, "_IF_END%:", count);
+			}
+
 
 			f := "";
 			if t.kind == .Floating {
 				f = "f";
 			}
 			if op.type == {
-				case .Equals;
 				case .Plus;
 					emit(compiler, "%add %, %, %", f, register(9, t), register(10, t), register(9, t));
 				case .Minus;
@@ -793,6 +840,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						div = "fdiv";
 					}
 					emit(compiler, "% %, %, %", div, register(9, t), register(10, t), register(9, t));
+				case .Percent;
+					div := ifx t.unsigned then "udiv" else "sdiv";
+					emit(compiler, "% %, %, %", div, register(11, t), register(10, t), register(9, t));
+					emit(compiler, "msub %, %, %, %", register(9, t), register(11, t), register(9, t), register(10, t));
 				case .Less;
 					if binary.left.resolved_type.kind == .Floating {
 						emit(compiler, "fcmp %, %", register(10, binary.left.resolved_type), register(9, binary.left.resolved_type));
@@ -845,6 +896,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						emit(compiler, "cmp %, %", register(10, t), register(9, t));
 						emit(compiler, "cset %, ne", register(9, t));
 					}
+				case .Ampersand;
+					emit(compiler, "and %, %, %", register(9, t), register(10, t), register(9, t));
 			}
 		case Node_Number;
  			number := expr.(*Node_Number);
@@ -882,8 +935,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				if target.size_in_bytes > source.size_in_bytes {
 					if source.unsigned {
 						emit(compiler, "mov %, %", dst, src);
-					} else {
-						emit(compiler, "sxtw %, %", dst, src);
+					} else if source.size_in_bytes == {
+						case 1;
+							emit(compiler, "sxtb %, %", dst, src);
+						case 2;
+							emit(compiler, "sxth %, %", dst, src);
+						case 4;
+							emit(compiler, "sxtw %, %", dst, src);
 					}
 				}
 			} else if source.kind == .Floating && target.kind == .Floating {
@@ -892,10 +950,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				}
 			}
 		case Node_Char;
-			value := 0;
-			for expr.(*Node_Char).token.view {
-				value += it;
-			}
+			value := eval_char_literal(expr.(*Node_Char).token.view);
 			emit_comment(compiler, "expr: char literal '%'", expr.(*Node_Char).token.view);
 			emit_mov_imm_integer(compiler, xx value, 9, 4);
 		case Node_Call;
@@ -1095,6 +1150,18 @@ is_hfa :: (_struct: *Node_Struct) -> bool, count: int, size: int {
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 	if !stmt return;
 	if stmt.statement_type == {
+		case Node_While;
+			_while := stmt.(*Node_While);
+			push_scope(compiler);
+			count := compiler.label_for_count;
+			compiler.label_for_count += 1;
+			emit(compiler, "_FOR_START%:", count);
+			compile_expr(compiler, _while.cond);
+			emit(compiler, "cbz %, _FOR_END%", register(9, _while.cond.resolved_type), count);
+			compile_statement(compiler, _while.body);
+			emit(compiler, "b _FOR_START%", count);
+			emit(compiler, "_FOR_END%:", count);
+			pop_scope(compiler);
 		case Node_For;
 			emit_blank_line(compiler);
 			emit_comment(compiler, "stmt: for");
@@ -1156,6 +1223,7 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 					}
 				}
 			}
+			emit(compiler, "b _%_epilogue", compiler.current_function_name);
 		case Node_Expr_Statement;
 			emit_blank_line(compiler);
 			emit_comment(compiler, "stmt: expr");
@@ -1274,6 +1342,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				*/
 				push_scope(compiler);
 				name := identifier_from_declarator(declarator);
+				compiler.current_function_name = name;
 				emit_blank_line(compiler);
 				emit_comment(compiler, "======== function: %() ========", name);
 				emit_label(compiler, "_%", name);
@@ -1366,7 +1435,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				link_and_return_offset := total_stack_space - link_and_return_stack_size;
 
 				emit_comment(compiler, "--- prologue (stack: % bytes) ---", total_stack_space);
-				emit(compiler, "sub sp, sp, #%", total_stack_space);
+				emit(compiler, "mov x9, #%", total_stack_space);
+				emit(compiler, "sub sp, sp, x9");
 				emit(compiler, "str x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "str x29, [sp, #%]", link_and_return_offset + 8);
 				emit(compiler, "add x29, sp, #0");
@@ -1378,10 +1448,12 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				// Epilogue
 				emit_blank_line(compiler);
+				emit(compiler, "_%_epilogue:", name);
 				emit_comment(compiler, "--- epilogue ---");
 				emit(compiler, "ldr x30, [sp, #%]", link_and_return_offset);
 				emit(compiler, "ldr x29, [sp, #%]", link_and_return_offset + 8);
-				emit(compiler, "add sp, sp, #%", total_stack_space);
+				emit(compiler, "mov x9, #%", total_stack_space);
+				emit(compiler, "add sp, sp, x9");
 				emit(compiler, "ret");
 				emit_label_end(compiler);
 				pop_scope(compiler);

@@ -129,6 +129,11 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	info := New(Resolved_Type);
 
 	info.size_in_bytes = 4;
+
+	if counts[Type_Specifier.Int] {
+		info.size_in_bytes = 4;
+		info.alignment = 4;
+	}
 	
 	if counts[Type_Specifier.Signed] {
 		info.unsigned = false;
@@ -163,11 +168,6 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		info.size_in_bytes = 8;
 		info.kind = .Floating;
 		info.alignment = 8;
-	}
-
-	if counts[Type_Specifier.Int] {
-		info.size_in_bytes = 4;
-		info.alignment = 4;
 	}
 
 	for decl_info.qualifiers {
@@ -498,6 +498,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				return expr.resolved_type, expr.resolved_type != null;
 			}
 
+			ternary.on_true.resolved_type = on_true;
+			ternary.on_false.resolved_type = on_false;
+
 			if on_true.kind == .Composite && on_false.kind == .Composite {
 				assert(on_true.composite == on_false.composite);
 				expr.resolved_type = on_true;
@@ -660,6 +663,14 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			info.size_in_bytes = 8;
 			info.alignment = 8;
 			info.kind = .Pointer;
+			expr.resolved_type = info;
+			return info, true;
+		case Node_Char;
+			info := New(Resolved_Type);
+			info.size_in_bytes = 4;
+			info.alignment = 4;
+			info.kind = .Integral;
+			expr.resolved_type = info;
 			return info, true;
 		case Node_Call;
 			call := expr.(*Node_Call);
@@ -722,6 +733,10 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
 			typecheck_statement(tc, _for.body);
+		case Node_While;
+			_while := stmt.(*Node_While);
+			resolve_expr(tc, _while.cond);
+			typecheck_statement(tc, _while.body);
 		case Node_If;
 			_if := stmt.(*Node_If);
 			resolve_expr(tc, _if.cond);

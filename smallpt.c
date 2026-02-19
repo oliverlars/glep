@@ -188,15 +188,16 @@ int main(int argc, char **argv) {
     int w = 256;
     int h = 192;
 
-	int samps = 1;
+	int samps = 5;
 	if(argc > 1) {
 		samps = atoi(argv[1]);
 	}
+	samps = 64;
 
     Ray cam = (Ray){(Vec){50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
     Vec cx = vec(w * .5135 / h, 0, 0);
     Vec cy = vmul(vnorm(vcross(cx, cam.d)), .5135);
-    Vec *c = calloc(w * h, 88);
+    Vec *c = calloc(w * h, sizeof(Vec));
 
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
@@ -226,7 +227,7 @@ int main(int argc, char **argv) {
                                          vmul(cy, ((sy+.5+dy)/2+y)/h - .5)), cam.d);
                         d = vnorm(d);
                         Ray ray = (Ray){vadd(cam.o, vmul(d, 140)), d};
-                        r = vadd(r, vmul(radiance(ray, 0, &seed), 1./samps));
+                        r = vadd(r, vmul(radiance(ray, 0, &seed), 1.0/samps));
                     }
                     c[i] = vadd(c[i], vmul(vec(fmin(1, r.x), fmin(1, r.y), fmin(1, r.z)), .25));
                 }
@@ -234,18 +235,10 @@ int main(int argc, char **argv) {
         }
     }
 
-	int j = 0;
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			c[j] = (Vec){64, 0, 0};
-			j++;
-		}
-	}
-
     FILE *f = fopen("image.ppm", "w");
     fprintf(f, "P3\n%d %d\n255\n", w, h);
     for (int i = 0; i < w*h; i++)
-        fprintf(f, "%d %d %d ", (int)(c[i].x/255.99f), (int)(c[i].y/255.99f), (int)(c[i].z/255.99f));
+        fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
 
     fclose(f);
     return 0;
