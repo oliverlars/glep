@@ -418,15 +418,15 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	} else {
 		info.kind = .Integral;
 		info.size_in_bytes = 4;
-		if suffix == "ll" {
+		if suffix == "ll" || suffix == "LL" {
 			info.size_in_bytes = 8;
-		} else if suffix == "llu" {
-			info.size_in_bytes = 8;
-			info.unsigned = true;
-		} else if suffix == "ull" {
+		} else if suffix == "llu" || suffix == "LLU" {
 			info.size_in_bytes = 8;
 			info.unsigned = true;
-		} else if suffix == "u" {
+		} else if suffix == "ull" || suffix == "ULL" {
+			info.size_in_bytes = 8;
+			info.unsigned = true;
+		} else if suffix == "u" || suffix == "U" {
 			info.size_in_bytes = 4;
 			info.unsigned = true;
 		}
@@ -629,13 +629,14 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
+			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner, true;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
 			
 			assert(found);
-			expr.(*Node_Identifier).resolved_type = decl.declarator.resolved_type;
+			expr.resolved_type = decl.declarator.resolved_type;
 			return decl.declarator.resolved_type, true;
 		case Node_Unary;
 			info := resolve_expr(tc, expr.(*Node_Unary).expr);
