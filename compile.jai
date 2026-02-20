@@ -822,6 +822,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				f = "f";
 			}
 			if op.type == {
+				case .LessLess;
+					emit(compiler, "lsl %, %, %", register(9, t), register(10, t), register(9, t));
+				case .GreaterGreater;
+					if t.unsigned {
+						emit(compiler, "lsr %, %, %", register(9, t), register(10, t), register(9, t));
+					} else {
+						emit(compiler, "asr %, %, %", register(9, t), register(10, t), register(9, t));
+					}
 				case .Plus;
 					emit(compiler, "%add %, %, %", f, register(9, t), register(10, t), register(9, t));
 				case .Minus;
@@ -1194,9 +1202,11 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 			pop_scope(compiler);
 			emit(compiler, "_IF_END%:", count);
 		case Node_Block;
+			push_scope(compiler);
 			for stmt.(*Node_Block).statements {
 				compile_statement(compiler, it);
 			}
+			pop_scope(compiler);
 		case Node_Return;
 			emit_blank_line(compiler);
 			emit_comment(compiler, "stmt: return");
