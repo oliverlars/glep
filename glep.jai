@@ -580,6 +580,9 @@ tokenise :: (t: *Tokeniser) {
 							  is_char(t, #char "E") {
 						token.number_type = .Float;
 						t.at += 1;
+						if t.at < t.source.count && (is_char(t, #char "+") || is_char(t, #char "-")) {
+							t.at += 1;
+						}
 					} else {
 						break;
 					}
