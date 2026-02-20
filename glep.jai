@@ -1067,6 +1067,9 @@ parse_declaration_specifiers :: (p: *Parser, info: *Node_Decl_Info) {
 				info.reference = false;
 			}
 			info._enum = _enum;
+		} else if is_type_qualifier(current(p)) && current(p).view != "_Atomic" {
+			array_add(*info.qualifiers, current(p).view);
+			skip(p);
 		} else if is_declaration_start(p, current(p)) {
 			if current(p).view == "_Atomic" {
 				skip(p);
