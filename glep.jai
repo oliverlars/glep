@@ -1351,7 +1351,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 			}
 		} else {
 			sizeof := New(Node_Sizeof_Expr);
-			sizeof.expr = parse_expr(p);
+			sizeof.expr = parse_unary(p);
 			result = sizeof;
 		}
 	} else if is_prefix_op(current(p)) {
@@ -2288,8 +2288,117 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 	}
 }
 
+run_test :: (filename: string) -> passed: bool {
+	// Compile with clang to get reference output
+	cc_result, clang_cc_out, clang_cc_err := run_command("sh", "-c", sprint("clang '%' -o.build/test_clang -lm -Wl,-stack_size,0x1000000 2>&1", filename));
+	if cc_result.exit_code != 0 {
+		print("  SKIP (clang compile failed): %\n", filename);
+		return false;
+	}
+
+	run_result, clang_output, clang_run_err := run_command("sh", "-c", "./.build/test_clang 2>&1");
+	if run_result.exit_code != 0 {
+		print("  SKIP (clang run failed): %\n", filename);
+		return false;
+	}
+
+	// Compile with glep
+	minimal := read_entire_file(filename);
+	if !minimal.count {
+		print("  FAIL (read failed): %\n", filename);
+		return false;
+	}
+
+	tokeniser: Tokeniser;
+	tokeniser.source = minimal;
+	tokenise(*tokeniser);
+
+	cpp: Preprocessor;
+	array_add(*cpp.path_stack, get_absolute_path(filename));
+	add_all_builtins(*cpp);
+	tokens := preprocess(*cpp, tokeniser.tokens);
+
+	tokens_no_newlines: [..]Token;
+	for tokens {
+		if it.type != .Newline {
+			array_add(*tokens_no_newlines, it);
+		}
+	}
+
+	parser: Parser;
+	parser.tokens = tokens_no_newlines;
+
+	tu := parse_translation_unit(*parser);
+
+	typechecker: Type_Checker;
+	typechecker.ordinary = parser.ordinary;
+	typecheck(*typechecker, tu);
+
+	compiler: Compiler;
+	compiler.strings = parser.strings;
+	compiler.ordinary = parser.ordinary;
+	compiler.structs = parser.structs;
+	compiler.enums = parser.enums;
+	compiler.typedefs = parser.typedefs;
+	compile(*compiler, tu);
+
+	// Assemble with clang
+	asm_result, asm_out, asm_err := run_command("sh", "-c", "clang out.s -o.build/test_glep -lm -Wl,-stack_size,0x1000000 2>&1");
+	if asm_result.exit_code != 0 {
+		print("  FAIL (asm link): %\n", filename);
+		return false;
+	}
+
+	// Run glep output and compare
+	glep_result, glep_output, glep_err := run_command("sh", "-c", "./.build/test_glep 2>&1");
+	if glep_result.exit_code != 0 {
+		print("  FAIL (glep run crashed): %\n", filename);
+		return false;
+	}
+
+	if glep_output != clang_output {
+		print("  FAIL (output mismatch): %\n", filename);
+		print("    clang: %\n", clang_output);
+		print("    glep:  %\n", glep_output);
+		return false;
+	}
+
+	print("  PASS: %\n", filename);
+	return true;
+}
+
+run_tests :: () {
+	test_files: [..]string;
+
+	visitor :: (info: *File_Visit_Info, test_files: *[..]string) {
+		name := info.short_name;
+		if name.count > 2 && name[name.count-2] == #char "." && name[name.count-1] == #char "c" {
+			array_add(test_files, copy_string(info.full_name));
+		}
+	}
+	visit_files("tests", false, *test_files, visitor, visit_files = true, visit_directories = false);
+
+	if test_files.count == 0 {
+		print("No test files found in tests/\n");
+		return;
+	}
+
+	passed := 0;
+	failed := 0;
+	for test_files {
+		if run_test(it) {
+			passed += 1;
+		} else {
+			failed += 1;
+		}
+	}
+
+	print("\n--- Test Results ---\n");
+	print("  Passed: %/%\n", passed, test_files.count);
+	if failed > 0 print("  Failed: %/%\n", failed, test_files.count);
+}
+
 main :: () {
-	t0 := current_time_monotonic();
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
@@ -2321,6 +2430,7 @@ main :: () {
 		print("% ", it.view);
 	}
 
+	t0 := current_time_monotonic();
 	tu := parse_translation_unit(*parser);
 
 	typechecker: Type_Checker;
@@ -2354,9 +2464,15 @@ main :: () {
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
 	print("\nCompiling assembly...\n\n");
-	run_command("clang", "out.s", "-oout");
+	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
 	print("Compile same program with clang...\n");
 	run_command("clang", "-S", filename, "-oclang_out.s");
 	print("Running program...\n\n");
 	run_command("./out");
+
+	// Run tests
+	print("\n========================================\n");
+	print("  Running tests/\n");
+	print("========================================\n");
+	run_tests();
 }
