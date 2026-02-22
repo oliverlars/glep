@@ -848,6 +848,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 						div = "fdiv";
 					}
 					emit(compiler, "% %, %, %", div, register(9, t), register(10, t), register(9, t));
+				case .Caret;
+						emit(compiler, "eor %, %, %", register(9, t), register(10, t), register(9, t));
 				case .Percent;
 					div := ifx t.unsigned then "udiv" else "sdiv";
 					emit(compiler, "% %, %, %", div, register(11, t), register(10, t), register(9, t));

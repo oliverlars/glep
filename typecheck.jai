@@ -406,7 +406,7 @@ split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 
 resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	info := New(Resolved_Type);
-	number, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
+	_, suffix := split_suffix_from_number(number_node.token_with_suffix.view);
 	if number_node.kind == .FLOAT {
 		info.kind = .Floating;
 		info.size_in_bytes = 8;
@@ -417,18 +417,45 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 		}
 	} else {
 		info.kind = .Integral;
-		info.size_in_bytes = 4;
-		if suffix == "ll" || suffix == "LL" {
+		if suffix == "u" || suffix == "U" {
+			if number_node.as_u64 <= 0xFFFFFFFF {
+				info.size_in_bytes = 4;
+			} else {
+				info.size_in_bytes = 8;
+			}
+			info.unsigned = true;
+
+		} else if suffix == "l" || suffix == "L" || suffix == "ll" || suffix == "LL" {
 			info.size_in_bytes = 8;
-		} else if suffix == "llu" || suffix == "LLU" {
+			if number_node.unsigned && number_node.as_u64 > 0x7FFFFFFFFFFFFFFF {
+				info.unsigned = true;
+			}
+
+		} else if suffix == "ul" || suffix == "UL" || suffix == "lu" || suffix == "LU"
+			|| suffix == "ull" || suffix == "ULL" || suffix == "llu" || suffix == "LLU" {
 			info.size_in_bytes = 8;
 			info.unsigned = true;
-		} else if suffix == "ull" || suffix == "ULL" {
-			info.size_in_bytes = 8;
-			info.unsigned = true;
-		} else if suffix == "u" || suffix == "U" {
-			info.size_in_bytes = 4;
-			info.unsigned = true;
+
+		} else {
+			if number_node.unsigned {
+				if number_node.as_u64 <= 0x7FFFFFFF {
+					info.size_in_bytes = 4;
+				} else if number_node.as_u64 <= 0xFFFFFFFF {
+					info.size_in_bytes = 4;
+					info.unsigned = true;
+				} else if number_node.as_u64 <= 0x7FFFFFFFFFFFFFFF {
+					info.size_in_bytes = 8;
+				} else {
+					info.size_in_bytes = 8;
+					info.unsigned = true;
+				}
+			} else {
+				if number_node.as_u64 <= 0x7FFFFFFF {
+					info.size_in_bytes = 4;
+				} else {
+					info.size_in_bytes = 8;
+				}
+			}
 		}
 	}
 	return info;
