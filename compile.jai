@@ -1546,40 +1546,13 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				emit(compiler, ".globl _%", name);
 				init_expr: *Node_Expr;
 				if declarator.init {
-					if declarator.init.initializer_type == Node_Scalar_Initializer {
-						init_expr = declarator.init.(*Node_Scalar_Initializer).expr;
-						assert(declarator.resolved_type != null);
-						if declarator.resolved_type.size_in_bytes == {
-							case 1;
-								emit(compiler, ".p2align %", 0);
-								emit_label(compiler, "_%", name);
-								emit(compiler, ".byte %", eval_expr(init_expr));
-								emit_label_end(compiler);
-							case 2;
-								emit(compiler, ".p2align %", 1);
-								emit_label(compiler, "_%", name);
-								emit(compiler, ".short %", eval_expr(init_expr));
-								emit_label_end(compiler);
-							case 4;
-								emit(compiler, ".p2align %", 2);
-								emit_label(compiler, "_%", name);
-								emit(compiler, ".long %", eval_expr(init_expr));
-								emit_label_end(compiler);
-							case 8;
-								emit(compiler, ".p2align %", 3);
-								emit_label(compiler, "_%", name);
-								emit(compiler, ".quad %", eval_expr(init_expr));
-								emit_label_end(compiler);
-						}
-					} else {
-						emit_label(compiler, "_%", name);
-						bytes := NewArray(declarator.resolved_type.size_in_bytes, u8);
-						compile_global_initializer(compiler, declarator.init, bytes, 0);
-						for bytes {
-							emit(compiler, ".byte %", it);
-						}
-						emit_label_end(compiler);
+					emit_label(compiler, "_%", name);
+					bytes := NewArray(declarator.resolved_type.size_in_bytes, u8);
+					compile_global_initializer(compiler, declarator.init, bytes, 0);
+					for bytes {
+						emit(compiler, ".byte %", it);
 					}
+					emit_label_end(compiler);
 				}
 			}
 		}

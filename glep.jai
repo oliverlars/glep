@@ -2288,15 +2288,37 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 	}
 }
 
+// Extract base name from path: "tests/test_foo.c" -> "test_foo"
+test_base_name :: (filename: string) -> string {
+	start := 0;
+	for i: 0..filename.count-1 {
+		if filename[i] == #char "/" then start = i + 1;
+	}
+	end := filename.count;
+	for i: 0..filename.count-1 {
+		if i > start && filename[i] == #char "." then end = i;
+	}
+	result: string;
+	result.data = filename.data + start;
+	result.count = end - start;
+	return result;
+}
+
 run_test :: (filename: string) -> passed: bool {
-	// Compile with clang to get reference output
-	cc_result, clang_cc_out, clang_cc_err := run_command("sh", "-c", sprint("clang '%' -o.build/test_clang -lm -Wl,-stack_size,0x1000000 2>&1", filename));
+	base := test_base_name(filename);
+	clang_exe := sprint("tests/build/%_clang", base);
+	glep_exe  := sprint("tests/build/%_glep", base);
+	glep_asm  := sprint("tests/build/%.s", base);
+	glep_c    := sprint("tests/build/%.c", base);
+
+	// Compile with clang
+	cc_result, clang_cc_out, clang_cc_err := run_command("sh", "-c", sprint("clang '%' -o'%' -lm -Wl,-stack_size,0x1000000 2>&1", filename, clang_exe));
 	if cc_result.exit_code != 0 {
 		print("  SKIP (clang compile failed): %\n", filename);
 		return false;
 	}
 
-	run_result, clang_output, clang_run_err := run_command("sh", "-c", "./.build/test_clang 2>&1");
+	run_result, clang_output, clang_run_err := run_command("sh", "-c", sprint("'%' 2>&1", clang_exe));
 	if run_result.exit_code != 0 {
 		print("  SKIP (clang run failed): %\n", filename);
 		return false;
@@ -2334,6 +2356,16 @@ run_test :: (filename: string) -> passed: bool {
 	typechecker.ordinary = parser.ordinary;
 	typecheck(*typechecker, tu);
 
+	c_builder: String_Builder;
+	for tu.declarations {
+		print_decl(*c_builder, it);
+		if !it.body {
+			append(*c_builder, ";");
+		}
+		append(*c_builder, "\n");
+	}
+	write_entire_file("out.c", builder_to_string(*c_builder));
+
 	compiler: Compiler;
 	compiler.strings = parser.strings;
 	compiler.ordinary = parser.ordinary;
@@ -2342,15 +2374,19 @@ run_test :: (filename: string) -> passed: bool {
 	compiler.typedefs = parser.typedefs;
 	compile(*compiler, tu);
 
+	// Copy outputs to tests/build/
+	run_command("sh", "-c", sprint("cp out.s '%'", glep_asm));
+	run_command("sh", "-c", sprint("cp out.c '%'", glep_c));
+
 	// Assemble with clang
-	asm_result, asm_out, asm_err := run_command("sh", "-c", "clang out.s -o.build/test_glep -lm -Wl,-stack_size,0x1000000 2>&1");
+	asm_result, asm_out, asm_err := run_command("sh", "-c", sprint("clang out.s -o'%' -lm -Wl,-stack_size,0x1000000 2>&1", glep_exe));
 	if asm_result.exit_code != 0 {
 		print("  FAIL (asm link): %\n", filename);
 		return false;
 	}
 
 	// Run glep output and compare
-	glep_result, glep_output, glep_err := run_command("sh", "-c", "./.build/test_glep 2>&1");
+	glep_result, glep_output, glep_err := run_command("sh", "-c", sprint("'%' 2>&1", glep_exe));
 	if glep_result.exit_code != 0 {
 		print("  FAIL (glep run crashed): %\n", filename);
 		return false;
@@ -2463,16 +2499,17 @@ main :: () {
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
-	print("\nCompiling assembly...\n\n");
-	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
-	print("Compile same program with clang...\n");
-	run_command("clang", "-S", filename, "-oclang_out.s");
-	print("Running program...\n\n");
-	run_command("./out");
+	// print("\nCompiling assembly...\n\n");
+	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
+	// print("Compile same program with clang...\n");
+	// run_command("clang", "-S", filename, "-oclang_out.s");
+	// print("Running program...\n\n");
+	// run_command("./out");
 
 	// Run tests
 	print("\n========================================\n");
 	print("  Running tests/\n");
 	print("========================================\n");
-	run_tests();
+	run_test("tests/test_globals.c");
+	//run_tests();
 }

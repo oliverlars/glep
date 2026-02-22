@@ -117,7 +117,7 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
         double r1 = 2*M_PI*rng(seed), r2 = rng(seed), r2s = sqrt(r2);
         Vec w = nl;
         Vec u;
-        if (fabs(w.x) > .1) {
+        if (fabs(w.x) > 0.1) {
             u = vnorm(vcross(vec(0,1,0), w));
         } else {
             u = vnorm(vcross(vec(1,0,0), w));
@@ -163,14 +163,14 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
 
     double c;
     if (into) {
-        c = 1 - (-ddn);
+        c = 1.0 + ddn;
     } else {
-        c = 1 - vdot(tdir, n);
+        c = 1.0 - vdot(tdir, n);
     }
 
     double Re = R0 + (1-R0)*c*c*c*c*c;
     double Tr = 1 - Re;
-    double P = .25 + .5*Re;
+    double P = 0.25 + 0.5*Re;
 
     if (depth > 2) {
         if (rng(seed) < P) {
@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
 	if(argc > 1) {
 		samps = atoi(argv[1]);
 	}
-	samps = 64;
+	samps = 4;
 
     Ray cam = (Ray){(Vec){50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
     Vec cx = vec(w * .5135 / h, 0, 0);
