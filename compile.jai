@@ -1117,7 +1117,9 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, cursor: in
 		} else {
 			emit_comment(compiler, "init: scalar store at sp+%", cursor);
 			compile_expr(compiler, expr);
-			emit(compiler, "str %, [sp, #%]", register(9, expr.resolved_type), cursor);
+			emit(compiler, "mov x12, #%", cursor);
+			emit(compiler, "add x12, sp, x12");
+			emit(compiler, "str %, [x12]", register(9, expr.resolved_type));
 		}
 		return cursor + expr.resolved_type.size_in_bytes;
 	}
@@ -1272,7 +1274,9 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 push_intermediate :: (compiler: *Compiler, resolved_type: *Resolved_Type) -> int {
 	offset := compiler.stack_offset;
 	emit_comment(compiler, "push intermediate -> sp+%", offset);
-	emit(compiler, "str %, [sp, #%]", register(9, resolved_type), offset);
+	emit(compiler, "mov x12, #%", offset);
+	emit(compiler, "add x12, sp, x12");
+	emit(compiler, "str %, [x12]", register(9, resolved_type));
 	compiler.stack_offset += 8;
 	if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
 	return offset;
@@ -1399,37 +1403,51 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 							copy_offset := 0;
 							while bytes_remaining >= 8 {
 								emit(compiler, "ldr x9, [x%, #%]", reg_integer, copy_offset);
-								emit(compiler, "str x9, [sp, #%]", compiler.stack_offset + copy_offset);
+								emit(compiler, "mov x12, #%", compiler.stack_offset + copy_offset);
+								emit(compiler, "add x12, sp, x12");
+								emit(compiler, "str x9, [x12]");
 								copy_offset += 8;
 								bytes_remaining -= 8;
 							}
 							if bytes_remaining >= 4 {
 								emit(compiler, "ldr w9, [x%, #%]", reg_integer, copy_offset);
-								emit(compiler, "str w9, [sp, #%]", compiler.stack_offset + copy_offset);
+								emit(compiler, "mov x12, #%", compiler.stack_offset + copy_offset);
+								emit(compiler, "add x12, sp, x12");
+								emit(compiler, "str w9, [x12]");
 								copy_offset += 4;
 								bytes_remaining -= 4;
 							}
 							if bytes_remaining >= 2 {
 								emit(compiler, "ldrh w9, [x%, #%]", reg_integer, copy_offset);
-								emit(compiler, "strh w9, [sp, #%]", compiler.stack_offset + copy_offset);
+								emit(compiler, "mov x12, #%", compiler.stack_offset + copy_offset);
+								emit(compiler, "add x12, sp, x12");
+								emit(compiler, "strh w9, [x12]");
 								copy_offset += 2;
 								bytes_remaining -= 2;
 							}
 							if bytes_remaining >= 1 {
 								emit(compiler, "ldrb w9, [x%, #%]", reg_integer, copy_offset);
-								emit(compiler, "strb w9, [sp, #%]", compiler.stack_offset + copy_offset);
+								emit(compiler, "mov x12, #%", compiler.stack_offset + copy_offset);
+								emit(compiler, "add x12, sp, x12");
+								emit(compiler, "strb w9, [x12]");
 							}
 							reg_integer += 1;
 						}
 					} else if it.declarators[0].resolved_type.kind == .Integral ||
 					   it.declarators[0].resolved_type.kind == .Pointer {
-						emit(compiler, "str x%, [sp, #%]", reg_integer, compiler.stack_offset);
+						emit(compiler, "mov x12, #%", compiler.stack_offset);
+						emit(compiler, "add x12, sp, x12");
+						emit(compiler, "str x%, [x12]", reg_integer);
 						reg_integer += 1;
 					} else if it.declarators[0].resolved_type.kind == .Floating {
 						if it.declarators[0].resolved_type.size_in_bytes == 8 {
-							emit(compiler, "str d%, [sp, #%]", reg_float, compiler.stack_offset);
+							emit(compiler, "mov x12, #%", compiler.stack_offset);
+							emit(compiler, "add x12, sp, x12");
+							emit(compiler, "str d%, [x12]", reg_float);
 						} else {
-							emit(compiler, "str s%, [sp, #%]", reg_float, compiler.stack_offset);
+							emit(compiler, "mov x12, #%", compiler.stack_offset);
+							emit(compiler, "add x12, sp, x12");
+							emit(compiler, "str s%, [x12]", reg_float);
 						}
 						reg_float += 1;
 					}

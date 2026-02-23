@@ -550,6 +550,9 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_builtin_object(cpp, "va_copy", "__builtin_va_copy");
 	add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
 
+	add_builtin_object(cpp, "__FLT_MAX__", "3.402823466e+38");
+	add_builtin_object(cpp, "__DBL_MAX__", "1.7976931348623158e+308");
+
 	add_function_builtin(cpp, "#define __asm(x)\n");
 	add_function_builtin(cpp, "#define __attribute__(x)\n");
 	// HACK(Oliver): Remove this dumbass shit
