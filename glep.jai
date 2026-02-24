@@ -294,6 +294,7 @@ Node_Number :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	kind: enum { FLOAT; INTEGER; };
+	unsigned: bool;
 	as_u64: u64;
 	as_f64: float64;
 	token_with_suffix: Token;
@@ -1505,12 +1506,15 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 				assert(false);
 			case .Binary;
 				result.(*Node_Number).as_u64 = string_to_int(token.view, 2, u64);
+				result.(*Node_Number).unsigned = true;
 			case .Octal;
 				result.(*Node_Number).as_u64 = string_to_int(token.view, 8, u64);
+				result.(*Node_Number).unsigned = true;
 			case .Decimal;
 				result.(*Node_Number).as_u64 = string_to_int(token.view, 10, u64);
 			case .Hexadecimal;
 				result.(*Node_Number).as_u64 = string_to_int(token.view, 16, u64);
+				result.(*Node_Number).unsigned = true;
 			case .Float;
 				result.(*Node_Number).kind = .FLOAT;
 				result.(*Node_Number).as_f64 = string_to_float(token.view);
