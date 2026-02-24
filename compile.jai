@@ -41,6 +41,7 @@ Compiler :: struct {
 	label_if_count: int;
 
 	current_function_name: string;
+	indirect_return_offset: int;
 
 	indent_level: int;
 }
@@ -1056,6 +1057,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 				compiler.stack_offset -= it;
 			}
 
+			// For indirect return (large non-HFA structs), allocate space and set x8
+			indirect_ret_offset := -1;
+			if needs_indirect_return(call.resolved_type) {
+				indirect_ret_offset = compiler.stack_offset;
+				size := (call.resolved_type.size_in_bytes + 7) & ~7;
+				compiler.stack_offset += size;
+				if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
+				emit_comment(compiler, "indirect return: x8 = sp+%", indirect_ret_offset);
+				emit(compiler, "add x8, sp, #%", indirect_ret_offset);
+			}
+
 			emit_comment(compiler, "call %", name);
 			emit(compiler, "bl _%", name);
 
@@ -1065,23 +1077,28 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) {
 			} else if call.resolved_type.kind == .Integral || call.resolved_type.kind == .Pointer {
 				emit(compiler, "mov %, %", register(9, call.resolved_type), register(0, call.resolved_type));
 			} else {
-				_struct := call.resolved_type.composite.(*Node_Struct);
-				hfa, count, size := is_hfa(_struct);
-				ret_offset := compiler.stack_offset;
-				compiler.stack_offset += call.resolved_type.size_in_bytes;
-				if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
-				if hfa {
-					if size == 4 {
-						for 0..count-1 {
-							emit(compiler, "str s%, [sp, #%]", it, ret_offset + it*4);
-						}
-					} else {
-						for 0..count-1 {
-							emit(compiler, "str d%, [sp, #%]", it, ret_offset + it * 8);
+				if indirect_ret_offset >= 0 {
+					// Callee wrote to x8, data is already at indirect_ret_offset
+					emit(compiler, "add x9, sp, #%", indirect_ret_offset);
+				} else {
+					_struct := call.resolved_type.composite.(*Node_Struct);
+					hfa, count, size := is_hfa(_struct);
+					ret_offset := compiler.stack_offset;
+					compiler.stack_offset += call.resolved_type.size_in_bytes;
+					if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
+					if hfa {
+						if size == 4 {
+							for 0..count-1 {
+								emit(compiler, "str s%, [sp, #%]", it, ret_offset + it*4);
+							}
+						} else {
+							for 0..count-1 {
+								emit(compiler, "str d%, [sp, #%]", it, ret_offset + it * 8);
+							}
 						}
 					}
+					emit(compiler, "add x9, sp, #%", ret_offset);
 				}
-				emit(compiler, "add x9, sp, #%", ret_offset);
 			}
 		case Node_String;
 			emit_comment(compiler, "expr: string literal");
@@ -1157,6 +1174,15 @@ is_hfa :: (_struct: *Node_Struct) -> bool, count: int, size: int {
 		if it.size_in_bytes != size return false, 0, 0;
 	}
 	return true, member_types.count, size;
+}
+
+needs_indirect_return :: (t: *Resolved_Type) -> bool {
+	if t == null return false;
+	if t.kind != .Composite return false;
+	_struct := t.composite.(*Node_Struct);
+	hfa, _, _ := is_hfa(_struct);
+	if hfa return false;
+	return t.size_in_bytes > 16;
 }
 
 compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
@@ -1235,6 +1261,12 @@ compile_statement :: (compiler: *Compiler, stmt: *Node_Statement) {
 							emit(compiler, "ldr d%, [x9, #%]", it, it * 8);
 						}
 					}
+				} else if needs_indirect_return(t) {
+					emit_comment(compiler, "indirect return: memcpy % bytes to x8", t.size_in_bytes);
+					emit(compiler, "ldr x0, [sp, #%]", compiler.indirect_return_offset);
+					emit(compiler, "mov x1, x9");
+					emit_mov_imm_integer(compiler, xx t.size_in_bytes, 2, 8);
+					emit(compiler, "bl _memcpy");
 				}
 			}
 			emit(compiler, "b _%_epilogue", compiler.current_function_name);
@@ -1374,6 +1406,17 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				compiler.builder = .{};
 
 				function := function_declarator(declarator);
+
+				// Save x8 (indirect return pointer) for functions returning large structs
+				if needs_indirect_return(declarator.resolved_type) {
+					compiler.indirect_return_offset = compiler.stack_offset;
+					compiler.stack_offset += 8;
+					if compiler.stack_offset > compiler.max_stack_offset  compiler.max_stack_offset = compiler.stack_offset;
+					emit_comment(compiler, "save x8 (indirect return ptr) at sp+%", compiler.indirect_return_offset);
+					emit(compiler, "str x8, [sp, #%]", compiler.indirect_return_offset);
+					emit(compiler, "mov x9, x8");
+				}
+
 				reg_float := 0;
 				reg_integer := 0;
 				if function.params.count > 0 {

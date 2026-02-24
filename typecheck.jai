@@ -881,6 +881,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	if !decl return;
 	if decl.body {
 		function := function_declarator(decl.declarators[0]);
+		decl.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
 		push_scope(tc);
 		for function.params {
 			typecheck_decl(tc, it);
