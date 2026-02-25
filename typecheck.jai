@@ -412,8 +412,6 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 		info.size_in_bytes = 8;
 		if suffix == "f" {
 			info.size_in_bytes = 4;
-		} else {
-			info.size_in_bytes = 8;
 		}
 	} else {
 		info.kind = .Integral;

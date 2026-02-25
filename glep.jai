@@ -1517,7 +1517,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 				result.(*Node_Number).unsigned = true;
 			case .Float;
 				result.(*Node_Number).kind = .FLOAT;
-				result.(*Node_Number).as_f64 = string_to_float(token.view);
+				result.(*Node_Number).as_f64 = string_to_float64(token.view);
 		}
 		skip(p);
 	} else if current(p).type == .Char {
