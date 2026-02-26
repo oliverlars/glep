@@ -55,6 +55,8 @@ Type_Checker :: struct {
 	// resolving a struct to avoid any further attempt at resolving it
 	// incase of recursive types.
 	_structs: Table(*Node_Struct, *Resolved_Type);
+
+	current_function_return_type: *Resolved_Type;
 }
 
 current_scope :: (tc: *Type_Checker) -> *Scope {
@@ -744,7 +746,12 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Expr_Statement;
 			resolve_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
-			stmt.(*Node_Return).expr.resolved_type = resolve_expr(tc, stmt.(*Node_Return).expr);
+			ret := stmt.(*Node_Return);
+			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
+			if tc.current_function_return_type && ret.expr.resolved_type && !types_equal(ret.expr.resolved_type, tc.current_function_return_type) {
+				ret.expr = insert_cast(tc, ret.expr, tc.current_function_return_type);
+				ret.expr.resolved_type = tc.current_function_return_type;
+			}
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
@@ -880,6 +887,8 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	if decl.body {
 		function := function_declarator(decl.declarators[0]);
 		decl.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
+		prev_return_type := tc.current_function_return_type;
+		tc.current_function_return_type = decl.declarators[0].resolved_type;
 		push_scope(tc);
 		for function.params {
 			typecheck_decl(tc, it);
@@ -891,6 +900,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		}
 		typecheck_statement(tc, decl.body);
 		pop_scope(tc);
+		tc.current_function_return_type = prev_return_type;
 	} else {
 		for declarator: decl.declarators {
 			push_decl(tc, decl.base, declarator);
