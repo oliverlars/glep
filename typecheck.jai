@@ -508,6 +508,13 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 	return c;
 }
 
+coerce :: (tc: *Type_Checker, expr: **Node_Expr, target: *Resolved_Type) {
+	if !target return;
+	if !expr.*.resolved_type return;
+	if types_equal(expr.*.resolved_type, target) return;
+	expr.* = insert_cast(tc, expr.*, target);
+}
+
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {
@@ -537,12 +544,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved_type := common_type(on_true, on_false);
 			if !resolved_type return null, false;
 
-			if !types_equal(on_true, resolved_type) {
-				ternary.on_true = insert_cast(tc, ternary.on_true, resolved_type);
-			}
-			if !types_equal(on_false, resolved_type) {
-				ternary.on_false = insert_cast(tc, ternary.on_false, resolved_type);
-			}
+			coerce(tc, *ternary.on_true, resolved_type);
+			coerce(tc, *ternary.on_false, resolved_type);
 
 			expr.resolved_type = resolved_type;
 			return resolved_type, true;
@@ -581,18 +584,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				return null, false;
 			}
 			
-			if !types_equal(right_info, left_info) {
-				assign.right = insert_cast(tc, assign.right, left_info);
-				assign.right.resolved_type = left_info;
-			} else {
-				assign.right.resolved_type = left_info;
-			}
+			coerce(tc, *assign.right, left_info);
 			assign.left.resolved_type = left_info;
 			assign.resolved_type = left_info;
-
-			assert(assign.resolved_type != null);
-			assert(assign.left.resolved_type != null);
-			assert(assign.right.resolved_type != null);
 			return left_info, true;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
@@ -608,12 +602,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved_type := common_type(left_info, right_info);
 			if !resolved_type return null, false;
 
-			if !types_equal(left_info, resolved_type) {
-				binary.left = insert_cast(tc, binary.left, resolved_type);
-			}
-			if !types_equal(right_info, resolved_type) {
-				binary.right = insert_cast(tc, binary.right, resolved_type);
-			}
+			coerce(tc, *binary.left, resolved_type);
+			coerce(tc, *binary.right, resolved_type);
 					
 			if binary.op.type == {
 				case .Less; #through;
@@ -719,9 +709,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					} else {
 						param_type = resolve_base(tc, param.base);
 					}
-					if param_type && !types_equal(arg_type, param_type) {
-						call.args[it_index] = insert_cast(tc, it, param_type);
-						call.args[it_index].resolved_type = param_type;
+					if param_type {
+						coerce(tc, *call.args[it_index], param_type);
 					}
 				}
 			}
@@ -748,10 +737,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Return;
 			ret := stmt.(*Node_Return);
 			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
-			if tc.current_function_return_type && ret.expr.resolved_type && !types_equal(ret.expr.resolved_type, tc.current_function_return_type) {
-				ret.expr = insert_cast(tc, ret.expr, tc.current_function_return_type);
-				ret.expr.resolved_type = tc.current_function_return_type;
-			}
+			coerce(tc, *ret.expr, tc.current_function_return_type);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
