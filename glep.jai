@@ -12,6 +12,8 @@
 #load "typecheck.jai";
 #load "compile.jai";
 
+#load "ir.jai";
+
 Token_Type :: enum {
 	Invalid;
 	Hash;
@@ -2503,17 +2505,22 @@ main :: () {
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
-	// print("\nCompiling assembly...\n\n");
-	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
-	// print("Compile same program with clang...\n");
-	// run_command("clang", "-S", filename, "-oclang_out.s");
-	// print("Running program...\n\n");
-	// run_command("./out");
+	print("\nCompiling assembly...\n\n");
+	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
+	print("Compile same program with clang...\n");
+	run_command("clang", "-S", filename, "-oclang_out.s");
+	print("Running program...\n\n");
+	run_command("./out");
 
 	// Run tests
 	print("\n========================================\n");
 	print("  Running tests/\n");
 	print("========================================\n");
-	run_test("tests/test_globals.c");
+	//run_test("tests/test_globals.c");
 	//run_tests();
+
+
+
+
+
 }

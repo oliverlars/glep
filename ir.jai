@@ -1,5 +1,7 @@
 
-Operator :: enum {
+#import "Basic";
+
+IR_Operator :: enum {
 	Add;
 	Sub;
 	Mul;
@@ -27,25 +29,26 @@ Operator :: enum {
 	Ifz;
 	Param;
 	Call;
+	Alloca;
 	Return;
 }
 
-Instruction :: struct {
-	op: Operator;
+IR_Instruction :: struct {
+	op: IR_Operator;
 
-	dst: Operand;
-	a:   Operand;
-	b:   Operand;
+	dst: IR_Operand;
+	a:   IR_Operand;
+	b:   IR_Operand;
 }
 
-Operand_Kind :: enum {
+IR_Operand_Kind :: enum {
 	None;
 	Constant;
 	Label;
 	Register;
 }
 
-Operand_Type :: struct {
+IR_Operand_Type :: struct {
 	kind: enum {
 		Integer;
 		Float;
@@ -54,28 +57,59 @@ Operand_Type :: struct {
 	unsigned: bool;
 }
 
-Operand :: struct {
-	kind: Operand_Kind;
-	type: Operand_Type;
+IR_U8  :: IR_Operand_Type.{.Integer, 1, true};
+IR_U16 :: IR_Operand_Type.{.Integer, 2, true};
+IR_U32 :: IR_Operand_Type.{.Integer, 4, true};
+IR_U64 :: IR_Operand_Type.{.Integer, 8, true};
+IR_S8  :: IR_Operand_Type.{.Integer, 1, false};
+IR_S16 :: IR_Operand_Type.{.Integer, 2, false};
+IR_S32 :: IR_Operand_Type.{.Integer, 4, false};
+IR_S64 :: IR_Operand_Type.{.Integer, 8, false};
+IR_F32 :: IR_Operand_Type.{.Float, 4, false};
+IR_F64 :: IR_Operand_Type.{.Float, 8, false};
+
+IR_Operand :: struct {
+	kind: IR_Operand_Kind;
+	type: IR_Operand_Type;
 	constant: u64;
 	register: int;
 	label: string;
 }
 
 
-Global :: struct {
+IR_Global :: struct {
 	name: string;
 	bytes: []u8;
 	alignment: int;
 }
 
-Function :: struct {
+IR_Function :: struct {
 	name: string;
-	params: [..]Operand_Type;
-	instructions: [..]Instruction;
+	params: [..]IR_Operand_Type;
+	instructions: [..]IR_Instruction;
 }
 
 IR :: struct {
-	functions: [..]Function;
-	globals: [..]Global;
+	functions: [..]IR_Function;
+	globals: [..]IR_Global;
+}
+
+emit :: (function: *IR_Function, ins: IR_Instruction) {
+	array_add(*function.instructions, ins);
+}
+
+ir_add :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return IR_Instruction.{ .Add, dst, a, b };
+}
+
+ir_alloca :: (size: u64) -> IR_Instruction {
+	operand := IR_Operand.{ kind = .Constant, type = IR_U64, constant = size };
+	instruction: IR_Instruction;
+	instruction.op = .Alloca;
+	instruction.a = operand;
+	return instruction;
+}
+
+compile :: (ir: *IR, tu: *Node_Translation_Unit) {
+
 }
