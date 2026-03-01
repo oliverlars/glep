@@ -13,6 +13,7 @@
 #load "compile.jai";
 
 #load "ir.jai";
+#load "lower_arm64.jai";
 
 Token_Type :: enum {
 	Invalid;
@@ -2520,7 +2521,9 @@ main :: () {
 	//run_tests();
 
 
+	print("\nDOING IR\n\n");
 
+	ir := ir_test();
 
-
+	lower_to_arm64e(*ir);
 }

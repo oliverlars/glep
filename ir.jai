@@ -98,9 +98,6 @@ emit :: (function: *IR_Function, ins: IR_Instruction) {
 	array_add(*function.instructions, ins);
 }
 
-ir_add :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
-	return IR_Instruction.{ .Add, dst, a, b };
-}
 
 ir_alloca :: (size: u64) -> IR_Instruction {
 	operand := IR_Operand.{ kind = .Constant, type = IR_U64, constant = size };
@@ -110,6 +107,152 @@ ir_alloca :: (size: u64) -> IR_Instruction {
 	return instruction;
 }
 
-compile :: (ir: *IR, tu: *Node_Translation_Unit) {
+ir_label :: (name: string) -> IR_Instruction {
+	operand := IR_Operand.{ kind = .Label, label = name };
+	instruction: IR_Instruction;
+	instruction.op = .Label;
+	instruction.a = operand;
+	return instruction;
+}
 
+ir_add :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Add, dst, a, b };
+}
+
+ir_sub :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Sub, dst, a, b };
+}
+
+ir_mul :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Mul, dst, a, b };
+}
+
+ir_div :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Div, dst, a, b };
+}
+
+ir_mod :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Mod, dst, a, b };
+}
+
+ir_and :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .And, dst, a, b };
+}
+
+ir_or :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Or, dst, a, b };
+}
+
+ir_xor :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Xor, dst, a, b };
+}
+
+ir_shl :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Shl, dst, a, b };
+}
+
+ir_shr :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Shr, dst, a, b };
+}
+
+ir_lt :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Lt, dst, a, b };
+}
+
+ir_le :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Le, dst, a, b };
+}
+
+ir_eq :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Eq, dst, a, b };
+}
+
+ir_ne :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	return .{ .Ne, dst, a, b };
+}
+
+ir_neg :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .Neg, dst, a, .{} };
+}
+
+ir_not :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .Not, dst, a, .{} };
+}
+
+ir_copy :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .Copy, dst, a, .{} };
+}
+
+ir_cast :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .Cast, dst, a, .{} };
+}
+
+ir_load :: (dst: IR_Operand, addr: IR_Operand) -> IR_Instruction {
+	return .{ .Load, dst, addr, .{} };
+}
+
+ir_store :: (addr: IR_Operand, value: IR_Operand) -> IR_Instruction {
+	return .{ .Store, .{}, addr, value };
+}
+
+ir_address :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .Address, dst, a, .{} };
+}
+
+ir_goto :: (name: string) -> IR_Instruction {
+	return .{ .Goto, .{}, .{ kind = .Label, label = name }, .{} };
+}
+
+ir_if :: (cond: IR_Operand, name: string) -> IR_Instruction {
+	return .{ .If, .{}, cond, .{ kind = .Label, label = name } };
+}
+
+ir_ifz :: (cond: IR_Operand, name: string) -> IR_Instruction {
+	return .{ .Ifz, .{}, cond, .{ kind = .Label, label = name } };
+}
+
+ir_param :: (a: IR_Operand) -> IR_Instruction {
+	return .{ .Param, .{}, a, .{} };
+}
+
+ir_call :: (dst: IR_Operand, func: string, arg_count: u64) -> IR_Instruction {
+	return .{ .Call, dst, .{ kind = .Label, label = func }, .{ kind = .Constant, type = IR_U64, constant = arg_count } };
+}
+
+ir_return :: (a: IR_Operand) -> IR_Instruction {
+	return .{ .Return, .{}, a, .{} };
+}
+
+ir_constant :: (value: u64, type: IR_Operand_Type) -> IR_Operand {
+	return .{ kind = .Constant, type = type, constant = value };
+}
+
+ir_register :: (reg: int, type: IR_Operand_Type) -> IR_Operand {
+	return .{ kind = .Register, type = type, register = reg };
+}
+
+ir_label_operand :: (name: string) -> IR_Operand {
+	return .{ kind = .Label, label = name };
+}
+
+ir_none :: () -> IR_Operand {
+	return .{};
+}
+
+ir_test :: () -> IR {
+	ir: IR;
+
+	f: IR_Function;
+	f.name = "main";
+
+	t0 := IR_Operand.{ kind = .Register, type = IR_S32, register = 0 };
+	two := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 2 };
+
+	add := ir_add(t0, two, two);
+	emit(*f, add);
+	emit(*f, ir_return(t0));
+
+	array_add(*ir.functions, f);
+
+	return ir;
 }
