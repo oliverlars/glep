@@ -246,10 +246,18 @@ ir_test :: () -> IR {
 	f.name = "main";
 
 	t0 := IR_Operand.{ kind = .Register, type = IR_S32, register = 0 };
-	two := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 2 };
+	thirty_two := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 33 };
 
-	add := ir_add(t0, two, two);
+	newline := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 10 };
+
+
+	add := ir_add(t0, thirty_two, thirty_two);
 	emit(*f, add);
+	emit(*f, ir_param(t0));
+	emit(*f, ir_call(.{}, "putchar", 1));
+
+	emit(*f, ir_param(newline));
+	emit(*f, ir_call(.{}, "putchar", 1));
 	emit(*f, ir_return(t0));
 
 	array_add(*ir.functions, f);
