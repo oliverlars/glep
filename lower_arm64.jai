@@ -138,6 +138,9 @@ lower :: (emitter: *Emitter) {
 					if it.a.kind == .Label {
 						emit(emitter, "adrp x9, _%@PAGE", it.a.label);
 						emit(emitter, "add x9, x9, _%@PAGEOFF", it.a.label);
+					} else if it.a.kind == .Register {
+						emit(emitter, "mov x9, sp");
+						emit(emitter, "add x9, x9, #%", it.a.register * 8);
 					}
 					emit_store_into(emitter, it.dst, 9);
 				case .Call;
