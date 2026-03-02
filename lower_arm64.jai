@@ -105,6 +105,8 @@ lower :: (emitter: *Emitter) {
 		emit(emitter, "str x30, [sp, #%]", stack_space - link_and_frame + 8);
 		emit(emitter, "mov x29, sp");
 		for function.instructions { 
+			// We just search backwards when doing a call and then
+			// process the param instructions then
 			if it.op == .Param then continue;
 
 			is_binary :: (op: IR_Operator) -> bool {
@@ -132,6 +134,12 @@ lower :: (emitter: *Emitter) {
 			b := register_from_operand(it.b.type, 11);
 
 			if it.op == {
+				case .Address;
+					if it.a.kind == .Label {
+						emit(emitter, "adrp x9, _%@PAGE", it.a.label);
+						emit(emitter, "add x9, x9, _%@PAGEOFF", it.a.label);
+					}
+					emit_store_into(emitter, it.dst, 9);
 				case .Call;
 					param_end := it_index;
 					param_start := param_end - it.b.constant.(int);
@@ -212,6 +220,13 @@ lower :: (emitter: *Emitter) {
 					emit(emitter, "add sp, sp, x9");
 					emit(emitter, "ret");
 			}
+		}
+	}
+
+	for emitter.ir.globals {
+		emit(emitter, "_%:", it.name);
+		for byte: it.bytes {
+			emit(emitter, ".byte %", byte);
 		}
 	}
 

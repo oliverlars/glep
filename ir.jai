@@ -239,6 +239,10 @@ ir_none :: () -> IR_Operand {
 	return .{};
 }
 
+ir_emit_global :: (ir: *IR, name: string, bytes: []u8, alignment: int) { 
+	array_add(*ir.globals, IR_Global.{ name, bytes, alignment});
+}
+
 ir_test :: () -> IR {
 	ir: IR;
 
@@ -246,19 +250,31 @@ ir_test :: () -> IR {
 	f.name = "main";
 
 	t0 := IR_Operand.{ kind = .Register, type = IR_S32, register = 0 };
-	thirty_two := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 33 };
+	thirty_three := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 33 };
 
 	newline := IR_Operand.{ kind = .Constant, type = IR_S32, constant = 10 };
 
 
-	add := ir_add(t0, thirty_two, thirty_two);
+	ptr_t0 := IR_Operand.{ kind = .Register, type = IR_U64, register = 0 };
+
+	add := ir_add(t0, thirty_three, thirty_three);
 	emit(*f, add);
 	emit(*f, ir_param(t0));
 	emit(*f, ir_call(.{}, "putchar", 1));
 
 	emit(*f, ir_param(newline));
 	emit(*f, ir_call(.{}, "putchar", 1));
+
+	str := IR_Operand.{ kind = .Label, label = "test_string" };
+	emit(*f, ir_address(ptr_t0, str));
+	emit(*f, ir_param(ptr_t0));
+	emit(*f, ir_call(.{}, "printf", 1));
 	emit(*f, ir_return(t0));
+
+	bytes: []u8;
+	bytes.data = "test_string\0";
+	bytes.count = 11;
+	ir_emit_global(*ir, "test_string", bytes, 8);
 
 	array_add(*ir.functions, f);
 
