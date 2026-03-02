@@ -94,7 +94,7 @@ IR :: struct {
 	globals: [..]IR_Global;
 }
 
-emit :: (function: *IR_Function, ins: IR_Instruction) {
+ir_emit :: (function: *IR_Function, ins: IR_Instruction) {
 	array_add(*function.instructions, ins);
 }
 
@@ -258,18 +258,18 @@ ir_test :: () -> IR {
 	ptr_t0 := IR_Operand.{ kind = .Register, type = IR_U64, register = 0 };
 
 	add := ir_add(t0, thirty_three, thirty_three);
-	emit(*f, add);
-	emit(*f, ir_param(t0));
-	emit(*f, ir_call(.{}, "putchar", 1));
+	ir_emit(*f, add);
+	ir_emit(*f, ir_param(t0));
+	ir_emit(*f, ir_call(.{}, "putchar", 1));
 
-	emit(*f, ir_param(newline));
-	emit(*f, ir_call(.{}, "putchar", 1));
+	ir_emit(*f, ir_param(newline));
+	ir_emit(*f, ir_call(.{}, "putchar", 1));
 
 	str := IR_Operand.{ kind = .Label, label = "test_string" };
-	emit(*f, ir_address(ptr_t0, str));
-	emit(*f, ir_param(ptr_t0));
-	emit(*f, ir_call(.{}, "printf", 1));
-	emit(*f, ir_return(t0));
+	ir_emit(*f, ir_address(ptr_t0, str));
+	ir_emit(*f, ir_param(ptr_t0));
+	ir_emit(*f, ir_call(.{}, "printf", 1));
+	ir_emit(*f, ir_return(t0));
 
 	bytes: []u8;
 	bytes.data = "test_string\0";

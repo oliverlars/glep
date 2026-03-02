@@ -515,6 +515,15 @@ coerce :: (tc: *Type_Checker, expr: **Node_Expr, target: *Resolved_Type) {
 	expr.* = insert_cast(tc, expr.*, target);
 }
 
+function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarator {
+	result := declarator;
+	while result && result.declarator_type != Node_Function_Declarator {
+		result = result.inner;
+	}
+	assert(result.declarator_type == Node_Function_Declarator);
+	return result.(*Node_Function_Declarator);
+}
+
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 	if !expr return null, false;
 	if expr.expr_type == {

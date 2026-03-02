@@ -235,11 +235,15 @@ lower :: (emitter: *Emitter) {
 
 	for function: emitter.ir.functions {
 		emit(emitter, ".globl _%", function.name);
+		for function.instructions {
+			print("% % % %\n", it.op, it.dst, it.a, it.b);
+		}
 	}
+
 }
 
 
-lower_to_arm64e :: (ir: *IR) {
+lower_to_arm64e :: (ir: *IR) -> Emitter {
 	emitter: Emitter;
 
 	emitter.ir = ir;
@@ -247,5 +251,5 @@ lower_to_arm64e :: (ir: *IR) {
 
 	lower(*emitter);
 
-	write_entire_file("ir.s", builder_to_string(*emitter.builder));
+	return emitter;
 }

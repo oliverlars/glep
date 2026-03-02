@@ -8,11 +8,11 @@
 
 #import "String";
 
+#load "eval.jai";
 #load "cpp.jai";
 #load "typecheck.jai";
 #load "compile.jai";
 
-#load "ir.jai";
 #load "lower_arm64.jai";
 
 Token_Type :: enum {
@@ -2445,7 +2445,7 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	filename := "smallpt.c";
+	filename := "test.c";
 	minimal := read_entire_file(filename);
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
@@ -2506,24 +2506,24 @@ main :: () {
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
+	// // Run tests
+	// print("\n========================================\n");
+	// print("  Running tests/\n");
+	// print("========================================\n");
+	// //run_test("tests/test_globals.c");
+	// //run_tests();
+
+
+	print("\nDOING IR\n\n");
+
+	emitter := lower_to_arm64e(*compiler.ir);
+
+	write_entire_file("out.s", builder_to_string(*emitter.builder));
+
 	print("\nCompiling assembly...\n\n");
 	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
 	print("Compile same program with clang...\n");
 	run_command("clang", "-S", filename, "-oclang_out.s");
 	print("Running program...\n\n");
 	run_command("./out");
-
-	// Run tests
-	print("\n========================================\n");
-	print("  Running tests/\n");
-	print("========================================\n");
-	//run_test("tests/test_globals.c");
-	//run_tests();
-
-
-	print("\nDOING IR\n\n");
-
-	ir := ir_test();
-
-	lower_to_arm64e(*ir);
 }
