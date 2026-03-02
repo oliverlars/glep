@@ -222,6 +222,41 @@ lower :: (emitter: *Emitter) {
 					emit(emitter, "mov x9, #%", stack_space);
 					emit(emitter, "add sp, sp, x9");
 					emit(emitter, "ret");
+				case .Cast;
+					dst_type := it.dst.type;
+					src_type := it.a.type;
+					if dst_type.kind == .Float && src_type.kind == .Integer {
+						if src_type.unsigned {
+							emit(emitter, "ucvtf %, %", dst, a);
+						} else {
+							emit(emitter, "scvtf %, %", dst, a);
+						}
+					} else if dst_type.kind == .Integer && src_type.kind == .Float {
+						if dst_type.unsigned {
+							emit(emitter, "fcvtzu %, %", dst, a);
+						} else {
+							emit(emitter, "fcvtzs %, %", dst, a);
+						}
+					} else if dst_type.kind == .Integer && src_type.kind == .Integer {
+						if dst_type.size_in_bytes > src_type.size_in_bytes {
+							if src_type.unsigned {
+								emit(emitter, "mov %, %", dst, a);
+							} else if src_type.size_in_bytes == {
+								case 1;
+									emit(emitter, "sxtb %, %", dst, a);
+								case 2;
+									emit(emitter, "sxth %, %", dst, a);
+								case 4;
+									emit(emitter, "sxtw %, %", dst, a);
+							}
+						}
+					} else if dst_type.kind == .Float && src_type.kind == .Float {
+						if dst_type.size_in_bytes != src_type.size_in_bytes {
+							emit(emitter, "fcvt %, %", dst, a);
+						}
+					} 
+					emit(emitter, "mov %, %", dst, a);
+					emit_store_into(emitter, it.dst, 9);
 			}
 		}
 	}
