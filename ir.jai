@@ -87,6 +87,8 @@ IR_Function :: struct {
 	name: string;
 	params: [..]IR_Operand_Type;
 	instructions: [..]IR_Instruction;
+	builder: String_Builder;
+	registers_seen: int;
 }
 
 IR :: struct {
@@ -96,6 +98,25 @@ IR :: struct {
 
 ir_emit :: (function: *IR_Function, ins: IR_Instruction) {
 	array_add(*function.instructions, ins);
+
+	append(*function.builder, tprint("% ", ins.op));
+
+	to_string :: (operand: IR_Operand) -> string {
+		if operand.kind == .None then return "";
+
+		if operand.kind == {
+			case .Label;
+				return tprint("%, ", operand.label);
+			case .Constant;
+				return tprint("#%, ", operand.constant);
+			case .Register;
+				return tprint("v%, ", operand.register);
+		}
+	}
+	append(*function.builder, to_string(ins.dst));
+	append(*function.builder, to_string(ins.a));
+	append(*function.builder, to_string(ins.b));
+	append(*function.builder, "\n");
 }
 
 

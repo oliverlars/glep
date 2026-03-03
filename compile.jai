@@ -9,6 +9,7 @@ Compiler :: struct {
 	typedefs: Table(string, *Node_Decl);
 
 	register: int;
+	registers_seen: int;
 
 	scopes: [..]Scope_Frame;
 
@@ -28,7 +29,6 @@ Scope_Frame :: struct {
 
 push_scope :: (compiler: *Compiler) {
 	scope: Scope_Frame;
-	compiler.register = 0;
 	array_add(*compiler.scopes, scope);
 }
 
@@ -104,6 +104,7 @@ operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 next_register :: (compiler: *Compiler) -> int {
 	next := compiler.register;
 	compiler.register += 1;
+	compiler.registers_seen = max(compiler.registers_seen, compiler.register);
 	return next;
 }
 
@@ -230,14 +231,19 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 }
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
+
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
 			if is_function_definition(decl, declarator) {
 				ir_function: IR_Function;
 				ir_function.name = identifier_from_declarator(declarator);
+
 				function := function_declarator(declarator);
+				compiler.register = 0;
+				compiler.registers_seen = 0;
 				compiler.current_function = *ir_function;
 				compile_statement(compiler, decl.body);
+				ir_function.registers_seen = compiler.registers_seen;
 				array_add(*compiler.ir.functions, ir_function);
 			}
 		}

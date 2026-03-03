@@ -2516,6 +2516,10 @@ main :: () {
 
 	print("\nDOING IR\n\n");
 
+	for compiler.ir.functions {
+		print(builder_to_string(*it.builder));
+	}
+
 	emitter := lower_to_arm64e(*compiler.ir);
 
 	write_entire_file("out.s", builder_to_string(*emitter.builder));

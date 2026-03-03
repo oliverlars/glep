@@ -277,7 +277,6 @@ types_equal :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
 	result &= a.size_in_bytes == b.size_in_bytes;
 	result &= a.unsigned == b.unsigned;
 	result &= a.array_count == b.array_count;
-	result &= inner_equal;
 	return result;
 }
 
