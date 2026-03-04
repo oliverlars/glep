@@ -340,8 +340,8 @@ register_allocation :: (ir: *IR) {
 	
 	for *function: ir.functions {
 
-		intervals := NewArray(function.registers_seen, Live_Range);
-		virtual_to_physical := NewArray(function.registers_seen, int);
+		intervals := NewArray(function.registers_needed, Live_Range);
+		virtual_to_physical := NewArray(function.registers_needed, int);
 
 		for function.instructions {
 			add_live_range(intervals, it.dst, it_index);

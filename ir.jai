@@ -90,7 +90,7 @@ IR_Function :: struct {
 	params: [..]IR_Operand_Type;
 	instructions: [..]IR_Instruction;
 	builder: String_Builder;
-	registers_seen: int;
+	registers_needed: int;
 }
 
 IR :: struct {

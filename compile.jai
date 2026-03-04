@@ -9,7 +9,7 @@ Compiler :: struct {
 	typedefs: Table(string, *Node_Decl);
 
 	register: int;
-	registers_seen: int;
+	registers_needed: int;
 
 	scopes: [..]Scope_Frame;
 
@@ -104,7 +104,7 @@ operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 next_register :: (compiler: *Compiler) -> int {
 	next := compiler.register;
 	compiler.register += 1;
-	compiler.registers_seen = max(compiler.registers_seen, compiler.register);
+	compiler.registers_needed = max(compiler.registers_needed, compiler.register);
 	return next;
 }
 
@@ -131,6 +131,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					ir_emit(function, ir_mul(dst, left, right));
 				case .ForwardSlash;
 					ir_emit(function, ir_div(dst, left, right));
+				case .Less;
+					ir_emit(function, ir_lt(dst, left, right));
+				case .Greater;
+					ir_emit(function, ir_lt(dst, right, left));
+				case .LessEqual;
+					ir_emit(function, ir_le(dst, left, right));
+				case .GreaterEqual;
+					ir_emit(function, ir_le(dst, right, left));
 			}
 			result = dst;
 		case Node_Identifier;
@@ -182,6 +190,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_cast(dst, compile_expr(compiler, _cast.expr)));
 			result = dst;
 		case Node_Decl;
+			decl := expr.(*Node_Decl);
+			compile_decl(compiler, decl);
 	}
 	return result;
 }
@@ -240,10 +250,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				function := function_declarator(declarator);
 				compiler.register = 0;
-				compiler.registers_seen = 0;
+				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;
 				compile_statement(compiler, decl.body);
-				ir_function.registers_seen = compiler.registers_seen;
+				ir_function.registers_needed = compiler.registers_needed;
 				array_add(*compiler.ir.functions, ir_function);
 			}
 		}
