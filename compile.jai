@@ -109,7 +109,24 @@ next_register :: (compiler: *Compiler) -> int {
 }
 
 compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
-
+	if !expr return .{};
+	function := compiler.current_function;
+	if expr.expr_type == {
+		case Node_Compound;
+			compound := expr.(*Node_Compound);
+			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
+			dst := ir_register(next_register(compiler), IR_PTR);
+			ir_emit(function, ir_alloca(dst, xx size));
+			ir_emit(function, ir_param(dst));
+			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
+			compile_initializer(compiler, compound.init, dst);
+			return dst;
+		case Node_Identifier;
+			id := expr.(*Node_Identifier);
+			slot := find_decl_slot(compiler, id.id.view);
+			return ir_register(slot.register, operand_type(slot.resolved_type));
+	}
 }
 
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {

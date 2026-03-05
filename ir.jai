@@ -69,6 +69,7 @@ IR_S32 :: IR_Operand_Type.{.Integer, 4, false};
 IR_S64 :: IR_Operand_Type.{.Integer, 8, false};
 IR_F32 :: IR_Operand_Type.{.Float, 4, false};
 IR_F64 :: IR_Operand_Type.{.Float, 8, false};
+IR_PTR :: IR_Operand_Type.{.Integer, 8, true};
 
 IR_Operand :: struct {
 	kind: IR_Operand_Kind;
@@ -127,10 +128,11 @@ ir_emit :: (function: *IR_Function, ins: IR_Instruction, at := -1) {
 }
 
 
-ir_alloca :: (size: u64) -> IR_Instruction {
+ir_alloca :: (dst: IR_Operand, size: u64) -> IR_Instruction {
 	operand := IR_Operand.{ kind = .Constant, type = IR_U64, constant = size };
 	instruction: IR_Instruction;
 	instruction.op = .Alloca;
+	instruction.dst = dst;
 	instruction.a = operand;
 	return instruction;
 }

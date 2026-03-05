@@ -224,6 +224,30 @@ lower :: (emitter: *Emitter) {
 					emit(emitter, "str %, [%]", b, a);
 				case .Copy;
 					emit(emitter, "mov %, %", dst, a);
+				case .Lt;
+					if it.a.type.kind == .Float {
+						emit(emitter, "fcmp %, %", dst, a);
+						emit(emitter, "cset %, lt", dst);
+					} else {
+						emit(emitter, "cmp %, %", dst, a);
+						if it.a.type.unsigned {
+							emit(emitter, "cset %, lo", dst);
+						} else {
+							emit(emitter, "cset %, lt", dst);
+						}
+					}
+				case .Le;
+					if it.a.type.kind == .Float {
+						emit(emitter, "fcmp %, %", dst, a);
+						emit(emitter, "cset %, le", dst);
+					} else {
+						emit(emitter, "cmp %, %", dst, a);
+						if it.a.type.unsigned {
+							emit(emitter, "cset %, ls", dst);
+						} else {
+							emit(emitter, "cset %, le", dst);
+						}
+					}
 				case .Add;
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fadd %, %, %", dst, a, b);
