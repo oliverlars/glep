@@ -29,12 +29,7 @@ scratch_name :: (type: IR_Operand_Type, scratch: int) -> string {
 	return tprint("x%", scratch);
 }
 
-// Materialise an operand into a scratch register. Returns the register name string.
-// For alloca vregs: computes sp + alloca_offset (an address).
-// For value vregs: loads from sp + vreg_offset (a value).
-// For constants: materialises the constant into the scratch register.
-// For labels: should not be called (handled inline by Address/Call).
-materialise :: (emitter: *Emitter, op: IR_Operand, info: *Function_Info, scratch: int) -> string {
+value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch: int) -> string {
 	if op.kind == .None return "";
 
 	if op.kind == .Constant {
@@ -55,18 +50,24 @@ materialise :: (emitter: *Emitter, op: IR_Operand, info: *Function_Info, scratch
 	}
 
 	if op.kind == .Register {
-		if info.is_alloca[op.register] {
-			// Alloca vreg: compute address = sp + alloca_offset
-			offset := info.alloca_offsets[op.register];
-			emit(emitter, "add x%, sp, #%", scratch, offset);
-			return tprint("x%", scratch);
-		} else {
-			// Value vreg: load from spill slot
-			offset := info.vreg_offsets[op.register];
-			name := scratch_name(op.type, scratch);
-			emit(emitter, "ldr %, [sp, #%]", name, offset);
-			return name;
-		}
+		if info.is_alloca[op.register] return "";
+		offset := info.vreg_offsets[op.register];
+		name := scratch_name(op.type, scratch);
+		emit(emitter, "ldr %, [sp, #%]", name, offset);
+		return name;
+	}
+
+	return "";
+}
+
+address_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch: int) -> string {
+	if op.kind == .None return "";
+
+	if op.kind == .Register {
+		if !info.is_alloca[op.register] return "";
+		offset := info.alloca_offsets[op.register];
+		emit(emitter, "add x%, sp, #%", scratch, offset);
+		return tprint("x%", scratch);
 	}
 
 	return "";
@@ -74,7 +75,7 @@ materialise :: (emitter: *Emitter, op: IR_Operand, info: *Function_Info, scratch
 
 // Store a value from scratch register back to the vreg's spill slot.
 // Only for value vregs (not allocas — those are addresses, not stored back).
-store_result :: (emitter: *Emitter, op: IR_Operand, info: *Function_Info, scratch: int) {
+store_result :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch: int) {
 	if op.kind != .Register return;
 	if info.is_alloca[op.register] return;
 	name := scratch_name(op.type, scratch);
@@ -95,8 +96,7 @@ lower :: (emitter: *Emitter) {
 
 	for function: emitter.ir.functions {
 		emit(emitter, "_%:", function.name);
-
-		// Pre-pass: collect allocas and compute stack layout
+		
 		info: Function_Info;
 		info.is_alloca = NewArray(function.registers_needed, bool);
 		info.alloca_offsets = NewArray(function.registers_needed, int);
@@ -145,7 +145,7 @@ lower :: (emitter: *Emitter) {
 						offset := info.alloca_offsets[it.a.register];
 						emit(emitter, "add x9, sp, #%", offset);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Call;
 					param_end := it_index;
@@ -155,7 +155,7 @@ lower :: (emitter: *Emitter) {
 					for param_index: param_start..param_end - 1 {
 						param := function.instructions[param_index];
 						// Materialise param value into x12/w12 as temp scratch
-						src := materialise(emitter, param.a, *info, 12);
+						src := value_from_operand(emitter, param.a, info, 12);
 						if param.a.type.kind == .Float {
 							emit(emitter, "fmov %, %", register_name(param.a, reg_float), src);
 							reg_float += 1;
@@ -174,33 +174,33 @@ lower :: (emitter: *Emitter) {
 						} else {
 							emit(emitter, "mov %, %", dst, register_name(it.dst, 0));
 						}
-						store_result(emitter, it.dst, *info, 9);
+						store_result(emitter, it.dst, info, 9);
 					}
 
 				case .Load;
-					a := materialise(emitter, it.a, *info, 10);
+					a := address_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					emit(emitter, "ldr %, [%]", dst, a);
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Store;
-					a := materialise(emitter, it.a, *info, 10);  // address
-					b := materialise(emitter, it.b, *info, 11);  // value
+					a := address_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					emit(emitter, "str %, [%]", b, a);
 
 				case .Copy;
-					a := materialise(emitter, it.a, *info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fmov %, %", dst, a);
 					} else {
 						emit(emitter, "mov %, %", dst, a);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Lt;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.a.type.kind == .Float {
 						emit(emitter, "fcmp %, %", a, b);
@@ -213,11 +213,11 @@ lower :: (emitter: *Emitter) {
 							emit(emitter, "cset %, lt", dst);
 						}
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Le;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.a.type.kind == .Float {
 						emit(emitter, "fcmp %, %", a, b);
@@ -230,11 +230,11 @@ lower :: (emitter: *Emitter) {
 							emit(emitter, "cset %, le", dst);
 						}
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Eq;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.a.type.kind == .Float {
 						emit(emitter, "fcmp %, %", a, b);
@@ -242,11 +242,11 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "cmp %, %", a, b);
 					}
 					emit(emitter, "cset %, eq", dst);
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Ne;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.a.type.kind == .Float {
 						emit(emitter, "fcmp %, %", a, b);
@@ -254,44 +254,44 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "cmp %, %", a, b);
 					}
 					emit(emitter, "cset %, ne", dst);
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Add;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fadd %, %, %", dst, a, b);
 					} else {
 						emit(emitter, "add %, %, %", dst, a, b);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Sub;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fsub %, %, %", dst, a, b);
 					} else {
 						emit(emitter, "sub %, %, %", dst, a, b);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Mul;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fmul %, %, %", dst, a, b);
 					} else {
 						emit(emitter, "mul %, %, %", dst, a, b);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Div;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fdiv %, %, %", dst, a, b);
@@ -300,11 +300,11 @@ lower :: (emitter: *Emitter) {
 					} else {
 						emit(emitter, "sdiv %, %, %", dst, a, b);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Mod;
-					a := materialise(emitter, it.a, *info, 10);
-					b := materialise(emitter, it.b, *info, 11);
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.unsigned {
 						emit(emitter, "udiv %, %, %", dst, a, b);
@@ -312,23 +312,23 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "sdiv %, %, %", dst, a, b);
 					}
 					emit(emitter, "msub %, %, %, %", dst, dst, b, a);
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Neg;
-					a := materialise(emitter, it.a, *info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fneg %, %", dst, a);
 					} else {
 						emit(emitter, "neg %, %", dst, a);
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Not;
-					a := materialise(emitter, it.a, *info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					emit(emitter, "mvn %, %", dst, a);
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Label;
 					emit(emitter, "%:", it.a.label);
@@ -337,12 +337,12 @@ lower :: (emitter: *Emitter) {
 					emit(emitter, "b %", it.a.label);
 
 				case .Ifz;
-					a := materialise(emitter, it.a, *info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					emit(emitter, "cbz %, %", a, it.b.label);
 
 				case .Return;
 					if it.a.kind != .None {
-						a := materialise(emitter, it.a, *info, 10);
+						a := value_from_operand(emitter, it.a, info, 10);
 						if it.a.type.kind == .Float {
 							emit(emitter, "fmov d0, %", a);
 						} else {
@@ -356,7 +356,7 @@ lower :: (emitter: *Emitter) {
 					emit(emitter, "ret");
 
 				case .Cast;
-					a := materialise(emitter, it.a, *info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					dst_type := it.dst.type;
 					src_type := it.a.type;
@@ -394,7 +394,7 @@ lower :: (emitter: *Emitter) {
 							emit(emitter, "fmov %, %", dst, a);
 						}
 					}
-					store_result(emitter, it.dst, *info, 9);
+					store_result(emitter, it.dst, info, 9);
 			}
 		}
 	}
