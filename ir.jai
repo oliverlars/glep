@@ -221,16 +221,8 @@ ir_load :: (dst: IR_Operand, addr: IR_Operand) -> IR_Instruction {
 	return .{ .Load, dst, addr, .{} };
 }
 
-ir_spill_load :: (dst: IR_Operand, addr: IR_Operand) -> IR_Instruction {
-	return .{ .SpillLoad, dst, addr, .{} };
-}
-
 ir_store :: (addr: IR_Operand, value: IR_Operand) -> IR_Instruction {
 	return .{ .Store, .{}, addr, value };
-}
-
-ir_spill_store :: (dst: IR_Operand, addr: IR_Operand) -> IR_Instruction {
-	return .{ .SpillStore, dst, addr, .{} };
 }
 
 ir_address :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {

@@ -18,9 +18,8 @@ Compiler :: struct {
 
 Binding :: struct {
 	name: string;
-	register: int;
+	slot: IR_Operand;
 	resolved_type: *Resolved_Type;
-	declarator: *Node_Declarator;
 }
 
 Scope_Frame :: struct {
@@ -42,13 +41,12 @@ current_scope_frame :: (compiler: *Compiler) -> *Scope_Frame {
 	return *compiler.scopes[compiler.scopes.count - 1];
 }
 
-bind_decl :: (compiler: *Compiler, name: string, declarator: *Node_Declarator) -> Binding {
+bind_decl :: (compiler: *Compiler, name: string, slot: IR_Operand, rt: *Resolved_Type) -> Binding {
 	frame := current_scope_frame(compiler);
 	binding: Binding;
 	binding.name = name;
-	binding.register = next_register(compiler);
-	binding.resolved_type = declarator.resolved_type;
-	binding.declarator = declarator;
+	binding.resolved_type = rt;
+	binding.slot = slot;
 	array_add(*frame.bindings, binding);
 
 	return binding;
@@ -69,24 +67,14 @@ is_function_declaration :: (declarator: *Node_Declarator) -> bool {
 	return false;
 }
 
-find_decl_slot :: (compiler: *Compiler, name: string) -> Binding {
-	find_decl_in_scope :: (compiler: *Compiler, name: string, scope_index: int) -> bool, Binding {
-		if scope_index < 0 return false, .{};
-		scope := compiler.scopes[scope_index];
-		for scope.bindings {
-			if it.name == name {
-				return true, it;
-			}
+find_binding :: (compiler: *Compiler, name: string) -> Binding {
+	for < compiler.scopes {
+		for it.bindings {
+			if it.name == name return it;
 		}
-		found, stack_slot := find_decl_in_scope(compiler, name, scope_index - 1);
-		return found, stack_slot;
 	}
-
-	scope_index := compiler.scopes.count - 1;
-
-	found, stack_slot := find_decl_in_scope(compiler, name, scope_index);
-	assert(found);
-	return stack_slot;
+	assert(false, "undeclared variable");
+	return .{};
 }
 
 is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
@@ -119,13 +107,14 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_alloca(dst, xx size));
 			ir_emit(function, ir_param(dst));
 			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
 			compile_initializer(compiler, compound.init, dst);
 			return dst;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
-			slot := find_decl_slot(compiler, id.id.view);
-			return ir_register(slot.register, operand_type(slot.resolved_type));
+			binding := find_binding(compiler, id.id.view);
+			return binding.slot;
 	}
 }
 
@@ -160,8 +149,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
-			slot := find_decl_slot(compiler, id.id.view);
-			result = ir_register(slot.register, operand_type(slot.resolved_type));
+			binding := find_binding(compiler, id.id.view);
+			dst := ir_register(next_register(compiler), binding.slot.type);
+			ir_emit(function, ir_load(dst, binding.slot));
+			result = dst;
 		case Node_String;
 			str := expr.(*Node_String);
 			found, count := table_find(*compiler.strings, str.token.view);
@@ -187,10 +178,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
-			dst := compile_expr(compiler, assign.left);
-			src := compile_expr(compiler, assign.right);
-			ir_emit(function, ir_copy(dst, src));
-			result = dst;
+			address := compile_lvalue(compiler, assign.left);
+			value := compile_expr(compiler, assign.right);
+			ir_emit(function, ir_store(address, value));
+			result = value;
 		case Node_Number;
 			number := expr.(*Node_Number);
 			type := operand_type(number.resolved_type);
@@ -214,12 +205,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 }
 
 compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
+	function := compiler.current_function;
 	for decl.declarators {
 		name := identifier_from_declarator(it);
 
-		binding := bind_decl(compiler, name, it);
-		dst := ir_register(binding.register, operand_type(it.resolved_type));
-		compile_initializer(compiler, it.init, dst);
+		slot := ir_register(next_register(compiler), IR_PTR);
+		ir_emit(function, ir_alloca(slot, xx it.resolved_type.size_in_bytes));
+		binding := bind_decl(compiler, name, slot, it.resolved_type);
+		compile_initializer(compiler, it.init, slot);
 	}
 }
 
@@ -251,7 +244,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		value := compile_expr(compiler, expr);
-		ir_emit(function, ir_copy(dst, value));
+		ir_emit(function, ir_store(dst, value));
 	} else {
 		assert(false, "TODO: designated initializer");
 	}
