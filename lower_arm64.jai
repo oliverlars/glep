@@ -50,7 +50,6 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 	}
 
 	if op.kind == .Register {
-		if info.is_alloca[op.register] return "";
 		offset := info.vreg_offsets[op.register];
 		name := scratch_name(op.type, scratch);
 		emit(emitter, "ldr %, [sp, #%]", name, offset);
@@ -64,7 +63,6 @@ address_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info,
 	if op.kind == .None return "";
 
 	if op.kind == .Register {
-		if !info.is_alloca[op.register] return "";
 		offset := info.alloca_offsets[op.register];
 		emit(emitter, "add x%, sp, #%", scratch, offset);
 		return tprint("x%", scratch);
@@ -121,6 +119,22 @@ lower :: (emitter: *Emitter) {
 		link_and_frame := 16;
 		stack_space := (alloca_size + vreg_spill_size + link_and_frame + 15) & ~15;
 		info.stack_space = stack_space;
+
+
+		param_alloca_index := 0;
+		reg_int := 0;
+		reg_float := 0;
+		for i: 0..function.params.count-1 {
+			alloca_inst := function.instructions[i];
+			offset := info.alloca_offsets[alloca_inst.dst.register];
+			if function.params[i].kind == .Float {
+				emit(emitter, "str d%, [sp, #%]", reg_float, offset);
+				reg_float += 1;
+			} else {
+				emit(emitter, "str x%, [sp, #%]", reg_int, offset);
+				reg_int += 1;
+			}
+		}
 
 		// Prologue
 		emit(emitter, "sub sp, sp, #%", stack_space);

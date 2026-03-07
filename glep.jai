@@ -2445,7 +2445,7 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	filename := "test.c";
+	filename := "tests/test_smallpt.c";
 	minimal := read_entire_file(filename);
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;

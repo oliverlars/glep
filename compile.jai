@@ -14,6 +14,8 @@ Compiler :: struct {
 	scopes: [..]Scope_Frame;
 
 	current_function: *IR_Function;
+
+	label_counter: int;
 }
 
 Binding :: struct {
@@ -52,6 +54,10 @@ bind_decl :: (compiler: *Compiler, name: string, slot: IR_Operand, rt: *Resolved
 	return binding;
 }
 
+next_label :: (compiler: *Compiler) -> string {
+	defer compiler.label_counter += 1;
+	return tprint("l%", compiler.label_counter);
+}
 
 is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
 	return is_function_declaration(declarator) && decl.body != null;
@@ -67,14 +73,15 @@ is_function_declaration :: (declarator: *Node_Declarator) -> bool {
 	return false;
 }
 
-find_binding :: (compiler: *Compiler, name: string) -> Binding {
+find_binding :: (compiler: *Compiler, name: string) -> Binding, bool {
+	is_global := 0;
 	for < compiler.scopes {
 		for it.bindings {
-			if it.name == name return it;
+			if it.name == name return it, it_index == 0;
 		}
 	}
 	assert(false, "undeclared variable");
-	return .{};
+	return .{}, false;
 }
 
 is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
@@ -96,6 +103,22 @@ next_register :: (compiler: *Compiler) -> int {
 	return next;
 }
 
+offset_from_member_name :: (_struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
+	offset := 0;
+	index := 0;
+	for _struct.members {
+		for declarator: it.declarators {
+			member_name := identifier_from_declarator(declarator);
+			if name == member_name {
+				offset = layout.members[index].offset;
+				break it;
+			}
+			index += 1;
+		}
+	}
+	return offset;
+}
+
 compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 	if !expr return .{};
 	function := compiler.current_function;
@@ -114,7 +137,22 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
 			binding := find_binding(compiler, id.id.view);
-			return binding.slot;
+			operand := binding.slot;
+			if binding.slot.kind == .Label {
+				dst := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_address(dst, binding.slot));
+				operand = dst;
+			}
+			return operand;
+		case Node_Member_Access;
+			member_access := expr.(*Node_Member_Access);
+			operand := compile_lvalue(compiler, member_access.left);
+			lhs_type := member_access.left.resolved_type;
+			_struct := lhs_type.composite.(*Node_Struct);
+
+			offset := offset_from_member_name(_struct, lhs_type.layout, member_access.right.view);
+			ir_add(operand, operand, ir_constant(offset.(u64), IR_U64));
+			return operand;
 	}
 }
 
@@ -123,10 +161,19 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 	result: IR_Operand;
 	function := compiler.current_function;
 	if expr.expr_type == {
+		case Node_Unary;
+			unary := expr.(*Node_Unary);
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
+			short_circuit := next_label(compiler);
 			left := compile_expr(compiler, binary.left);
+			if binary.op.type == .PipePipe {
+				ir_emit(function, ir_if(left, short_circuit));
+			} else if binary.op.type == .AmpersandAmpersand {
+				ir_emit(function, ir_ifz(left, short_circuit));
+			}
 			right := compile_expr(compiler, binary.right);
+			ir_emit(function, ir_label(short_circuit));
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
 			if binary.op.type == {
 				case .Plus;
@@ -150,9 +197,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
 			binding := find_binding(compiler, id.id.view);
-			dst := ir_register(next_register(compiler), binding.slot.type);
-			ir_emit(function, ir_load(dst, binding.slot));
+			address := binding.slot;
+			if binding.slot.kind == .Label {
+				address = ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_address(address, binding.slot));
+			}
+			dst := ir_register(next_register(compiler), operand_type(binding.resolved_type));
+			ir_emit(function, ir_load(dst, address));
 			result = dst;
+		case Node_Member_Access;
+			member_access := expr.(*Node_Member_Access);
+			dst := compile_lvalue(compiler, member_access);
 		case Node_String;
 			str := expr.(*Node_String);
 			found, count := table_find(*compiler.strings, str.token.view);
@@ -164,6 +219,31 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			dst := ir_register(next_register(compiler), .{ .Integer, 8, true });
 			ir_emit(function, ir_address(dst, ir_label_operand(label)));
 			result = dst;
+		case Node_If;
+			_if := expr.(*Node_If);
+			cond := compile_expr(compiler, _if.cond);
+			on_false := next_label(compiler);
+			end := next_label(compiler);
+
+			ir_emit(function, ir_ifz(cond, on_false));
+			compile_statement(compiler, _if.on_true);
+			ir_emit(function, ir_goto(end));
+			ir_emit(function, ir_label(on_false));
+			compile_statement(compiler, _if.on_false);
+			ir_emit(function, ir_label(end));
+		case Node_For;
+			_for := expr.(*Node_For);
+			start := next_label(compiler);
+			end := next_label(compiler);
+
+			compile_decl(compiler, _for.init);
+			ir_emit(function, ir_label(start));
+			cond := compile_expr(compiler, _for.cond);
+			ir_emit(function, ir_ifz(cond, end));
+			compile_statement(compiler, _for.body);
+			compile_expr(compiler, _for.expr);
+			ir_emit(function, ir_goto(start));
+			ir_emit(function, ir_label(end));
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -252,31 +332,34 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
+	push_scope(compiler);
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
+			name := identifier_from_declarator(declarator);
 			if is_function_definition(decl, declarator) {
 				ir_function: IR_Function;
-				ir_function.name = identifier_from_declarator(declarator);
+				ir_function.name = name;
 
 				function := function_declarator(declarator);
 				compiler.register = 0;
 				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;
+				for function.params {
+					compile_decl(compiler, it);
+					array_add(*ir_function.params, operand_type(it.declarators[0].resolved_type));
+				}
 				compile_statement(compiler, decl.body);
 				ir_function.registers_needed = compiler.registers_needed;
 				array_add(*compiler.ir.functions, ir_function);
+			} else if is_variable_declaration(decl, declarator) {
+				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
 			}
 		}
 	}
+	pop_scope(compiler);
 
 	for value, key: compiler.strings {
 		ir_emit_global(*compiler.ir, tprint("str%", value), xx key, 8);
 	}
-
-	for decl: tu.declarations {
-		for declarator: decl.declarators {
-			if is_variable_declaration(decl, declarator) {
-			}
-		}
-	}
+	
 }
