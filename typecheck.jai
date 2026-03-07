@@ -756,7 +756,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			}
 		case Node_For;
 			_for := stmt.(*Node_For);
-			typecheck_decl(tc, _for.init);
+			typecheck_statement(tc, _for.init);
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
 			typecheck_statement(tc, _for.body);

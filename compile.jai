@@ -146,13 +146,25 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			return operand;
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
-			operand := compile_lvalue(compiler, member_access.left);
+			operand: IR_Operand;
+			if member_access.op.type == .Arrow {
+				// LHS is already a pointer, load it directly.
+				operand = compile_expr(compiler, member_access.left);
+			} else {
+				// LHS is a value but we want the address
+				operand = compile_lvalue(compiler, member_access.left);
+			}
 			lhs_type := member_access.left.resolved_type;
 			_struct := lhs_type.composite.(*Node_Struct);
 
 			offset := offset_from_member_name(_struct, lhs_type.layout, member_access.right.view);
-			ir_add(operand, operand, ir_constant(offset.(u64), IR_U64));
+			ir_emit(function, ir_add(operand, operand, ir_constant(offset.(u64), IR_U64)));
 			return operand;
+		case Node_Unary;
+			unary := expr.(*Node_Unary);
+			if unary.op.type == .Asterisk {
+				dst := compile_lvalue(compiler, unary.expr);
+			}
 	}
 }
 
@@ -163,6 +175,37 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 	if expr.expr_type == {
 		case Node_Unary;
 			unary := expr.(*Node_Unary);
+			if unary.op.type == {
+				case .Minus;
+					value := compile_expr(compiler, unary.expr);
+					dst := ir_register(next_register(compiler), value.type);
+					ir_emit(function, ir_neg(dst, value));
+					result = dst;
+				case .Bang;
+					value := compile_expr(compiler, unary.expr);
+					dst := ir_register(next_register(compiler), value.type);
+					ir_emit(function, ir_eq(dst, dst, ir_constant(0, dst.type)));
+					result = dst;
+				case .PlusPlus;
+					address := compile_lvalue(compiler, unary.expr);
+					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
+					ir_emit(function, ir_load(pre, address));
+
+					offset := 1;
+					if unary.expr.resolved_type.kind == .Pointer {
+						offset = unary.expr.resolved_type.inner.size_in_bytes;
+					}
+
+					post := ir_register(next_register(compiler), pre.type);
+					ir_emit(function, ir_add(post, pre, ir_constant(xx offset, pre.type)));
+					ir_emit(function, ir_store(address, post));
+
+					if unary.postfix {
+						result = pre;
+					} else {
+						result = post;
+					}
+			}
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
 			short_circuit := next_label(compiler);
@@ -192,6 +235,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					ir_emit(function, ir_le(dst, left, right));
 				case .GreaterEqual;
 					ir_emit(function, ir_le(dst, right, left));
+				case .EqualEqual;
+					ir_emit(function, ir_eq(dst, left, right));
+				case .BangEqual;
+					ir_emit(function, ir_ne(dst, left, right));
+				case .Percent;
+					ir_emit(function, ir_mod(dst, left, right));
+				case .Ampersand;
+					ir_emit(function, ir_and(dst, left, right));
 			}
 			result = dst;
 		case Node_Identifier;
@@ -207,7 +258,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
-			dst := compile_lvalue(compiler, member_access);
+			address := compile_lvalue(compiler, member_access);
+			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
+			ir_emit(function, ir_load(dst, address));
+			result = dst;
 		case Node_String;
 			str := expr.(*Node_String);
 			found, count := table_find(*compiler.strings, str.token.view);
@@ -236,7 +290,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			start := next_label(compiler);
 			end := next_label(compiler);
 
-			compile_decl(compiler, _for.init);
+			compile_statement(compiler, _for.init);
 			ir_emit(function, ir_label(start));
 			cond := compile_expr(compiler, _for.cond);
 			ir_emit(function, ir_ifz(cond, end));
@@ -297,7 +351,7 @@ compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
 }
 
 compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
-
+	if !statement return;
 	function := compiler.current_function;
 	if statement.statement_type == {
 		case Node_Decl_Statement;

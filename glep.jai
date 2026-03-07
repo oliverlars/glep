@@ -413,7 +413,7 @@ Node_If :: struct {
 
 Node_For :: struct {
 	#as using node: Node_Statement;
-	init : *Node_Decl;
+	init: *Node_Statement;
 	cond: *Node_Expr;
 	expr: *Node_Expr;
 	body: *Node_Statement;
@@ -1939,8 +1939,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				skip(p);
 				_for := New(Node_For);
 				expect(p, .LeftParenthesis);
-				_for.init = parse_decl(p);
-				expect(p, .Semicolon);
+				_for.init = parse_statement(p);
 				_for.cond = parse_expr(p);
 				expect(p, .Semicolon);
 				_for.expr = parse_expr(p);
@@ -1989,6 +1988,11 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					_if.on_false = parse_statement(p);
 				}
 				statement = _if;
+			} else if is_declaration_start(p) {
+				decl_stmt := New(Node_Decl_Statement);
+				decl_stmt.decl = parse_decl(p);
+				statement = decl_stmt;
+				expect(p, .Semicolon);
 			} else {
 				expr_stmt := New(Node_Expr_Statement);
 				expr_stmt.expr = parse_expr(p);
@@ -2278,7 +2282,7 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 		case Node_For;
 			append(builder, "for ");
 			append(builder, "(");
-			print_decl(builder, stmt.(*Node_For).init);
+			print_statement(builder, stmt.(*Node_For).init);
 			append(builder, "; ");
 			print_expr(builder, stmt.(*Node_For).cond);
 			append(builder, "; ");
