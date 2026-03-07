@@ -155,6 +155,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				operand = compile_lvalue(compiler, member_access.left);
 			}
 			lhs_type := member_access.left.resolved_type;
+			if lhs_type.composite == null {
+				lhs_type = lhs_type.inner;
+			}
 			_struct := lhs_type.composite.(*Node_Struct);
 
 			offset := offset_from_member_name(_struct, lhs_type.layout, member_access.right.view);
