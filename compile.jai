@@ -123,6 +123,18 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 	if !expr return .{};
 	function := compiler.current_function;
 	if expr.expr_type == {
+		case Node_Array_Access;
+			array_access := expr.(*Node_Array_Access);
+			index := compile_expr(compiler, array_access.index);
+			
+			array := compile_lvalue(compiler, array_access.left);
+
+			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
+
+			dst := ir_register(next_register(compiler), IR_PTR);
+			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
+			ir_emit(function, ir_add(dst, array, index));
+			return dst;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
 			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
@@ -166,9 +178,10 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Unary;
 			unary := expr.(*Node_Unary);
 			if unary.op.type == .Asterisk {
-				dst := compile_lvalue(compiler, unary.expr);
+				dst := compile_expr(compiler, unary.expr);
 				return dst;
 			}
+			assert(false, "We shouldnt try compling an lvalue unary that isnt a dereference");
 	}
 }
 
@@ -188,7 +201,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				case .Bang;
 					value := compile_expr(compiler, unary.expr);
 					dst := ir_register(next_register(compiler), value.type);
-					ir_emit(function, ir_eq(dst, dst, ir_constant(0, dst.type)));
+					ir_emit(function, ir_eq(dst, value, ir_constant(0, value.type)));
 					result = dst;
 				case .Ampersand;
 					address := compile_lvalue(compiler, unary.expr);
@@ -199,6 +212,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					value := compile_expr(compiler, unary.expr);
 					dst := ir_register(next_register(compiler), value.type);
 					ir_emit(function, ir_load(dst, value));
+					result = dst;
 				case .PlusPlus;
 					address := compile_lvalue(compiler, unary.expr);
 					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
@@ -264,6 +278,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					ir_emit(function, ir_mod(dst, left, right));
 				case .Ampersand;
 					ir_emit(function, ir_and(dst, left, right));
+				case .Pipe;
+					ir_emit(function, ir_or(dst, left, right));
+				case .Caret;
+					ir_emit(function, ir_xor(dst, left, right));
+				case .LessLess;
+					ir_emit(function, ir_shl(dst, left, right));
+				case .GreaterGreater;
+					ir_emit(function, ir_shr(dst, left, right));
 			}
 			result = dst;
 		case Node_Identifier;
@@ -282,6 +304,19 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			address := compile_lvalue(compiler, member_access);
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
 			ir_emit(function, ir_load(dst, address));
+			result = dst;
+		case Node_Array_Access;
+			array_access := expr.(*Node_Array_Access);
+
+			index := compile_expr(compiler, array_access.index);
+
+			array := compile_expr(compiler, array_access.left);
+
+			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
+
+			dst := ir_register(next_register(compiler), array.type);
+			ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64));
+			ir_emit(function, ir_add(dst, array, index));
 			result = dst;
 		case Node_Char;
 			c := expr.(*Node_Char);
@@ -326,10 +361,41 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
-			
+
+			emit_struct_params :: (compiler: *Compiler, base: IR_Operand, _struct: *Node_Struct, layout: Struct_Layout) {
+				function := compiler.current_function;
+				index := 0;
+				for _struct.members {
+					for declarator: it.declarators {
+						member_type := declarator.resolved_type;
+						offset := layout.members[index].offset;
+
+						address := base;
+						if offset != 0 {
+							address = ir_register(next_register(compiler), IR_PTR);
+							ir_emit(function, ir_add(address, base, ir_constant(xx offset, IR_U64)));
+						}
+
+						if member_type.kind == .Composite {
+							emit_struct_params(compiler, address, member_type.composite.(*Node_Struct), member_type.layout);
+						} else {
+							value := ir_register(next_register(compiler), operand_type(member_type));
+							ir_emit(function, ir_load(value, address));
+							ir_emit(function, ir_param(value));
+						}
+						index += 1;
+					}
+				}
+			}
+
 			for call.args {
-				arg := compile_expr(compiler, it);
-				ir_emit(function, ir_param(arg));
+				if it.resolved_type.kind == .Composite {
+					address := compile_lvalue(compiler, it);
+					emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout);
+				} else {
+					arg := compile_expr(compiler, it);
+					ir_emit(function, ir_param(arg));
+				}
 			}
 			
 			dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
@@ -423,9 +489,30 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				compiler.register = 0;
 				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;
+
+				append_struct_params :: (_struct: *Node_Struct, layout: Struct_Layout, params: *[..]IR_Operand_Type) {
+					index := 0;
+					for _struct.members {
+						for declarator: it.declarators {
+							member_type := declarator.resolved_type;
+							if member_type.kind == .Composite {
+								append_struct_params(member_type.composite.(*Node_Struct), member_type.layout, params);
+							} else {
+								array_add(params, operand_type(member_type));
+							}
+							index += 1;
+						}
+					}
+				}
+
 				for function.params {
 					compile_decl(compiler, it);
-					array_add(*ir_function.params, operand_type(it.declarators[0].resolved_type));
+					param_type := it.declarators[0].resolved_type;
+					if param_type.kind == .Composite {
+						append_struct_params(param_type.composite.(*Node_Struct), param_type.layout, *ir_function.params);
+					} else {
+						array_add(*ir_function.params, operand_type(param_type));
+					}
 				}
 				compile_statement(compiler, decl.body);
 				ir_function.registers_needed = compiler.registers_needed;
