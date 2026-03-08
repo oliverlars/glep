@@ -195,6 +195,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					dst := ir_register(next_register(compiler), address.type);
 					ir_emit(function, ir_copy(dst, address));
 					result = dst;
+				case .Asterisk;
+					value := compile_expr(compiler, unary.expr);
+					dst := ir_register(next_register(compiler), value.type);
+					ir_emit(function, ir_load(dst, value));
 				case .PlusPlus;
 					address := compile_lvalue(compiler, unary.expr);
 					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
