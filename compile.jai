@@ -167,6 +167,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			unary := expr.(*Node_Unary);
 			if unary.op.type == .Asterisk {
 				dst := compile_lvalue(compiler, unary.expr);
+				return dst;
 			}
 	}
 }
@@ -189,6 +190,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					dst := ir_register(next_register(compiler), value.type);
 					ir_emit(function, ir_eq(dst, dst, ir_constant(0, dst.type)));
 					result = dst;
+				case .Ampersand;
+					address := compile_lvalue(compiler, unary.expr);
+					dst := ir_register(next_register(compiler), address.type);
+					ir_emit(function, ir_copy(dst, address));
+					result = dst;
 				case .PlusPlus;
 					address := compile_lvalue(compiler, unary.expr);
 					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
@@ -209,6 +215,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 						result = post;
 					}
 			}
+		case Node_Sizeof_Type;
+			sizeof := expr.(*Node_Sizeof_Type);
+			dst := ir_constant(xx sizeof.target_type.size_in_bytes, operand_type(sizeof.target_type));
+			result = dst;
+		case Node_Sizeof_Expr;
+			sizeof := expr.(*Node_Sizeof_Expr);
+			dst := ir_constant(xx sizeof.expr.resolved_type.size_in_bytes, operand_type(sizeof.expr.resolved_type));
+			result = dst;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
 			short_circuit := next_label(compiler);
@@ -265,6 +279,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
 			ir_emit(function, ir_load(dst, address));
 			result = dst;
+		case Node_Char;
+			c := expr.(*Node_Char);
+			value := eval_char_literal(c.token.view);
+			result = ir_constant(xx value, IR_S32);
 		case Node_String;
 			str := expr.(*Node_String);
 			found, count := table_find(*compiler.strings, str.token.view);
