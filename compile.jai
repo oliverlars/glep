@@ -484,9 +484,17 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 		value := compile_expr(compiler, expr);
 		ir_emit(function, ir_store(dst, value));
 	} else {
-		assert(false, "TODO: designated initializer");
+		for init.(*Node_Designated_Initializer).designations {
+			member_addr := dst;
+			if it.byte_offset != 0 {
+				member_addr = ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_add(member_addr, dst, ir_constant(xx it.byte_offset, IR_U64)));
+			}
+			compile_initializer(compiler, it.expr, member_addr);
+		}
 	}
 }
+
 
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
