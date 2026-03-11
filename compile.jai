@@ -485,14 +485,34 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 		ir_emit(function, ir_store(dst, value));
 	} else {
 		for init.(*Node_Designated_Initializer).designations {
-			member_addr := dst;
+			member_address := dst;
 			if it.byte_offset != 0 {
-				member_addr = ir_register(next_register(compiler), IR_PTR);
-				ir_emit(function, ir_add(member_addr, dst, ir_constant(xx it.byte_offset, IR_U64)));
+				member_address = ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_add(member_address, dst, ir_constant(xx it.byte_offset, IR_U64)));
 			}
-			compile_initializer(compiler, it.expr, member_addr);
+			compile_initializer(compiler, it.expr, member_address);
 		}
 	}
+}
+
+compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, size_in_bytes: int) -> []u8 {
+	if !init return {};
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, bytes: []u8, byte_offset := 0) -> int {
+		function := compiler.current_function;
+		if init.initializer_type == Node_Scalar_Initializer {
+			expr := init.(*Node_Scalar_Initializer).expr;
+			value := eval_constant_expr(expr);
+			memcpy(bytes.data + byte_offset, *value.as_u64, expr.resolved_type.size_in_bytes);
+			return byte_offset + expr.resolved_type.size_in_bytes;
+		} else {
+			for init.(*Node_Designated_Initializer).designations {
+				compile_global_initializer(compiler, it.expr, bytes, byte_offset + it.byte_offset);
+			}
+		}
+		return byte_offset;
+	}
+	bytes := NewArray(size_in_bytes, u8);
+	return compile_global_initializer(compiler, init, size_in_bytes);
 }
 
 
@@ -540,6 +560,8 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				array_add(*compiler.ir.functions, ir_function);
 			} else if is_variable_declaration(decl, declarator) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
+				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type.size_in_bytes);
+				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
 			}
 		}
 	}
