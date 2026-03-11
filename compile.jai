@@ -246,49 +246,80 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
-			short_circuit := next_label(compiler);
-			left := compile_expr(compiler, binary.left);
-			if binary.op.type == .PipePipe {
-				ir_emit(function, ir_if(left, short_circuit));
-			} else if binary.op.type == .AmpersandAmpersand {
-				ir_emit(function, ir_ifz(left, short_circuit));
-			}
-			right := compile_expr(compiler, binary.right);
-			ir_emit(function, ir_label(short_circuit));
+
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
-			if binary.op.type == {
-				case .Plus;
-					ir_emit(function, ir_add(dst, left, right));
-				case .Minus;
-					ir_emit(function, ir_sub(dst, left, right));
-				case .Asterisk;
-					ir_emit(function, ir_mul(dst, left, right));
-				case .ForwardSlash;
-					ir_emit(function, ir_div(dst, left, right));
-				case .Less;
-					ir_emit(function, ir_lt(dst, left, right));
-				case .Greater;
-					ir_emit(function, ir_lt(dst, right, left));
-				case .LessEqual;
-					ir_emit(function, ir_le(dst, left, right));
-				case .GreaterEqual;
-					ir_emit(function, ir_le(dst, right, left));
-				case .EqualEqual;
-					ir_emit(function, ir_eq(dst, left, right));
-				case .BangEqual;
-					ir_emit(function, ir_ne(dst, left, right));
-				case .Percent;
-					ir_emit(function, ir_mod(dst, left, right));
-				case .Ampersand;
-					ir_emit(function, ir_and(dst, left, right));
-				case .Pipe;
-					ir_emit(function, ir_or(dst, left, right));
-				case .Caret;
-					ir_emit(function, ir_xor(dst, left, right));
-				case .LessLess;
-					ir_emit(function, ir_shl(dst, left, right));
-				case .GreaterGreater;
-					ir_emit(function, ir_shr(dst, left, right));
+
+			if binary.op.type == .AmpersandAmpersand {
+				on_false := next_label(compiler);
+				end := next_label(compiler);
+
+				left := compile_expr(compiler, binary.left);
+				ir_emit(function, ir_ifz(left, on_false));
+
+				right := compile_expr(compiler, binary.right);
+				ir_emit(function, ir_ne(dst, right, ir_constant(0, right.type)));
+				ir_emit(function, ir_goto(end));
+
+				ir_emit(function, ir_label(on_false));
+				ir_emit(function, ir_copy(dst, ir_constant(0, dst.type)));
+
+				ir_emit(function, ir_label(end));
+			} else if binary.op.type == .PipePipe {
+				on_true := next_label(compiler);
+				end := next_label(compiler);
+
+				left := compile_expr(compiler, binary.left);
+				ir_emit(function, ir_if(left, on_true));
+
+				right := compile_expr(compiler, binary.right);
+				ir_emit(function, ir_eq(dst, right, ir_constant(1, right.type)));
+				ir_emit(function, ir_goto(end));
+
+				ir_emit(function, ir_label(on_true));
+				ir_emit(function, ir_copy(dst, ir_constant(1, dst.type)));
+
+				ir_emit(function, ir_label(on_true));
+
+				ir_emit(function, ir_add(dst, left, right));
+
+				ir_emit(function, ir_label(end));
+			} else {
+				left := compile_expr(compiler, binary.left);
+				right := compile_expr(compiler, binary.right);
+				if binary.op.type == {
+					case .Plus;
+						ir_emit(function, ir_add(dst, left, right));
+					case .Minus;
+						ir_emit(function, ir_sub(dst, left, right));
+					case .Asterisk;
+						ir_emit(function, ir_mul(dst, left, right));
+					case .ForwardSlash;
+						ir_emit(function, ir_div(dst, left, right));
+					case .Less;
+						ir_emit(function, ir_lt(dst, left, right));
+					case .Greater;
+						ir_emit(function, ir_lt(dst, right, left));
+					case .LessEqual;
+						ir_emit(function, ir_le(dst, left, right));
+					case .GreaterEqual;
+						ir_emit(function, ir_le(dst, right, left));
+					case .EqualEqual;
+						ir_emit(function, ir_eq(dst, left, right));
+					case .BangEqual;
+						ir_emit(function, ir_ne(dst, left, right));
+					case .Percent;
+						ir_emit(function, ir_mod(dst, left, right));
+					case .Ampersand;
+						ir_emit(function, ir_and(dst, left, right));
+					case .Pipe;
+						ir_emit(function, ir_or(dst, left, right));
+					case .Caret;
+						ir_emit(function, ir_xor(dst, left, right));
+					case .LessLess;
+						ir_emit(function, ir_shl(dst, left, right));
+					case .GreaterGreater;
+						ir_emit(function, ir_shr(dst, left, right));
+				}
 			}
 			result = dst;
 		case Node_Identifier;
@@ -391,8 +422,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 							value := ir_register(next_register(compiler), operand_type(member_type));
 							ir_emit(function, ir_load(value, address));
 							ir_emit(function, ir_param(value));
+							param_count += 1;
 						}
-						param_count += 1;
 						index += 1;
 					}
 				}
@@ -498,6 +529,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, size_in_bytes: int) -> []u8 {
 	if !init return {};
 	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, bytes: []u8, byte_offset := 0) -> int {
+		if !init return byte_offset;
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
@@ -512,7 +544,10 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 		return byte_offset;
 	}
 	bytes := NewArray(size_in_bytes, u8);
-	return compile_global_initializer(compiler, init, size_in_bytes);
+	
+	compile_global_initializer(compiler, init, bytes);
+
+	return bytes;
 }
 
 
