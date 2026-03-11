@@ -89,6 +89,7 @@ IR_Global :: struct {
 IR_Function :: struct {
 	name: string;
 	params: [..]IR_Operand_Type;
+	results: [..]IR_Operand_Type;
 	instructions: [..]IR_Instruction;
 	builder: String_Builder;
 	registers_needed: int;

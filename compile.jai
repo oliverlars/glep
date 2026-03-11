@@ -431,7 +431,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			}
 
 			param_count := 0;
-			for call.args {
+			for < call.args {
 				if it.resolved_type.kind == .Composite {
 					address := compile_lvalue(compiler, it);
 					param_count += emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout);
@@ -588,6 +588,13 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						append_struct_params(param_type.composite.(*Node_Struct), param_type.layout, *ir_function.params);
 					} else {
 						array_add(*ir_function.params, operand_type(param_type));
+					}
+
+					ret_type := declarator.resolved_type;
+					if ret_type.kind == .Composite {
+						append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *ir_function.results);
+					} else {
+						array_add(*ir_function.results, operand_type(ret_type));
 					}
 				}
 				compile_statement(compiler, decl.body);

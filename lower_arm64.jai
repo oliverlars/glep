@@ -162,12 +162,14 @@ lower :: (emitter: *Emitter) {
 					store_result(emitter, it.dst, info, 9);
 
 				case .Call;
-					param_end := it_index;
-					param_start := param_end - it.b.constant.(int);
+					param_count := it.b.constant.(int);
+					param_start := it_index-1;
+					param_end := param_start - param_count;
 					reg_int := 0;
 					reg_float := 0;
-					for param_index: param_start..param_end - 1 {
-						param := function.instructions[param_index];
+					param_index := 0;
+					for 0..param_count-1 {
+						param := function.instructions[param_start - param_index];
 						// Materialise param value into x12/w12 as temp scratch
 						src := value_from_operand(emitter, param.a, info, 12);
 						if param.a.type.kind == .Float {
@@ -178,7 +180,19 @@ lower :: (emitter: *Emitter) {
 							emit(emitter, "mov %, %", reg_dst, src);
 							reg_int += 1;
 						}
+						param_index += 1;
 					}
+
+					// Assume any more Param instructions are now variadic
+					variadic_count := 0;
+					while function.instructions[param_start - param_index].op == .Param {
+						param := function.instructions[param_start - param_index];
+						src := value_from_operand(emitter, param.a, info, 12);
+						emit(emitter, "str %, [sp, #%]", variadic_count*8);
+						param_index += 1;
+						variadic_count += 1;
+					}
+
 					emit(emitter, "bl _%", it.a.label);
 					if it.dst.kind != .None {
 						// Move return value from x0/d0 to scratch, then store
