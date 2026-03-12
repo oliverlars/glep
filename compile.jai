@@ -137,10 +137,13 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
 			size := (compound.resolved_type.size_in_bytes + 7) & ~7;
+			compound_address := ir_register(next_register(compiler), IR_PTR);
 			ir_emit(function, ir_alloca(dst, xx size));
-			ir_emit(function, ir_param(dst));
-			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+			ir_emit(function, ir_address(compound_address, dst));
+			// These have to go backwards because
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
+			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+			ir_emit(function, ir_param(compound_address));
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
 			compile_initializer(compiler, compound.init, dst);
 			return dst;
@@ -176,6 +179,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				return dst;
 			}
 			assert(false, "We shouldnt try compling an lvalue unary that isnt a dereference");
+			return .{};
 		case Node_Call;
 			value := compile_expr(compiler, expr);
 			size := (expr.resolved_type.size_in_bytes + 7) & ~7;
@@ -186,6 +190,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			assert(false, "Compile LValue case not implemented");
 			return .{};
 	}
+	return .{};
 }
 
 compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
@@ -236,6 +241,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 						result = post;
 					}
 			}
+		case Node_Compound;
+			result = compile_lvalue(compiler, expr);
 		case Node_Sizeof_Type;
 			sizeof := expr.(*Node_Sizeof_Type);
 			dst := ir_constant(xx sizeof.target_type.size_in_bytes, operand_type(sizeof.target_type));
@@ -455,10 +462,19 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
-			address := compile_lvalue(compiler, assign.left);
-			value := compile_expr(compiler, assign.right);
-			ir_emit(function, ir_store(address, value));
-			result = value;
+			lhs := compile_lvalue(compiler, assign.left);
+			if assign.right.resolved_type.kind == .Composite {
+				rhs := compile_expr(compiler, assign.right);
+				size := assign.right.resolved_type.size_in_bytes;
+				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
+				ir_emit(function, ir_param(rhs));
+				ir_emit(function, ir_param(lhs));
+				ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
+			} else {
+				rhs := compile_expr(compiler, assign.right);
+				ir_emit(function, ir_store(lhs, rhs));
+			}
+			result = lhs;
 		case Node_Number;
 			number := expr.(*Node_Number);
 			type := operand_type(number.resolved_type);
@@ -531,8 +547,17 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 	function := compiler.current_function;
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
-		value := compile_expr(compiler, expr);
-		ir_emit(function, ir_store(dst, value));
+		if expr.resolved_type.kind == .Composite {
+			rhs := compile_expr(compiler, expr);
+			size := expr.resolved_type.size_in_bytes;
+			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
+			ir_emit(function, ir_param(rhs));
+			ir_emit(function, ir_param(dst));
+			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
+		} else {
+			value := compile_expr(compiler, expr);
+			ir_emit(function, ir_store(dst, value));
+		}
 	} else {
 		for init.(*Node_Designated_Initializer).designations {
 			member_address := dst;

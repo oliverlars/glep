@@ -46,10 +46,18 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 			if w2 != 0 emit(emitter, "movk x%, #%, lsl #32", scratch, w2);
 			if w3 != 0 emit(emitter, "movk x%, #%, lsl #48", scratch, w3);
 		}
-		return scratch_name(op.type, scratch);
+		dst := scratch_name(op.type, scratch);
+		if op.type.kind == .Float {
+			emit(emitter, "fmov %, x%", dst, scratch);
+		}
+		return dst;
 	}
 
-	if op.kind == .Register {
+	if info.is_alloca[op.register] {
+		offset := info.alloca_offsets[op.register];
+		emit(emitter, "add x%, sp, #%", scratch, offset);
+		return tprint("x%", scratch);
+	} else if op.kind == .Register {
 		offset := info.vreg_offsets[op.register];
 		name := scratch_name(op.type, scratch);
 		emit(emitter, "ldr %, [sp, #%]", name, offset);
@@ -63,10 +71,15 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 address_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch: int) -> string {
 	if op.kind == .None return "";
 
-	if op.kind == .Register {
+	if info.is_alloca[op.register] {
 		offset := info.alloca_offsets[op.register];
 		emit(emitter, "add x%, sp, #%", scratch, offset);
 		return tprint("x%", scratch);
+	} else {
+		offset := info.vreg_offsets[op.register];
+		name := scratch_name(op.type, scratch);
+		emit(emitter, "ldr %, [sp, #%]", name, offset);
+		return name;
 	}
 
 	return "";
