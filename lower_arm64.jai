@@ -56,6 +56,7 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 		return name;
 	}
 
+	assert(false, "How the frick");
 	return "";
 }
 
@@ -120,6 +121,12 @@ lower :: (emitter: *Emitter) {
 		stack_space := (alloca_size + vreg_spill_size + link_and_frame + 15) & ~15;
 		info.stack_space = stack_space;
 
+		// Prologue
+		emit(emitter, "sub sp, sp, #%", stack_space);
+		emit(emitter, "str x29, [sp, #%]", stack_space - link_and_frame);
+		emit(emitter, "str x30, [sp, #%]", stack_space - link_and_frame + 8);
+		emit(emitter, "add x29, sp, #%", stack_space - link_and_frame);
+
 
 		param_alloca_index := 0;
 		reg_int := 0;
@@ -135,12 +142,6 @@ lower :: (emitter: *Emitter) {
 				reg_int += 1;
 			}
 		}
-
-		// Prologue
-		emit(emitter, "sub sp, sp, #%", stack_space);
-		emit(emitter, "str x29, [sp, #%]", stack_space - link_and_frame);
-		emit(emitter, "str x30, [sp, #%]", stack_space - link_and_frame + 8);
-		emit(emitter, "add x29, sp, #%", stack_space - link_and_frame);
 
 		// Emit instructions
 		// Scratch registers: x9/w9 for dst, x10/w10 for a, x11/w11 for b
@@ -188,7 +189,7 @@ lower :: (emitter: *Emitter) {
 					while function.instructions[param_start - param_index].op == .Param {
 						param := function.instructions[param_start - param_index];
 						src := value_from_operand(emitter, param.a, info, 12);
-						emit(emitter, "str %, [sp, #%]", variadic_count*8);
+						emit(emitter, "str %, [sp, #%]", src, variadic_count*8);
 						param_index += 1;
 						variadic_count += 1;
 					}

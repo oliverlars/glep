@@ -401,7 +401,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
 
-			emit_struct_params :: (compiler: *Compiler, base: IR_Operand, _struct: *Node_Struct, layout: Struct_Layout) -> int {
+			emit_struct_params :: (compiler: *Compiler, base: IR_Operand, _struct: *Node_Struct, layout: Struct_Layout, args: *[..]IR_Operand) -> int {
 				function := compiler.current_function;
 				param_count := 0;
 				index := 0;
@@ -417,11 +417,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 						}
 
 						if member_type.kind == .Composite {
-							param_count += emit_struct_params(compiler, address, member_type.composite.(*Node_Struct), member_type.layout);
+							param_count += emit_struct_params(compiler, address, member_type.composite.(*Node_Struct), member_type.layout, args);
 						} else {
 							value := ir_register(next_register(compiler), operand_type(member_type));
 							ir_emit(function, ir_load(value, address));
-							ir_emit(function, ir_param(value));
+							array_add(args, value);
 							param_count += 1;
 						}
 						index += 1;
@@ -430,20 +430,32 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				return param_count;
 			}
 
-			param_count := 0;
+			_, decl := table_find(*compiler.ordinary, name);
+			source_function := function_declarator(decl.(*Node_Decl).declarators[0]);
+			source_param_count := source_function.params.count;
+
+			args: [..] IR_Operand;
+			non_variadic_expanded_param_count := 0;
 			for < call.args {
+				unreversed_index := call.args.count - 1 - it_index;
+				variadic := unreversed_index >= source_param_count;
 				if it.resolved_type.kind == .Composite {
 					address := compile_lvalue(compiler, it);
-					param_count += emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout);
+					param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
+					if !variadic then non_variadic_expanded_param_count += param_count;
 				} else {
 					arg := compile_expr(compiler, it);
-					ir_emit(function, ir_param(arg));
-					param_count += 1;
+					array_add(*args, arg);
+					if !variadic then non_variadic_expanded_param_count += 1;
 				}
+			}
+
+			for args {
+				ir_emit(function, ir_param(it));
 			}
 			
 			dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
-			ir_emit(function, ir_call(dst, name, xx param_count));
+			ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
 			result = dst;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
