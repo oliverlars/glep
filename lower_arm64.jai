@@ -226,6 +226,23 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "mov %, %", dst, a);
 					}
 					store_result(emitter, it.dst, info, 9);
+				
+				case .Or;
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
+					dst := scratch_name(it.dst.type, 9);
+					if it.a.type.kind == .Float {
+						emit(emitter, "fcmp %, %", a, b);
+						emit(emitter, "cset %, ls", dst);
+					} else {
+						emit(emitter, "cmp %, %", a, b);
+						if it.a.type.unsigned {
+							emit(emitter, "cset %, ls", dst);
+						} else {
+							emit(emitter, "cset %, le", dst);
+						}
+					}
+					store_result(emitter, it.dst, info, 9);
 
 				case .Lt;
 					a := value_from_operand(emitter, it.a, info, 10);
@@ -368,6 +385,10 @@ lower :: (emitter: *Emitter) {
 				case .Ifz;
 					a := value_from_operand(emitter, it.a, info, 10);
 					emit(emitter, "cbz %, %", a, it.b.label);
+				
+				case .If;
+					a := value_from_operand(emitter, it.a, info, 10);
+					emit(emitter, "cbnz %, %", a, it.b.label);
 
 				case .Return;
 					if it.a.kind != .None {

@@ -265,23 +265,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 				ir_emit(function, ir_label(end));
 			} else if binary.op.type == .PipePipe {
-				on_true := next_label(compiler);
 				end := next_label(compiler);
 
 				left := compile_expr(compiler, binary.left);
-				ir_emit(function, ir_if(left, on_true));
+				ir_emit(function, ir_ne(dst, left, ir_constant(0, left.type)));
+				ir_emit(function, ir_if(left, end));
 
 				right := compile_expr(compiler, binary.right);
-				ir_emit(function, ir_eq(dst, right, ir_constant(1, right.type)));
-				ir_emit(function, ir_goto(end));
-
-				ir_emit(function, ir_label(on_true));
-				ir_emit(function, ir_copy(dst, ir_constant(1, dst.type)));
-
-				ir_emit(function, ir_label(on_true));
-
-				ir_emit(function, ir_add(dst, left, right));
-
+				ir_emit(function, ir_ne(dst, right, ir_constant(0, right.type)));
 				ir_emit(function, ir_label(end));
 			} else {
 				left := compile_expr(compiler, binary.left);
@@ -372,18 +363,23 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			dst := ir_register(next_register(compiler), .{ .Integer, 8, true });
 			ir_emit(function, ir_address(dst, ir_label_operand(label)));
 			result = dst;
-		case Node_If;
-			_if := expr.(*Node_If);
-			cond := compile_expr(compiler, _if.cond);
+		case Node_Ternary;
+			ternary := expr.(*Node_Ternary);
 			on_false := next_label(compiler);
 			end := next_label(compiler);
 
+			dst := ir_register(next_register(compiler), operand_type(ternary.resolved_type));
+
+			cond := compile_expr(compiler, ternary.cond);
 			ir_emit(function, ir_ifz(cond, on_false));
-			compile_statement(compiler, _if.on_true);
+			expr_true := compile_expr(compiler, ternary.on_true);
+			ir_emit(function, ir_copy(dst, expr_true));
 			ir_emit(function, ir_goto(end));
 			ir_emit(function, ir_label(on_false));
-			compile_statement(compiler, _if.on_false);
+			expr_false := compile_expr(compiler, ternary.on_false);
+			ir_emit(function, ir_copy(dst, expr_false));
 			ir_emit(function, ir_label(end));
+			result = dst;
 		case Node_For;
 			_for := expr.(*Node_For);
 			start := next_label(compiler);
@@ -509,6 +505,17 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 		case Node_Return;
 			ret := ir_return(compile_expr(compiler, statement.(*Node_Return).expr));
 			ir_emit(function, ret);
+		case Node_If;
+			_if := statement.(*Node_If);
+			on_false := next_label(compiler);
+			end := next_label(compiler);
+			cond := compile_expr(compiler, _if.cond);
+			ir_emit(function, ir_ifz(cond, on_false));
+			compile_statement(compiler, _if.on_true);
+			ir_emit(function, ir_goto(end));
+			ir_emit(function, ir_label(on_false));
+			compile_statement(compiler, _if.on_false);
+			ir_emit(function, ir_label(end));
 		case Node_Block;
 			push_scope(compiler);
 			block := statement.(*Node_Block);
@@ -622,7 +629,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	pop_scope(compiler);
 
 	for value, key: compiler.strings {
-		ir_emit_global(*compiler.ir, tprint("str%", value), xx key, 8);
+		terminated_bytes := NewArray(key.count + 1, u8);
+		memcpy(terminated_bytes.data, key.data, key.count);
+		terminated_bytes[key.count] = 0;
+		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, 8);
 	}
 	
 }
