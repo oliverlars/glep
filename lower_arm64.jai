@@ -132,7 +132,20 @@ lower :: (emitter: *Emitter) {
 		info.alloca_offsets = NewArray(function.registers_needed, int);
 		info.vreg_offsets = NewArray(function.registers_needed, int);
 
-		alloca_size := 0;
+		number_of_params := 0;
+		number_of_args := 0;
+		for function.instructions {
+			if it.op == .Call {
+				number_of_params += it.b.constant.(int);
+			} else if it.op == .Param {
+				number_of_args += 1;
+			}
+		}
+
+		number_of_variadics := number_of_args - number_of_params;
+		assert(number_of_variadics >= 0);
+
+		alloca_size := number_of_variadics*8; // We want to start after the variadic scratch space
 		for function.instructions {
 			if it.op == .Alloca {
 				info.is_alloca[it.dst.register] = true;
@@ -149,7 +162,7 @@ lower :: (emitter: *Emitter) {
 
 		vreg_spill_size := function.registers_needed * 8;
 		link_and_frame := 16;
-		stack_space := (alloca_size + vreg_spill_size + link_and_frame + 15) & ~15;
+		stack_space := (alloca_size + vreg_spill_size + link_and_frame + number_of_variadics * 8 + 15) & ~15;
 		info.stack_space = stack_space;
 
 		// Prologue
