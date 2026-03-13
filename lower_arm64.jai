@@ -36,15 +36,15 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 		if op.type.size_in_bytes <= 4 {
 			emit(emitter, "movz w%, #%", scratch, op.constant & 0xFFFF);
 			high := (op.constant >> 16) & 0xFFFF;
-			if high != 0 emit(emitter, "movk w%, #%, lsl #16", scratch, high);
+			emit(emitter, "movk w%, #%, lsl #16", scratch, high);
 		} else {
 			emit(emitter, "movz x%, #%, lsl #0",  scratch, op.constant & 0xFFFF);
 			w1 := (op.constant >> 16) & 0xFFFF;
 			w2 := (op.constant >> 32) & 0xFFFF;
 			w3 := (op.constant >> 48) & 0xFFFF;
-			if w1 != 0 emit(emitter, "movk x%, #%, lsl #16", scratch, w1);
-			if w2 != 0 emit(emitter, "movk x%, #%, lsl #32", scratch, w2);
-			if w3 != 0 emit(emitter, "movk x%, #%, lsl #48", scratch, w3);
+			emit(emitter, "movk x%, #%, lsl #16", scratch, w1);
+			emit(emitter, "movk x%, #%, lsl #32", scratch, w2);
+			emit(emitter, "movk x%, #%, lsl #48", scratch, w3);
 		}
 		dst := scratch_name(op.type, scratch);
 		if op.type.kind == .Float {
@@ -62,26 +62,14 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 		name := scratch_name(op.type, scratch);
 		emit(emitter, "ldr %, [sp, #%]", name, offset);
 		return name;
+	} else if op.kind == .Label {
+		emit(emitter, "adrp x%, _%@PAGE", scratch, op.label);
+		emit(emitter, "add x%, x%, _%@PAGEOFF", scratch, scratch, op.label);
+		name := scratch_name(op.type, scratch);
+		return tprint("x%", scratch);
 	}
 
 	assert(false, "How the frick");
-	return "";
-}
-
-address_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch: int) -> string {
-	if op.kind == .None return "";
-
-	if info.is_alloca[op.register] {
-		offset := info.alloca_offsets[op.register];
-		emit(emitter, "add x%, sp, #%", scratch, offset);
-		return tprint("x%", scratch);
-	} else {
-		offset := info.vreg_offsets[op.register];
-		name := scratch_name(op.type, scratch);
-		emit(emitter, "ldr %, [sp, #%]", name, offset);
-		return name;
-	}
-
 	return "";
 }
 
@@ -102,6 +90,36 @@ register_name :: (op: IR_Operand, reg: int) -> string {
 	}
 	if op.type.size_in_bytes <= 4 return tprint("w%", reg);
 	return tprint("x%", reg);
+}
+
+lower_binary :: (emitter: *Emitter, it: IR_Instruction, info: Function_Info, op: string) {
+	a := value_from_operand(emitter, it.a, info, 10);
+	b := value_from_operand(emitter, it.b, info, 11);
+	dst := scratch_name(it.dst.type, 9);
+	if it.dst.type.kind == .Float {
+		emit(emitter, "f% %, %, %", op, dst, a, b);
+	} else {
+		emit(emitter, "% %, %, %", op, dst, a, b);
+	}
+	store_result(emitter, it.dst, info, 9);
+}
+
+lower_compare :: (emitter: *Emitter, it: IR_Instruction, info: Function_Info, op: string) {
+	a := value_from_operand(emitter, it.a, info, 10);
+	b := value_from_operand(emitter, it.b, info, 11);
+	dst := scratch_name(it.dst.type, 9);
+	if it.a.type.kind == .Float {
+		emit(emitter, "fcmp %, %", a, b);
+		emit(emitter, "cset %, ls", dst);
+	} else {
+		emit(emitter, "cmp %, %", a, b);
+		if it.a.type.unsigned {
+			emit(emitter, "cset %, ls", dst);
+		} else {
+			emit(emitter, "cset %, le", dst);
+		}
+	}
+	store_result(emitter, it.dst, info, 9);
 }
 
 lower :: (emitter: *Emitter) {
@@ -141,21 +159,6 @@ lower :: (emitter: *Emitter) {
 		emit(emitter, "add x29, sp, #%", stack_space - link_and_frame);
 
 
-		param_alloca_index := 0;
-		reg_int := 0;
-		reg_float := 0;
-		for i: 0..function.params.count-1 {
-			alloca_inst := function.instructions[i];
-			offset := info.alloca_offsets[alloca_inst.dst.register];
-			if function.params[i].kind == .Float {
-				emit(emitter, "str d%, [sp, #%]", reg_float, offset);
-				reg_float += 1;
-			} else {
-				emit(emitter, "str x%, [sp, #%]", reg_int, offset);
-				reg_int += 1;
-			}
-		}
-
 		// Emit instructions
 		// Scratch registers: x9/w9 for dst, x10/w10 for a, x11/w11 for b
 		for function.instructions {
@@ -163,6 +166,25 @@ lower :: (emitter: *Emitter) {
 			if it.op == .Alloca then continue;
 
 			if it.op == {
+				case .LoadParam;
+					param_n := it.a.constant.(int);
+					int_count := 0;
+					float_count := 0;
+					for i: 0..param_n-1 {
+						if function.params[i].kind == .Float {
+							float_count += 1;
+						} else {
+							int_count += 1;
+						}
+					}
+					dst := scratch_name(it.dst.type, 9);
+					if function.params[param_n].kind == .Float {
+						emit(emitter, "fmov %, d%", dst, float_count);
+					} else {
+						emit(emitter, "mov %, %", dst, register_name(it.dst, int_count));
+					}
+					store_result(emitter, it.dst, info, 9);
+
 				case .Address;
 					dst := scratch_name(it.dst.type, 9);
 					if it.a.kind == .Label {
@@ -220,13 +242,13 @@ lower :: (emitter: *Emitter) {
 					}
 
 				case .Load;
-					a := address_from_operand(emitter, it.a, info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
 					emit(emitter, "ldr %, [%]", dst, a);
 					store_result(emitter, it.dst, info, 9);
 
 				case .Store;
-					a := address_from_operand(emitter, it.a, info, 10);
+					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
 					emit(emitter, "str %, [%]", b, a);
 
@@ -314,40 +336,6 @@ lower :: (emitter: *Emitter) {
 					}
 					emit(emitter, "cset %, ne", dst);
 					store_result(emitter, it.dst, info, 9);
-
-				case .Add;
-					a := value_from_operand(emitter, it.a, info, 10);
-					b := value_from_operand(emitter, it.b, info, 11);
-					dst := scratch_name(it.dst.type, 9);
-					if it.dst.type.kind == .Float {
-						emit(emitter, "fadd %, %, %", dst, a, b);
-					} else {
-						emit(emitter, "add %, %, %", dst, a, b);
-					}
-					store_result(emitter, it.dst, info, 9);
-
-				case .Sub;
-					a := value_from_operand(emitter, it.a, info, 10);
-					b := value_from_operand(emitter, it.b, info, 11);
-					dst := scratch_name(it.dst.type, 9);
-					if it.dst.type.kind == .Float {
-						emit(emitter, "fsub %, %, %", dst, a, b);
-					} else {
-						emit(emitter, "sub %, %, %", dst, a, b);
-					}
-					store_result(emitter, it.dst, info, 9);
-
-				case .Mul;
-					a := value_from_operand(emitter, it.a, info, 10);
-					b := value_from_operand(emitter, it.b, info, 11);
-					dst := scratch_name(it.dst.type, 9);
-					if it.dst.type.kind == .Float {
-						emit(emitter, "fmul %, %, %", dst, a, b);
-					} else {
-						emit(emitter, "mul %, %, %", dst, a, b);
-					}
-					store_result(emitter, it.dst, info, 9);
-
 				case .Div;
 					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
@@ -360,7 +348,6 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "sdiv %, %, %", dst, a, b);
 					}
 					store_result(emitter, it.dst, info, 9);
-
 				case .Mod;
 					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
@@ -372,16 +359,14 @@ lower :: (emitter: *Emitter) {
 					}
 					emit(emitter, "msub %, %, %, %", dst, dst, b, a);
 					store_result(emitter, it.dst, info, 9);
-
+				case .Add;
+					lower_binary(emitter, it, info, "add");
+				case .Sub;
+					lower_binary(emitter, it, info, "sub");
+				case .Mul;
+					lower_binary(emitter, it, info, "mul");
 				case .Neg;
-					a := value_from_operand(emitter, it.a, info, 10);
-					dst := scratch_name(it.dst.type, 9);
-					if it.dst.type.kind == .Float {
-						emit(emitter, "fneg %, %", dst, a);
-					} else {
-						emit(emitter, "neg %, %", dst, a);
-					}
-					store_result(emitter, it.dst, info, 9);
+					lower_binary(emitter, it, info, "neg");
 
 				case .Not;
 					a := value_from_operand(emitter, it.a, info, 10);
@@ -460,9 +445,15 @@ lower :: (emitter: *Emitter) {
 					store_result(emitter, it.dst, info, 9);
 			}
 		}
+		// Incase we don't specify a return statement for `void`
+		emit(emitter, "ldr x29, [sp, #%]", stack_space - link_and_frame);
+		emit(emitter, "ldr x30, [sp, #%]", stack_space - link_and_frame + 8);
+		emit(emitter, "add sp, sp, #%", stack_space);
+		emit(emitter, "ret");
 	}
 
 	for emitter.ir.globals {
+		emit(emitter, ".p2align %", it.alignment);
 		emit(emitter, "_%:", it.name);
 		for byte: it.bytes {
 			emit(emitter, ".byte %", byte);

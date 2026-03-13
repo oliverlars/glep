@@ -20,9 +20,7 @@ IR_Operator :: enum {
 	Ne;
 	Copy;
 	Cast;
-	SpillLoad;
 	Load;
-	SpillStore;
 	Store;
 	Address;
 	Label;
@@ -30,6 +28,7 @@ IR_Operator :: enum {
 	If;
 	Ifz;
 	Param;
+	LoadParam;
 	Call;
 	Alloca;
 	Return;
@@ -244,6 +243,10 @@ ir_ifz :: (cond: IR_Operand, name: string) -> IR_Instruction {
 
 ir_param :: (a: IR_Operand) -> IR_Instruction {
 	return .{ .Param, .{}, a, .{} };
+}
+
+ir_load_param :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .LoadParam, dst, a, .{}};
 }
 
 ir_call :: (dst: IR_Operand, func: string, arg_count: u64) -> IR_Instruction {

@@ -492,21 +492,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Decl;
 			decl := expr.(*Node_Decl);
-			compile_decl(compiler, decl);
+			for decl.declarators {
+				compile_declarator(compiler, it);
+			}
 	}
 	return result;
 }
 
-compile_decl :: (compiler: *Compiler, decl: *Node_Decl) {
+compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Binding {
 	function := compiler.current_function;
-	for decl.declarators {
-		name := identifier_from_declarator(it);
+	name := identifier_from_declarator(declarator);
 
-		slot := ir_register(next_register(compiler), IR_PTR);
-		ir_emit(function, ir_alloca(slot, xx it.resolved_type.size_in_bytes));
-		binding := bind_decl(compiler, name, slot, it.resolved_type);
-		compile_initializer(compiler, it.init, slot);
-	}
+	slot := ir_register(next_register(compiler), IR_PTR);
+	ir_emit(function, ir_alloca(slot, xx declarator.resolved_type.size_in_bytes));
+	binding := bind_decl(compiler, name, slot, declarator.resolved_type);
+	compile_initializer(compiler, declarator.init, slot);
+	return binding;
 }
 
 compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
@@ -515,7 +516,9 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 	if statement.statement_type == {
 		case Node_Decl_Statement;
 			decl := statement.(*Node_Decl_Statement).decl;
-			compile_decl(compiler, decl);
+			for decl.declarators {
+				compile_declarator(compiler, it);
+			}
 		case Node_Expr_Statement;
 			compile_expr(compiler, statement.(*Node_Expr_Statement).expr);
 		case Node_Return;
@@ -594,6 +597,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 	}
 	bytes := NewArray(size_in_bytes, u8);
 	compile_global_initializer(compiler, init, bytes);
+	print("BYTES: %\n", cast,force([]float64)bytes);
 	return bytes;
 }
 
@@ -628,28 +632,64 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 				}
 
+				emit_struct_load_params :: (compiler: *Compiler, function: *IR_Function, _struct: *Node_Struct, layout: Struct_Layout, base: IR_Operand, param_index: int) -> int {
+					index := 0;
+					for _struct.members {
+						for declarator: it.declarators {
+							member_type := declarator.resolved_type;
+							offset := layout.members[index].offset;
+
+							if member_type.kind == .Composite {
+								member_base := base;
+								member_base = ir_register(next_register(compiler), IR_PTR);
+								ir_emit(function, ir_add(member_base, base, ir_constant(xx offset, IR_U64)));
+								param_index = emit_struct_load_params(compiler, function, member_type.composite.(*Node_Struct), member_type.layout, member_base, param_index);
+							} else {
+								dst := ir_register(next_register(compiler), operand_type(member_type));
+								ir_emit(function, ir_load_param(dst, ir_constant(xx param_index, IR_U64)));
+								address := base;
+								address = ir_register(next_register(compiler), IR_PTR);
+								ir_emit(function, ir_add(address, base, ir_constant(xx offset, IR_U64)));
+								ir_emit(function, ir_store(address, dst));
+								param_index += 1;
+							}
+							index += 1;
+						}
+					}
+					return param_index;
+				}
+
+				param_index := 0;
 				for function.params {
-					compile_decl(compiler, it);
+					binding := compile_declarator(compiler, it.declarators[0]);
 					param_type := it.declarators[0].resolved_type;
 					if param_type.kind == .Composite {
-						append_struct_params(param_type.composite.(*Node_Struct), param_type.layout, *ir_function.params);
+						_struct := param_type.composite.(*Node_Struct);
+						param_index = emit_struct_load_params(compiler, *ir_function, _struct, param_type.layout, binding.slot, param_index);
+						append_struct_params(_struct, param_type.layout, *ir_function.params);
 					} else {
 						array_add(*ir_function.params, operand_type(param_type));
-					}
-
-					ret_type := declarator.resolved_type;
-					if ret_type.kind == .Composite {
-						append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *ir_function.results);
-					} else {
-						array_add(*ir_function.results, operand_type(ret_type));
+						dst := ir_register(next_register(compiler), operand_type(param_type));
+						ir_emit(*ir_function, ir_load_param(dst, ir_constant(xx param_index, IR_U64)));
+						ir_emit(*ir_function, ir_store(binding.slot, dst));
+						param_index += 1;
 					}
 				}
+
+				ret_type := declarator.resolved_type;
+				if ret_type.kind == .Composite {
+					append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *ir_function.results);
+				} else {
+					array_add(*ir_function.results, operand_type(ret_type));
+				}
+
 				compile_statement(compiler, decl.body);
 				ir_function.registers_needed = compiler.registers_needed;
 				array_add(*compiler.ir.functions, ir_function);
 			} else if is_variable_declaration(decl, declarator) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
 				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type.size_in_bytes);
+				print("BYTES 2: %\n\n", cast,force([]float64)bytes);
 				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
 			}
 		}
@@ -660,7 +700,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 		terminated_bytes := NewArray(key.count + 1, u8);
 		memcpy(terminated_bytes.data, key.data, key.count);
 		terminated_bytes[key.count] = 0;
-		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, 8);
+		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, 1);
 	}
 	
 }

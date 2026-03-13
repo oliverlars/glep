@@ -870,6 +870,8 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 			}
 			if !types_equal(target, expr_type) {
 				init.(*Node_Scalar_Initializer).expr = insert_cast(tc, scalar, target);
+			} else {
+				init.(*Node_Scalar_Initializer).expr.resolved_type = target;
 			}
 	}
 	return target;
