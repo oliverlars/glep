@@ -818,7 +818,7 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
 	if !init return null;
 
-if init.initializer_type == {
+	if init.initializer_type == {
 		case Node_Designated_Initializer;
 			index := 0;
 			designations := init.(*Node_Designated_Initializer).designations;
@@ -871,7 +871,6 @@ if init.initializer_type == {
 			if !types_equal(target, expr_type) {
 				init.(*Node_Scalar_Initializer).expr = insert_cast(tc, scalar, target);
 			}
-			init.(*Node_Scalar_Initializer).expr.resolved_type = target;
 	}
 	return target;
 }

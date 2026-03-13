@@ -578,7 +578,12 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
 			value := eval_constant_expr(expr);
-			memcpy(bytes.data + byte_offset, *value.as_u64, expr.resolved_type.size_in_bytes);
+			if expr.resolved_type.kind == .Floating && expr.resolved_type.size_in_bytes == 4 {
+				f32_val := cast(float32) value.as_f64;
+				memcpy(bytes.data + byte_offset, *f32_val, 4);
+			} else {
+				memcpy(bytes.data + byte_offset, *value.as_u64, expr.resolved_type.size_in_bytes);
+			}
 			return byte_offset + expr.resolved_type.size_in_bytes;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
@@ -588,9 +593,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 		return byte_offset;
 	}
 	bytes := NewArray(size_in_bytes, u8);
-	
 	compile_global_initializer(compiler, init, bytes);
-
 	return bytes;
 }
 
