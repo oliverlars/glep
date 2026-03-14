@@ -654,6 +654,11 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
+			info := New(Resolved_Type);
+			info.size_in_bytes = 8;
+			info.kind = .Integral;
+			info.unsigned = true;
+			array_access.index = insert_cast(tc, array_access.index, info);
 			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner, true;
 		case Node_Identifier;

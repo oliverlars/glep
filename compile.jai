@@ -352,7 +352,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 
 			dst := ir_register(next_register(compiler), array.type);
-			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
+			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, index.type)));
 			ir_emit(function, ir_add(dst, array, index));
 			result = dst;
 		case Node_Char;
