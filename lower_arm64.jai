@@ -212,13 +212,13 @@ lower :: (emitter: *Emitter) {
 
 				case .Call;
 					param_count := it.b.constant.(int);
-					param_start := it_index-1;
-					param_end := param_start - param_count;
+					param_start := it_index + 1;
+					param_end := param_start + param_count;
 					reg_int := 0;
 					reg_float := 0;
 					param_index := 0;
-					for 0..param_count-1 {
-						param := function.instructions[param_start - param_index];
+					for param_start..param_end-1 {
+						param := function.instructions[it];
 						// Materialise param value into x12/w12 as temp scratch
 						src := value_from_operand(emitter, param.a, info, 12);
 						if param.a.type.kind == .Float {
@@ -234,8 +234,9 @@ lower :: (emitter: *Emitter) {
 
 					// Assume any more Param instructions are now variadic
 					variadic_count := 0;
-					while function.instructions[param_start - param_index].op == .Param {
-						param := function.instructions[param_start - param_index];
+					while param_end + variadic_count < function.instructions.count &&
+						  function.instructions[param_end + variadic_count].op == .Param {
+						param := function.instructions[param_end + variadic_count];
 						src := value_from_operand(emitter, param.a, info, 12);
 						emit(emitter, "str %, [sp, #%]", src, variadic_count*8);
 						param_index += 1;
@@ -253,7 +254,7 @@ lower :: (emitter: *Emitter) {
 						}
 						store_result(emitter, it.dst, info, 9);
 					}
-
+					it_index += param_index;
 				case .Load;
 					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);

@@ -439,9 +439,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 			args: [..] IR_Operand;
 			non_variadic_expanded_param_count := 0;
-			for < call.args {
-				unreversed_index := call.args.count - 1 - it_index;
-				variadic := unreversed_index >= source_param_count;
+			for call.args {
+				variadic := it_index >= source_param_count;
 				if it.resolved_type.kind == .Composite {
 					address := compile_lvalue(compiler, it);
 					param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
@@ -453,12 +452,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				}
 			}
 
+			dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
+			ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+
 			for args {
 				ir_emit(function, ir_param(it));
 			}
-			
-			dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
-			ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+
 			result = dst;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
