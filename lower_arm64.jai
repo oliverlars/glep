@@ -20,6 +20,21 @@ emit :: (emitter: *Emitter, fmt: string, args: ..Any) {
 	append(*emitter.builder, "\n");
 }
 
+sp_offset :: (emitter: *Emitter, scratch: int, offset: int) -> string {
+	reg := tprint("x%", scratch);
+	if offset <= 4095 {
+		emit(emitter, "add %, sp, #%", reg, offset);
+	} else {
+		v := offset.(u64);
+		emit(emitter, "movz %, #%, lsl #0", reg, v & 0xFFFF);
+		if v > 0xFFFF     emit(emitter, "movk %, #%, lsl #16", reg, (v >> 16) & 0xFFFF);
+		if v > 0xFFFFFFFF emit(emitter, "movk %, #%, lsl #32", reg, (v >> 32) & 0xFFFF);
+		if v > 0xFFFFFFFFFFFF emit(emitter, "movk %, #%, lsl #48", reg, (v >> 48) & 0xFFFF);
+		emit(emitter, "add %, sp, %", reg, reg);
+	}
+	return reg;
+}
+
 scratch_name :: (type: IR_Operand_Type, scratch: int) -> string {
 	if type.kind == .Float {
 		if type.size_in_bytes == 4 return tprint("s%", scratch);
@@ -55,12 +70,12 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 
 	if info.is_alloca[op.register] {
 		offset := info.alloca_offsets[op.register];
-		emit(emitter, "add x%, sp, #%", scratch, offset);
-		return tprint("x%", scratch);
+		return sp_offset(emitter, scratch, offset);
 	} else if op.kind == .Register {
 		offset := info.vreg_offsets[op.register];
+		base := sp_offset(emitter, scratch, offset);
 		name := scratch_name(op.type, scratch);
-		emit(emitter, "ldr %, [sp, #%]", name, offset);
+		emit(emitter, "ldr %, [%]", name, base);
 		return name;
 	} else if op.kind == .Label {
 		emit(emitter, "adrp x%, _%@PAGE", scratch, op.label);
@@ -80,7 +95,8 @@ store_result :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, scratch
 	if info.is_alloca[op.register] return;
 	name := scratch_name(op.type, scratch);
 	offset := info.vreg_offsets[op.register];
-	emit(emitter, "str %, [sp, #%]", name, offset);
+	base := sp_offset(emitter, 12, offset);
+	emit(emitter, "str %, [%]", name, base);
 }
 
 register_name :: (op: IR_Operand, reg: int) -> string {
@@ -166,10 +182,16 @@ lower :: (emitter: *Emitter) {
 		info.stack_space = stack_space;
 
 		// Prologue
-		emit(emitter, "sub sp, sp, #%", stack_space);
-		emit(emitter, "str x29, [sp, #%]", stack_space - link_and_frame);
-		emit(emitter, "str x30, [sp, #%]", stack_space - link_and_frame + 8);
-		emit(emitter, "add x29, sp, #%", stack_space - link_and_frame);
+		if stack_space <= 4095 {
+			emit(emitter, "sub sp, sp, #%", stack_space);
+		} else {
+			sp_offset(emitter, 9, stack_space);
+			emit(emitter, "sub sp, sp, x9");
+		}
+		base := sp_offset(emitter, 9, stack_space - link_and_frame);
+		emit(emitter, "str x29, [%]", base);
+		emit(emitter, "str x30, [%, #8]", base);
+		emit(emitter, "mov x29, %", base);
 
 
 		// Emit instructions
@@ -192,7 +214,11 @@ lower :: (emitter: *Emitter) {
 					}
 					dst := scratch_name(it.dst.type, 9);
 					if function.params[param_n].kind == .Float {
-						emit(emitter, "fmov %, d%", dst, float_count);
+						if function.params[param_n].size_in_bytes == 4 {
+							emit(emitter, "fcvt %, d%", dst, float_count);
+						} else {
+							emit(emitter, "fmov %, d%", dst, float_count);
+						}
 					} else {
 						emit(emitter, "mov %, %", dst, register_name(it.dst, int_count));
 					}
@@ -206,7 +232,7 @@ lower :: (emitter: *Emitter) {
 					} else if it.a.kind == .Register {
 						// Address of an alloca vreg
 						offset := info.alloca_offsets[it.a.register];
-						emit(emitter, "add x9, sp, #%", offset);
+						sp_offset(emitter, 9, offset);
 					}
 					store_result(emitter, it.dst, info, 9);
 
@@ -238,7 +264,8 @@ lower :: (emitter: *Emitter) {
 						  function.instructions[param_end + variadic_count].op == .Param {
 						param := function.instructions[param_end + variadic_count];
 						src := value_from_operand(emitter, param.a, info, 12);
-						emit(emitter, "str %, [sp, #%]", src, variadic_count*8);
+						base := sp_offset(emitter, 9, variadic_count*8);
+						emit(emitter, "str %, [%]", src, base);
 						param_index += 1;
 						variadic_count += 1;
 					}
@@ -412,9 +439,15 @@ lower :: (emitter: *Emitter) {
 						}
 					}
 					// Epilogue
-					emit(emitter, "ldr x29, [sp, #%]", stack_space - link_and_frame);
-					emit(emitter, "ldr x30, [sp, #%]", stack_space - link_and_frame + 8);
-					emit(emitter, "add sp, sp, #%", stack_space);
+					base := sp_offset(emitter, 9, stack_space - link_and_frame);
+					emit(emitter, "ldr x29, [%]", base);
+					emit(emitter, "ldr x30, [%, #8]", base);
+					if stack_space <= 4095 {
+						emit(emitter, "add sp, sp, #%", stack_space);
+					} else {
+						sp_offset(emitter, 9, stack_space);
+						emit(emitter, "add sp, sp, x9");
+					}
 					emit(emitter, "ret");
 
 				case .Cast;
@@ -460,9 +493,15 @@ lower :: (emitter: *Emitter) {
 			}
 		}
 		// Incase we don't specify a return statement for `void`
-		emit(emitter, "ldr x29, [sp, #%]", stack_space - link_and_frame);
-		emit(emitter, "ldr x30, [sp, #%]", stack_space - link_and_frame + 8);
-		emit(emitter, "add sp, sp, #%", stack_space);
+		base := sp_offset(emitter, 9, stack_space - link_and_frame);
+		emit(emitter, "ldr x29, [%]", base);
+		emit(emitter, "ldr x30, [%, #8]", base);
+		if stack_space <= 4095 {
+			emit(emitter, "add sp, sp, #%", stack_space);
+		} else {
+			sp_offset(emitter, 9, stack_space);
+			emit(emitter, "add sp, sp, x9");
+		}
 		emit(emitter, "ret");
 	}
 
