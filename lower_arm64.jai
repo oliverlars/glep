@@ -493,9 +493,9 @@ lower :: (emitter: *Emitter) {
 			}
 		}
 		// Incase we don't specify a return statement for `void`
-		base := sp_offset(emitter, 9, stack_space - link_and_frame);
-		emit(emitter, "ldr x29, [%]", base);
-		emit(emitter, "ldr x30, [%, #8]", base);
+		epilogue_base := sp_offset(emitter, 9, stack_space - link_and_frame);
+		emit(emitter, "ldr x29, [%]", epilogue_base);
+		emit(emitter, "ldr x30, [%, #8]", epilogue_base);
 		if stack_space <= 4095 {
 			emit(emitter, "add sp, sp, #%", stack_space);
 		} else {

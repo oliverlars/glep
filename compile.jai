@@ -150,9 +150,11 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
 			binding := find_binding(compiler, id.id.view);
-			dst = binding.slot;
 			if binding.slot.kind == .Label {
 				ir_emit(function, ir_address(dst, binding.slot));
+			} else {
+				dst = binding.slot;
+				dst.type = IR_PTR;
 			}
 			return dst;
 		case Node_Member_Access;
