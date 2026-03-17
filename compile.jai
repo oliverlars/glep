@@ -146,6 +146,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_param(compound_address));
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
 			compile_initializer(compiler, compound.init, dst);
+			dst = compound_address;
 			return dst;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);

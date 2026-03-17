@@ -407,7 +407,10 @@ lower :: (emitter: *Emitter) {
 				case .Mul;
 					lower_binary(emitter, it, info, "mul");
 				case .Neg;
-					lower_binary(emitter, it, info, "neg");
+					a := value_from_operand(emitter, it.a, info, 10);
+					dst := scratch_name(it.dst.type, 9);
+					emit(emitter, "neg %, %", dst, a);
+					store_result(emitter, it.dst, info, 9);
 
 				case .Not;
 					a := value_from_operand(emitter, it.a, info, 10);

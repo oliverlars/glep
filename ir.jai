@@ -146,6 +146,7 @@ ir_label :: (name: string) -> IR_Instruction {
 }
 
 ir_add :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	assert(a.type.kind == b.type.kind);
 	return .{ .Add, dst, a, b };
 }
 
