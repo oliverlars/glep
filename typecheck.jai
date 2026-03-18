@@ -635,6 +635,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 			member_access.left.resolved_type = resolve_expr(tc, member_access.left);
+			assert(member_access.left.resolved_type.kind != .Floating);
 			left_type := member_access.left.resolved_type;
 			id := member_access.right.view;
 			if left_type.composite == null {

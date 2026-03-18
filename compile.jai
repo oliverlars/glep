@@ -75,8 +75,8 @@ is_function_declaration :: (declarator: *Node_Declarator) -> bool {
 
 find_binding :: (compiler: *Compiler, name: string) -> Binding, bool {
 	is_global := 0;
-	for < compiler.scopes {
-		for it.bindings {
+	for < scope: compiler.scopes {
+		for < scope.bindings {
 			if it.name == name return it, it_index == 0;
 		}
 	}
@@ -331,8 +331,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				address = ir_register(next_register(compiler), IR_PTR);
 				ir_emit(function, ir_address(address, binding.slot));
 			}
-			dst := ir_register(next_register(compiler), operand_type(binding.resolved_type));
-			ir_emit(function, ir_load(dst, address));
+			dst: IR_Operand;
+			if binding.resolved_type.kind == .Composite {
+				dst = ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_copy(dst, binding.slot));
+			} else {
+				dst = ir_register(next_register(compiler), operand_type(binding.resolved_type));
+				ir_emit(function, ir_load(dst, address));
+			}
 			result = dst;
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
@@ -508,6 +514,10 @@ compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Bin
 
 	slot := ir_register(next_register(compiler), IR_PTR);
 	ir_emit(function, ir_alloca(slot, xx declarator.resolved_type.size_in_bytes));
+	print("TYPE: % | RT: %\n", name, declarator.resolved_type.*);
+	if name == "s" {
+		a := 5;
+	}
 	binding := bind_decl(compiler, name, slot, declarator.resolved_type);
 	compile_initializer(compiler, declarator.init, slot);
 	return binding;
