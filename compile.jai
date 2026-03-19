@@ -56,7 +56,7 @@ bind_decl :: (compiler: *Compiler, name: string, slot: IR_Operand, rt: *Resolved
 
 next_label :: (compiler: *Compiler) -> string {
 	defer compiler.label_counter += 1;
-	return tprint("l%", compiler.label_counter);
+	return tprint("Lbl%", compiler.label_counter);
 }
 
 is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
@@ -140,11 +140,10 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			compound_address := ir_register(next_register(compiler), IR_PTR);
 			ir_emit(function, ir_alloca(dst, xx size));
 			ir_emit(function, ir_address(compound_address, dst));
-			// These have to go backwards because
+			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
 			ir_emit(function, ir_param(compound_address));
-			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
 			compile_initializer(compiler, compound.init, dst);
 			dst = compound_address;
 			return dst;
@@ -221,7 +220,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					result = dst;
 				case .Asterisk;
 					value := compile_expr(compiler, unary.expr);
-					dst := ir_register(next_register(compiler), value.type);
+					dst := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type.inner));
 					ir_emit(function, ir_load(dst, value));
 					result = dst;
 				case .PlusPlus;
@@ -285,7 +284,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_ne(dst, right, ir_constant(0, right.type)));
 				ir_emit(function, ir_label(end));
 			} else {
+				if binary.op.type == .Less {
+					a := 5;
+				}
 				left := compile_expr(compiler, binary.left);
+				if left.register == 11 {
+					a := 5;
+				}
 				right := compile_expr(compiler, binary.right);
 				if binary.op.type == {
 					case .Plus;
@@ -297,6 +302,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					case .ForwardSlash;
 						ir_emit(function, ir_div(dst, left, right));
 					case .Less;
+						assert(left.type.kind == right.type.kind);
 						ir_emit(function, ir_lt(dst, left, right));
 					case .Greater;
 						ir_emit(function, ir_lt(dst, right, left));
@@ -475,10 +481,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			if assign.right.resolved_type.kind == .Composite {
 				rhs := compile_expr(compiler, assign.right);
 				size := assign.right.resolved_type.size_in_bytes;
+				ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 				ir_emit(function, ir_param(rhs));
 				ir_emit(function, ir_param(lhs));
-				ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 			} else {
 				rhs := compile_expr(compiler, assign.right);
 				ir_emit(function, ir_store(lhs, rhs));
@@ -543,7 +549,9 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			end := next_label(compiler);
 			cond := compile_expr(compiler, _if.cond);
 			ir_emit(function, ir_ifz(cond, on_false));
+			before := function.instructions.count;
 			compile_statement(compiler, _if.on_true);
+			after := function.instructions.count;
 			ir_emit(function, ir_goto(end));
 			ir_emit(function, ir_label(on_false));
 			compile_statement(compiler, _if.on_false);
@@ -566,10 +574,10 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 		if expr.resolved_type.kind == .Composite {
 			rhs := compile_expr(compiler, expr);
 			size := expr.resolved_type.size_in_bytes;
+			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			ir_emit(function, ir_param(rhs));
 			ir_emit(function, ir_param(dst));
-			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 		} else {
 			value := compile_expr(compiler, expr);
 			ir_emit(function, ir_store(dst, value));

@@ -251,8 +251,12 @@ lower :: (emitter: *Emitter) {
 							emit(emitter, "fmov %, %", register_name(param.a, reg_float), src);
 							reg_float += 1;
 						} else {
-							reg_dst := register_name(param.a, reg_int);
-							emit(emitter, "mov %, %", reg_dst, src);
+							is_address := param.a.kind == .Label || (param.a.kind == .Register && info.is_alloca[param.a.register]);
+							if is_address {
+								emit(emitter, "mov x%, %", reg_int, src);
+							} else {
+								emit(emitter, "mov %, %", register_name(param.a, reg_int), src);
+							}
 							reg_int += 1;
 						}
 						param_index += 1;
@@ -299,6 +303,7 @@ lower :: (emitter: *Emitter) {
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fmov %, %", dst, a);
 					} else {
+
 						emit(emitter, "mov %, %", dst, a);
 					}
 					store_result(emitter, it.dst, info, 9);
@@ -321,6 +326,7 @@ lower :: (emitter: *Emitter) {
 					store_result(emitter, it.dst, info, 9);
 
 				case .Lt;
+					assert(it.a.type.kind == it.b.type.kind);
 					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
@@ -427,7 +433,7 @@ lower :: (emitter: *Emitter) {
 				case .Ifz;
 					a := value_from_operand(emitter, it.a, info, 10);
 					emit(emitter, "cbz %, %", a, it.b.label);
-				
+
 				case .If;
 					a := value_from_operand(emitter, it.a, info, 10);
 					emit(emitter, "cbnz %, %", a, it.b.label);
