@@ -75,7 +75,13 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 		offset := info.vreg_offsets[op.register];
 		base := sp_offset(emitter, scratch, offset);
 		name := scratch_name(op.type, scratch);
-		emit(emitter, "ldr %, [%]", name, base);
+		if op.type.size_in_bytes == 1 {
+			emit(emitter, "ldrb %, [%]", name, base);
+		} else if op.type.size_in_bytes == 2 {
+			emit(emitter, "ldrh %, [%]", name, base);
+		} else if op.type.size_in_bytes >= 4 {
+			emit(emitter, "ldr %, [%]", name, base);
+		}
 		return name;
 	} else if op.kind == .Label {
 		emit(emitter, "adrp x%, _%@PAGE", scratch, op.label);

@@ -56,7 +56,7 @@ bind_decl :: (compiler: *Compiler, name: string, slot: IR_Operand, rt: *Resolved
 
 next_label :: (compiler: *Compiler) -> string {
 	defer compiler.label_counter += 1;
-	return tprint("Lbl%", compiler.label_counter);
+	return tprint("l%", compiler.label_counter);
 }
 
 is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
@@ -141,9 +141,10 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_alloca(dst, xx size));
 			ir_emit(function, ir_address(compound_address, dst));
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
-			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
-			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
 			ir_emit(function, ir_param(compound_address));
+			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
+
 			compile_initializer(compiler, compound.init, dst);
 			dst = compound_address;
 			return dst;
@@ -482,9 +483,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				rhs := compile_expr(compiler, assign.right);
 				size := assign.right.resolved_type.size_in_bytes;
 				ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
-				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
-				ir_emit(function, ir_param(rhs));
 				ir_emit(function, ir_param(lhs));
+				ir_emit(function, ir_param(rhs));
+				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			} else {
 				rhs := compile_expr(compiler, assign.right);
 				ir_emit(function, ir_store(lhs, rhs));
@@ -575,9 +576,10 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 			rhs := compile_expr(compiler, expr);
 			size := expr.resolved_type.size_in_bytes;
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
-			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
-			ir_emit(function, ir_param(rhs));
 			ir_emit(function, ir_param(dst));
+			ir_emit(function, ir_param(rhs));
+			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
+
 		} else {
 			value := compile_expr(compiler, expr);
 			ir_emit(function, ir_store(dst, value));
