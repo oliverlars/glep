@@ -191,7 +191,11 @@ lower :: (emitter: *Emitter) {
 		if stack_space <= 4095 {
 			emit(emitter, "sub sp, sp, #%", stack_space);
 		} else {
-			sp_offset(emitter, 9, stack_space);
+			v := stack_space.(u64);
+			emit(emitter, "movz x9, #%, lsl #0", v & 0xFFFF);
+			if v > 0xFFFF     emit(emitter, "movk x9, #%, lsl #16", (v >> 16) & 0xFFFF);
+			if v > 0xFFFFFFFF emit(emitter, "movk x9, #%, lsl #32", (v >> 32) & 0xFFFF);
+			if v > 0xFFFFFFFFFFFF emit(emitter, "movk x9, #%, lsl #48", (v >> 48) & 0xFFFF);
 			emit(emitter, "sub sp, sp, x9");
 		}
 		base := sp_offset(emitter, 9, stack_space - link_and_frame);
@@ -309,7 +313,6 @@ lower :: (emitter: *Emitter) {
 					if it.dst.type.kind == .Float {
 						emit(emitter, "fmov %, %", dst, a);
 					} else {
-
 						emit(emitter, "mov %, %", dst, a);
 					}
 					store_result(emitter, it.dst, info, 9);
@@ -332,7 +335,6 @@ lower :: (emitter: *Emitter) {
 					store_result(emitter, it.dst, info, 9);
 
 				case .Lt;
-					assert(it.a.type.kind == it.b.type.kind);
 					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
@@ -460,7 +462,11 @@ lower :: (emitter: *Emitter) {
 					if stack_space <= 4095 {
 						emit(emitter, "add sp, sp, #%", stack_space);
 					} else {
-						sp_offset(emitter, 9, stack_space);
+						v := stack_space.(u64);
+						emit(emitter, "movz x9, #%, lsl #0", v & 0xFFFF);
+						if v > 0xFFFF     emit(emitter, "movk x9, #%, lsl #16", (v >> 16) & 0xFFFF);
+						if v > 0xFFFFFFFF emit(emitter, "movk x9, #%, lsl #32", (v >> 32) & 0xFFFF);
+						if v > 0xFFFFFFFFFFFF emit(emitter, "movk x9, #%, lsl #48", (v >> 48) & 0xFFFF);
 						emit(emitter, "add sp, sp, x9");
 					}
 					emit(emitter, "ret");
@@ -514,7 +520,11 @@ lower :: (emitter: *Emitter) {
 		if stack_space <= 4095 {
 			emit(emitter, "add sp, sp, #%", stack_space);
 		} else {
-			sp_offset(emitter, 9, stack_space);
+			v := stack_space.(u64);
+			emit(emitter, "movz x9, #%, lsl #0", v & 0xFFFF);
+			if v > 0xFFFF     emit(emitter, "movk x9, #%, lsl #16", (v >> 16) & 0xFFFF);
+			if v > 0xFFFFFFFF emit(emitter, "movk x9, #%, lsl #32", (v >> 32) & 0xFFFF);
+			if v > 0xFFFFFFFFFFFF emit(emitter, "movk x9, #%, lsl #48", (v >> 48) & 0xFFFF);
 			emit(emitter, "add sp, sp, x9");
 		}
 		emit(emitter, "ret");

@@ -211,7 +211,6 @@ ir_not :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
 }
 
 ir_copy :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
-	assert(a.type.kind == dst.type.kind);
 	return .{ .Copy, dst, a, .{} };
 }
 

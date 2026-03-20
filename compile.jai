@@ -285,13 +285,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_ne(dst, right, ir_constant(0, right.type)));
 				ir_emit(function, ir_label(end));
 			} else {
-				if binary.op.type == .Less {
-					a := 5;
-				}
 				left := compile_expr(compiler, binary.left);
-				if left.register == 11 {
-					a := 5;
-				}
 				right := compile_expr(compiler, binary.right);
 				if binary.op.type == {
 					case .Plus;
@@ -303,7 +297,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					case .ForwardSlash;
 						ir_emit(function, ir_div(dst, left, right));
 					case .Less;
-						assert(left.type.kind == right.type.kind);
 						ir_emit(function, ir_lt(dst, left, right));
 					case .Greater;
 						ir_emit(function, ir_lt(dst, right, left));
@@ -403,19 +396,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_copy(dst, expr_false));
 			ir_emit(function, ir_label(end));
 			result = dst;
-		case Node_For;
-			_for := expr.(*Node_For);
-			start := next_label(compiler);
-			end := next_label(compiler);
-
-			compile_statement(compiler, _for.init);
-			ir_emit(function, ir_label(start));
-			cond := compile_expr(compiler, _for.cond);
-			ir_emit(function, ir_ifz(cond, end));
-			compile_statement(compiler, _for.body);
-			compile_expr(compiler, _for.expr);
-			ir_emit(function, ir_goto(start));
-			ir_emit(function, ir_label(end));
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -521,10 +501,6 @@ compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Bin
 
 	slot := ir_register(next_register(compiler), IR_PTR);
 	ir_emit(function, ir_alloca(slot, xx declarator.resolved_type.size_in_bytes));
-	print("TYPE: % | RT: %\n", name, declarator.resolved_type.*);
-	if name == "s" {
-		a := 5;
-	}
 	binding := bind_decl(compiler, name, slot, declarator.resolved_type);
 	compile_initializer(compiler, declarator.init, slot);
 	return binding;
@@ -544,15 +520,37 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 		case Node_Return;
 			ret := ir_return(compile_expr(compiler, statement.(*Node_Return).expr));
 			ir_emit(function, ret);
+		case Node_For;
+			_for := statement.(*Node_For);
+			start := next_label(compiler);
+			end := next_label(compiler);
+
+			compile_statement(compiler, _for.init);
+			ir_emit(function, ir_label(start));
+			cond := compile_expr(compiler, _for.cond);
+			ir_emit(function, ir_ifz(cond, end));
+			compile_statement(compiler, _for.body);
+			compile_expr(compiler, _for.expr);
+			ir_emit(function, ir_goto(start));
+			ir_emit(function, ir_label(end));
+		case Node_While;
+			_while := statement.(*Node_While);
+			start := next_label(compiler);
+			end := next_label(compiler);
+
+			ir_emit(function, ir_label(start));
+			cond := compile_expr(compiler, _while.cond);
+			ir_emit(function, ir_ifz(cond, end));
+			compile_statement(compiler, _while.body);
+			ir_emit(function, ir_goto(start));
+			ir_emit(function, ir_label(end));
 		case Node_If;
 			_if := statement.(*Node_If);
 			on_false := next_label(compiler);
 			end := next_label(compiler);
 			cond := compile_expr(compiler, _if.cond);
 			ir_emit(function, ir_ifz(cond, on_false));
-			before := function.instructions.count;
 			compile_statement(compiler, _if.on_true);
-			after := function.instructions.count;
 			ir_emit(function, ir_goto(end));
 			ir_emit(function, ir_label(on_false));
 			compile_statement(compiler, _if.on_false);
