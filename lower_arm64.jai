@@ -114,6 +114,13 @@ register_name :: (op: IR_Operand, reg: int) -> string {
 	return tprint("x%", reg);
 }
 
+find_function_results :: (emitter: *Emitter, name: string) -> []IR_Operand_Type {
+	for * emitter.ir.functions {
+		if it.name == name return it.results;
+	}
+	return .{};
+}
+
 lower_binary :: (emitter: *Emitter, it: IR_Instruction, info: Function_Info, op: string) {
 	a := value_from_operand(emitter, it.a, info, 10);
 	b := value_from_operand(emitter, it.b, info, 11);
@@ -423,7 +430,11 @@ lower :: (emitter: *Emitter) {
 				case .Neg;
 					a := value_from_operand(emitter, it.a, info, 10);
 					dst := scratch_name(it.dst.type, 9);
-					emit(emitter, "neg %, %", dst, a);
+					if it.dst.type.kind == .Float {
+						emit(emitter, "fneg %, %", dst, a);
+					} else {
+						emit(emitter, "neg %, %", dst, a);
+					}
 					store_result(emitter, it.dst, info, 9);
 
 				case .Not;
