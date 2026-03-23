@@ -153,6 +153,9 @@ lower_compare :: (emitter: *Emitter, it: IR_Instruction, info: Function_Info, op
 
 lower :: (emitter: *Emitter) {
 
+	emit(emitter, ".text");
+	emit(emitter, ".p2align 2");
+
 	for function: emitter.ir.functions {
 		emit(emitter, "_%:", function.name);
 		
@@ -293,14 +296,42 @@ lower :: (emitter: *Emitter) {
 
 					emit(emitter, "bl _%", it.a.label);
 					if it.dst.kind != .None {
-						// Move return value from x0/d0 to scratch, then store
-						dst := scratch_name(it.dst.type, 9);
-						if it.dst.type.kind == .Float {
-							emit(emitter, "fmov %, d0", dst);
+						if it.dst.kind == .Register && info.is_alloca[it.dst.register] {
+							// Struct return: store return registers into the alloca
+							target_results := find_function_results(emitter, it.a.label);
+							offset := info.alloca_offsets[it.dst.register];
+							base := sp_offset(emitter, 9, offset);
+							float_reg := 0;
+							int_reg := 0;
+							member_offset := 0;
+							for target_results {
+								if it.kind == .Float {
+									if it.size_in_bytes == 4 {
+										emit(emitter, "str s%, [x9, #%]", float_reg, member_offset);
+									} else {
+										emit(emitter, "str d%, [x9, #%]", float_reg, member_offset);
+									}
+									float_reg += 1;
+								} else {
+									if it.size_in_bytes <= 4 {
+										emit(emitter, "str w%, [x9, #%]", int_reg, member_offset);
+									} else {
+										emit(emitter, "str x%, [x9, #%]", int_reg, member_offset);
+									}
+									int_reg += 1;
+								}
+								member_offset += it.size_in_bytes;
+							}
 						} else {
-							emit(emitter, "mov %, %", dst, register_name(it.dst, 0));
+							// Scalar return
+							dst := scratch_name(it.dst.type, 9);
+							if it.dst.type.kind == .Float {
+								emit(emitter, "fmov %, d0", dst);
+							} else {
+								emit(emitter, "mov %, %", dst, register_name(it.dst, 0));
+							}
+							store_result(emitter, it.dst, info, 9);
 						}
-						store_result(emitter, it.dst, info, 9);
 					}
 					it_index += param_index;
 				case .Load;
@@ -328,16 +359,38 @@ lower :: (emitter: *Emitter) {
 					a := value_from_operand(emitter, it.a, info, 10);
 					b := value_from_operand(emitter, it.b, info, 11);
 					dst := scratch_name(it.dst.type, 9);
-					if it.a.type.kind == .Float {
-						emit(emitter, "fcmp %, %", a, b);
-						emit(emitter, "cset %, ls", dst);
+					emit(emitter, "orr %, %, %", dst, a, b);
+					store_result(emitter, it.dst, info, 9);
+
+				case .And;
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
+					dst := scratch_name(it.dst.type, 9);
+					emit(emitter, "and %, %, %", dst, a, b);
+					store_result(emitter, it.dst, info, 9);
+
+				case .Xor;
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
+					dst := scratch_name(it.dst.type, 9);
+					emit(emitter, "eor %, %, %", dst, a, b);
+					store_result(emitter, it.dst, info, 9);
+
+				case .Shl;
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
+					dst := scratch_name(it.dst.type, 9);
+					emit(emitter, "lsl %, %, %", dst, a, b);
+					store_result(emitter, it.dst, info, 9);
+
+				case .Shr;
+					a := value_from_operand(emitter, it.a, info, 10);
+					b := value_from_operand(emitter, it.b, info, 11);
+					dst := scratch_name(it.dst.type, 9);
+					if it.dst.type.unsigned {
+						emit(emitter, "lsr %, %, %", dst, a, b);
 					} else {
-						emit(emitter, "cmp %, %", a, b);
-						if it.a.type.unsigned {
-							emit(emitter, "cset %, ls", dst);
-						} else {
-							emit(emitter, "cset %, le", dst);
-						}
+						emit(emitter, "asr %, %, %", dst, a, b);
 					}
 					store_result(emitter, it.dst, info, 9);
 
@@ -459,11 +512,37 @@ lower :: (emitter: *Emitter) {
 
 				case .Return;
 					if it.a.kind != .None {
-						a := value_from_operand(emitter, it.a, info, 10);
-						if it.a.type.kind == .Float {
-							emit(emitter, "fmov d0, %", a);
+						if function.results.count > 1 {
+							// HFA struct return: operand is a pointer, load members into return registers
+							a := value_from_operand(emitter, it.a, info, 10);
+							float_reg := 0;
+							int_reg := 0;
+							member_offset := 0;
+							for function.results {
+								if it.kind == .Float {
+									if it.size_in_bytes == 4 {
+										emit(emitter, "ldr s%, [x10, #%]", float_reg, member_offset);
+									} else {
+										emit(emitter, "ldr d%, [x10, #%]", float_reg, member_offset);
+									}
+									float_reg += 1;
+								} else {
+									if it.size_in_bytes <= 4 {
+										emit(emitter, "ldr w%, [x10, #%]", int_reg, member_offset);
+									} else {
+										emit(emitter, "ldr x%, [x10, #%]", int_reg, member_offset);
+									}
+									int_reg += 1;
+								}
+								member_offset += it.size_in_bytes;
+							}
 						} else {
-							emit(emitter, "mov %, %", register_name(it.a, 0), a);
+							a := value_from_operand(emitter, it.a, info, 10);
+							if it.a.type.kind == .Float {
+								emit(emitter, "fmov d0, %", a);
+							} else {
+								emit(emitter, "mov %, %", register_name(it.a, 0), a);
+							}
 						}
 					}
 					// Epilogue
@@ -541,7 +620,9 @@ lower :: (emitter: *Emitter) {
 		emit(emitter, "ret");
 	}
 
+	emit(emitter, ".data");
 	for emitter.ir.globals {
+		emit(emitter, ".globl _%", it.name);
 		emit(emitter, ".p2align %", it.alignment);
 		emit(emitter, "_%:", it.name);
 		for byte: it.bytes {

@@ -130,6 +130,12 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			
 			array := compile_lvalue(compiler, array_access.left);
 
+			if array_access.left.resolved_type.kind == .Pointer {
+				loaded := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_load(loaded, array));
+				array = loaded;
+			}
+
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
 			ir_emit(function, ir_add(dst, array, index));
@@ -185,6 +191,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			return .{};
 		case Node_Call;
 			value := compile_expr(compiler, expr);
+			if expr.resolved_type.kind == .Composite {
+				return value;
+			}
 			size := (expr.resolved_type.size_in_bytes + 7) & ~7;
 			ir_emit(function, ir_alloca(dst, xx size));
 			ir_emit(function, ir_store(dst, value));
@@ -448,14 +457,28 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				}
 			}
 
-			dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
-			ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+			if call.resolved_type.kind == .Composite {
+				ret_slot := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_alloca(ret_slot, xx call.resolved_type.size_in_bytes));
+				ir_emit(function, ir_call(ret_slot, name, xx non_variadic_expanded_param_count));
 
-			for args {
-				ir_emit(function, ir_param(it));
+				for args {
+					ir_emit(function, ir_param(it));
+				}
+
+				addr := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_address(addr, ret_slot));
+				result = addr;
+			} else {
+				dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
+				ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+
+				for args {
+					ir_emit(function, ir_param(it));
+				}
+
+				result = dst;
 			}
-
-			result = dst;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
 			lhs := compile_lvalue(compiler, assign.left);
@@ -718,9 +741,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	pop_scope(compiler);
 
 	for value, key: compiler.strings {
-		terminated_bytes := NewArray(key.count + 1, u8);
-		memcpy(terminated_bytes.data, key.data, key.count);
-		terminated_bytes[key.count] = 0;
+		terminated_bytes := process_string_escapes(key);
 		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, 1);
 	}
 	
