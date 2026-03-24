@@ -1448,7 +1448,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			unary := New(Node_Unary);
 			unary.op = current(p);
 			skip(p);
-			unary.expr = lhs;
+			unary.expr = result;
 			unary.postfix = true;
 			result = unary;
 		} else if current(p).type == .Period {
