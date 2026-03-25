@@ -391,10 +391,15 @@ Node_Block :: struct {
 
 Node_Label :: struct {
 	#as using node: Node_Statement;
-	statement: *Node_Statement;
-	is_case: bool;
-	expr: *Node_Expr;
+	token: Token;
 	statement_type = #this;
+}
+
+Node_Case :: struct {
+	#as using node: Node_Statement;
+	statement: *Node_Statement;
+	expr: *Node_Expr;
+	is_default: bool;
 }
 
 Node_Return :: struct {
@@ -1904,18 +1909,22 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 	} else {
 		if current(p).type == .Identifier {
 			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
-				label := New(Node_Label);
-				if current(p).view == "case" {
+				if current(p).type == .Identifier {
+					label := New(Node_Label);
+					label.token = current(p);
 					skip(p);
-					label.is_case = true;
-					label.expr = parse_expr(p);
-				} else if current(p).view == "default" {
+					expect(p, .Colon);
+				} else {
+				_case := New(Node_Case);
 					skip(p);
-					label.is_case = true;
+					if current(p).view == "default" {
+						_case.is_default = true;
+					}
+					_case.expr = parse_expr(p);
+					expect(p, .Colon);
+					_case.statement = parse_statement(p);
+					statement = _case;
 				}
-				expect(p, .Colon);
-				label.statement = parse_statement(p);
-				statement = label;
 			} else if current(p).view == "continue" {
 				statement = New(Node_Continue);
 				skip(p);
@@ -2269,15 +2278,16 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			append(builder, ")");
 			print_statement(builder, stmt.(*Node_Do).body, depth);
 			append(builder, "\n");
-		case Node_Label;
-			if stmt.(*Node_Label).is_case && stmt.(*Node_Label).expr {
-				append(builder, "case ");
-			} else if !stmt.(*Node_Label).expr {
+		case Node_Case;
+			_case := stmt.(*Node_Case);
+			if _case.is_default {
 				append(builder, "default ");
+			} else {
+				append(builder, "case ");
 			}
-			print_expr(builder, stmt.(*Node_Label).expr);
+			print_expr(builder, _case.expr);
 			append(builder, ": ");
-			print_statement(builder, stmt.(*Node_Label).statement, depth);
+			print_statement(builder, _case.statement, depth);
 			append(builder, "\n");
 		case Node_For;
 			append(builder, "for ");
@@ -2511,12 +2521,11 @@ main :: () {
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
-	// // Run tests
-	// print("\n========================================\n");
-	// print("  Running tests/\n");
-	// print("========================================\n");
-	// //run_test("tests/test_globals.c");
-	// //run_tests();
+	// Run tests
+	print("\n========================================\n");
+	print("  Running tests/\n");
+	print("========================================\n");
+	run_tests();
 
 
 	print("\nDOING IR\n\n");

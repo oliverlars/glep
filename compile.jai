@@ -585,6 +585,13 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 				compile_statement(compiler, it);
 			}
 			pop_scope(compiler);
+		case Node_Label;
+			label := tprint("l%_%",statement.(*Node_Label).token.view, compiler.current_function.name);
+			ir_emit(function, ir_label(label));
+		case Node_Goto;
+		goto := statement.(*Node_Goto);
+			label := tprint("l%_%", goto.to.view, compiler.current_function.name);
+			
 	}
 }
 
