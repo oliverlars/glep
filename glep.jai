@@ -1914,8 +1914,9 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					label.token = current(p);
 					skip(p);
 					expect(p, .Colon);
+					statement = label;
 				} else {
-				_case := New(Node_Case);
+					_case := New(Node_Case);
 					skip(p);
 					if current(p).view == "default" {
 						_case.is_default = true;
@@ -1938,6 +1939,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				skip(p);
 				goto.to = current(p);
 				expect(p, .Identifier);
+				statement = goto;
 			} else if current(p).view == "return" {
 				skip(p);
 				ret := New(Node_Return);
@@ -2460,7 +2462,7 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	filename := "tests/test_smallpt.c";
-	//filename = "test.c";
+	filename = "test.c";
 	minimal := read_entire_file(filename);
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
@@ -2522,10 +2524,10 @@ main :: () {
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
 
 	// Run tests
-	print("\n========================================\n");
-	print("  Running tests/\n");
-	print("========================================\n");
-	run_tests();
+	// print("\n========================================\n");
+	// print("  Running tests/\n");
+	// print("========================================\n");
+	// run_tests();
 
 
 	print("\nDOING IR\n\n");

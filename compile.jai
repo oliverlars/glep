@@ -589,9 +589,9 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			label := tprint("l%_%",statement.(*Node_Label).token.view, compiler.current_function.name);
 			ir_emit(function, ir_label(label));
 		case Node_Goto;
-		goto := statement.(*Node_Goto);
+			goto := statement.(*Node_Goto);
 			label := tprint("l%_%", goto.to.view, compiler.current_function.name);
-			
+			ir_emit(function, ir_goto(label));
 	}
 }
 
