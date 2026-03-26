@@ -668,7 +668,15 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			
 			assert(found);
 			expr.resolved_type = decl.declarator.resolved_type;
-			return decl.declarator.resolved_type, true;
+			if expr.resolved_type.kind == .Array {
+				expr.resolved_type = New(Resolved_Type);
+				expr.resolved_type.kind = .Integral;
+				expr.resolved_type.alignment = 8;
+				expr.resolved_type.size_in_bytes = 8;
+				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
+				expr.resolved_type.unsigned = true;
+			}
+			return expr.resolved_type, true;
 		case Node_Unary;
 			info := resolve_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
@@ -861,7 +869,6 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 					} else if type.kind == .Array {
 						offset = index * type.inner.size_in_bytes;
 						type = type.inner;
-						print("array inner offset: %\n", offset);
 					}
 				}
 				designation.byte_offset = offset;

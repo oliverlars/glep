@@ -341,9 +341,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_address(address, binding.slot));
 			}
 			dst: IR_Operand;
-			if binding.resolved_type.kind == .Composite {
+			if binding.resolved_type.kind == .Composite || binding.resolved_type.kind == .Array {
 				dst = ir_register(next_register(compiler), IR_PTR);
-				ir_emit(function, ir_copy(dst, binding.slot));
+				ir_emit(function, ir_copy(dst, address));
 			} else {
 				dst = ir_register(next_register(compiler), operand_type(binding.resolved_type));
 				ir_emit(function, ir_load(dst, address));
@@ -361,18 +361,14 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				result = dst;
 			}
 		case Node_Array_Access;
-			array_access := expr.(*Node_Array_Access);
-
-			index := compile_expr(compiler, array_access.index);
-
-			array := compile_expr(compiler, array_access.left);
-
-			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
-
-			dst := ir_register(next_register(compiler), array.type);
-			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, index.type)));
-			ir_emit(function, ir_add(dst, array, index));
-			result = dst;
+			address := compile_lvalue(compiler, expr);
+			if expr.resolved_type.kind == .Composite {
+				result = address;
+			} else {
+				dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
+				ir_emit(function, ir_load(dst, address));
+				result = dst;
+			}
 		case Node_Char;
 			c := expr.(*Node_Char);
 			value := eval_char_literal(c.token.view);
@@ -648,7 +644,6 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 	}
 	bytes := NewArray(size_in_bytes, u8);
 	compile_global_initializer(compiler, init, bytes);
-	print("BYTES: %\n", cast,force([]float64)bytes);
 	return bytes;
 }
 
@@ -740,7 +735,6 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 			} else if is_variable_declaration(decl, declarator) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
 				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type.size_in_bytes);
-				print("BYTES 2: %\n\n", cast,force([]float64)bytes);
 				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
 			}
 		}

@@ -605,7 +605,6 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 
 	while !end(cpp, src_tokens) {
 		cpp.line = current(cpp, src_tokens).line;
-		print("LINE: %\n", cpp.line);
 		if current(cpp, src_tokens).type == {
 			case .Hash;
 				skip(cpp, src_tokens);
@@ -734,7 +733,6 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							while current(cpp, src_tokens).type != .Greater {
 								path = join(path, skip(cpp, src_tokens).view);
 							}
-							print("PATH: %\n", path);
 							if path == "stdio.h" {
 								a := 5;
 							}

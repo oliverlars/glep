@@ -2463,7 +2463,10 @@ main :: () {
 	// minimal := read_entire_file("friday.c");
 	filename := "tests/test_smallpt.c";
 	filename = "test.c";
+	//filename = "tests/big_fuzz.c";
 	minimal := read_entire_file(filename);
+
+	t0 := current_time_monotonic();
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
 	tokenise(*tokeniser);
@@ -2486,11 +2489,7 @@ main :: () {
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
 
-	for tokens_no_newlines {
-		print("% ", it.view);
-	}
 
-	t0 := current_time_monotonic();
 	tu := parse_translation_unit(*parser);
 
 	typechecker: Type_Checker;
@@ -2532,9 +2531,13 @@ main :: () {
 
 	print("\nDOING IR\n\n");
 
+	ir_builder: String_Builder;
 	for compiler.ir.functions {
-		print(builder_to_string(*it.builder));
+		append(*ir_builder, builder_to_string(*it.builder));
 	}
+	write_entire_file("out.ir", builder_to_string(*ir_builder));
+
+
 
 	emitter := lower_to_arm64e(*compiler.ir);
 
