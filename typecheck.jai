@@ -325,14 +325,20 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 
 		scale.resolved_type.* = size_number.resolved_type.*;
 
+		// The scaled index must be 8 bytes wide to match pointer width in the add
+		index_type := New(Resolved_Type);
+		index_type.kind = .Integral;
+		index_type.size_in_bytes = 8;
+		index_type.unsigned = true;
+
 		if side == .Left {
 			scale.left = at.left;
 			scale.right = size_number;
-			at.left = scale;
+			at.left = insert_cast(scale, index_type);
 		} else {
 			scale.left = at.right;
 			scale.right = size_number;
-			at.right = scale;
+			at.right = insert_cast(scale, index_type);
 		}
 	}
 
@@ -497,7 +503,7 @@ decl_info_from_resolved_type :: (target: *Resolved_Type) -> Node_Decl_Info {
 	return info;
 }
 
-insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
+insert_cast :: (at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
 	c := New(Node_Cast);
 	c.expr = at;
 	c.resolved_type = target;
@@ -507,11 +513,11 @@ insert_cast :: (tc: *Type_Checker, at: *Node_Expr, target: *Resolved_Type) -> *N
 	return c;
 }
 
-coerce :: (tc: *Type_Checker, expr: **Node_Expr, target: *Resolved_Type) {
+coerce :: (expr: **Node_Expr, target: *Resolved_Type) {
 	if !target return;
 	if !expr.*.resolved_type return;
 	if types_equal(expr.*.resolved_type, target) return;
-	expr.* = insert_cast(tc, expr.*, target);
+	expr.* = insert_cast(expr.*, target);
 }
 
 function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarator {
@@ -552,8 +558,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved_type := common_type(on_true, on_false);
 			if !resolved_type return null, false;
 
-			coerce(tc, *ternary.on_true, resolved_type);
-			coerce(tc, *ternary.on_false, resolved_type);
+			coerce(*ternary.on_true, resolved_type);
+			coerce(*ternary.on_false, resolved_type);
 
 			expr.resolved_type = resolved_type;
 			return resolved_type, true;
@@ -592,7 +598,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				return null, false;
 			}
 			
-			coerce(tc, *assign.right, left_info);
+			coerce(*assign.right, left_info);
 			assign.left.resolved_type = left_info;
 			assign.resolved_type = left_info;
 			return left_info, true;
@@ -601,7 +607,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			left_info := resolve_expr(tc, binary.left);
 			right_info := resolve_expr(tc, binary.right);
 
-			if left_info.kind == .Pointer || right_info.kind == .Pointer {
+			if (left_info.kind == .Pointer || right_info.kind == .Pointer) && (binary.op.type == .Plus || binary.op.type == .Minus) {
 				resolved_type := pointer_arithmetic_type(binary, left_info, right_info);
 				expr.resolved_type = resolved_type;
 				return resolved_type, resolved_type != null;
@@ -610,8 +616,8 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved_type := common_type(left_info, right_info);
 			if !resolved_type return null, false;
 
-			coerce(tc, *binary.left, resolved_type);
-			coerce(tc, *binary.right, resolved_type);
+			coerce(*binary.left, resolved_type);
+			coerce(*binary.right, resolved_type);
 					
 			if binary.op.type == {
 				case .Less; #through;
@@ -659,7 +665,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			info.size_in_bytes = 8;
 			info.kind = .Integral;
 			info.unsigned = true;
-			array_access.index = insert_cast(tc, array_access.index, info);
+			array_access.index = insert_cast(array_access.index, info);
 			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner, true;
 		case Node_Identifier;
@@ -670,7 +676,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			expr.resolved_type = decl.declarator.resolved_type;
 			if expr.resolved_type.kind == .Array {
 				expr.resolved_type = New(Resolved_Type);
-				expr.resolved_type.kind = .Integral;
+				expr.resolved_type.kind = .Pointer;
 				expr.resolved_type.alignment = 8;
 				expr.resolved_type.size_in_bytes = 8;
 				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
@@ -687,6 +693,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					info.size_in_bytes = 8;
 					info.alignment = 8;
 					info.inner = inner;
+					info.unsigned = true;
 				case .Asterisk;
 					info = info.inner;
 			}
@@ -732,7 +739,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 						param_type = resolve_base(tc, param.base);
 					}
 					if param_type {
-						coerce(tc, *call.args[it_index], param_type);
+						coerce(*call.args[it_index], param_type);
 					}
 				}
 			}
@@ -759,7 +766,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Return;
 			ret := stmt.(*Node_Return);
 			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
-			coerce(tc, *ret.expr, tc.current_function_return_type);
+			coerce(*ret.expr, tc.current_function_return_type);
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
@@ -882,7 +889,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 				print("Scalar does not match left hand type\n");
 			}
 			if !types_equal(target, expr_type) {
-				init.(*Node_Scalar_Initializer).expr = insert_cast(tc, scalar, target);
+				init.(*Node_Scalar_Initializer).expr = insert_cast(scalar, target);
 			} else {
 				init.(*Node_Scalar_Initializer).expr.resolved_type = target;
 			}

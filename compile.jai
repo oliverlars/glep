@@ -127,14 +127,11 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 		case Node_Array_Access;
 			array_access := expr.(*Node_Array_Access);
 			index := compile_expr(compiler, array_access.index);
-			
-			array := compile_lvalue(compiler, array_access.left);
 
-			if array_access.left.resolved_type.kind == .Pointer {
-				loaded := ir_register(next_register(compiler), IR_PTR);
-				ir_emit(function, ir_load(loaded, array));
-				array = loaded;
-			}
+			// compile_expr handles both cases:
+			//   array → Copy (alloca address IS the base pointer)
+			//   pointer → Load (loads the pointer value from the alloca)
+			array := compile_expr(compiler, array_access.left);
 
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
