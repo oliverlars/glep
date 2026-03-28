@@ -2461,8 +2461,8 @@ main :: () {
 
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
-	filename := "tests/test_smallpt.c";
-	filename = "test.c";
+	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
+	//filename = "test.c";
 	//filename = "tests/big_fuzz.c";
 	minimal := read_entire_file(filename);
 

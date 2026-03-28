@@ -44,7 +44,6 @@ Decl :: struct {
 Scope :: struct {
 	decls: [..]Decl;
 }
-
 Type_Checker :: struct {
 	scopes: [..]Scope;
 
@@ -57,6 +56,9 @@ Type_Checker :: struct {
 	_structs: Table(*Node_Struct, *Resolved_Type);
 
 	current_function_return_type: *Resolved_Type;
+
+	// Put more info in this
+	errors: [..]string;
 }
 
 current_scope :: (tc: *Type_Checker) -> *Scope {
@@ -378,25 +380,6 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 	return resolved;
 }
 
-can_coerce_to :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
-	if !target || !source return false;
-
-	if target.kind == .Integral && source.kind == .Integral return true;
-	if target.kind == .Floating && source.kind == .Floating return true;
-	if target.kind == .Integral && source.kind == .Floating return true;
-	if target.kind == .Floating && source.kind == .Integral return true;
-
-	if target.kind == .Pointer && source.kind == .Pointer return true; 
-	if target.kind == .Pointer && source.kind == .Integral return true;
-	if target.kind == .Integral && source.kind == .Pointer return true;
-
-	if target.kind == .Composite && source.kind == .Composite {
-		return target.composite == source.composite;
-	}
-
-	return false;
-}
-
 split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 	suffix := number_with_suffix;
 	suffix.count = 0;
@@ -513,11 +496,23 @@ insert_cast :: (at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
 	return c;
 }
 
-coerce :: (expr: **Node_Expr, target: *Resolved_Type) {
-	if !target return;
-	if !expr.*.resolved_type return;
-	if types_equal(expr.*.resolved_type, target) return;
-	expr.* = insert_cast(expr.*, target);
+coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
+	if !target || !source return false;
+
+	if target.kind == .Integral && source.kind == .Integral return true;
+	if target.kind == .Floating && source.kind == .Floating return true;
+	if target.kind == .Integral && source.kind == .Floating return true;
+	if target.kind == .Floating && source.kind == .Integral return true;
+
+	if target.kind == .Pointer && source.kind == .Pointer return true; 
+	if target.kind == .Pointer && source.kind == .Integral return true;
+	if target.kind == .Integral && source.kind == .Pointer return true;
+
+	if target.kind == .Composite && source.kind == .Composite {
+		return target.composite == source.composite;
+	}
+
+	return false;
 }
 
 function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarator {
@@ -529,21 +524,26 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 	return result.(*Node_Function_Declarator);
 }
 
-resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
-	if !expr return null, false;
+report_error :: (tc: *Type_Checker, fmt: string, args: ..Any) {
+	error := tprint("Type Mismatch: %", tprint(fmt, ..args));
+	array_add(*tc.errors, error);
+} 
+
+resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
+	if !expr return null;
 	if expr.expr_type == {
 		case Node_Ternary;
 			ternary := expr.(*Node_Ternary);
 			resolve_expr(tc, ternary.cond);
-			on_true, _ := resolve_expr(tc, ternary.on_true);
-			on_false, _ := resolve_expr(tc, ternary.on_false);
+			on_true := resolve_expr(tc, ternary.on_true);
+			on_false := resolve_expr(tc, ternary.on_false);
 			if on_true.kind == .Pointer || on_false.kind == .Pointer {
 				if on_true.kind == .Pointer {
 					expr.resolved_type = on_true;
 				} else {
 					expr.resolved_type = on_false;
 				}
-				return expr.resolved_type, expr.resolved_type != null;
+				return expr.resolved_type;
 			}
 
 			ternary.on_true.resolved_type = on_true;
@@ -552,17 +552,23 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			if on_true.kind == .Composite && on_false.kind == .Composite {
 				assert(on_true.composite == on_false.composite);
 				expr.resolved_type = on_true;
-				return on_true, true;
+				return on_true;
 			}
 
 			resolved_type := common_type(on_true, on_false);
-			if !resolved_type return null, false;
+			if !resolved_type {
+				return null;
+			}
 
-			coerce(*ternary.on_true, resolved_type);
-			coerce(*ternary.on_false, resolved_type);
+			if !coerceable(on_true, resolved_type) {
+				report_error(tc, "couldnt convert % to %", on_true.*, resolved_type.*);
+			}
+			if !coerceable(on_false, resolved_type) {
+				report_error(tc, "couldnt convert ternary % to %", on_false.*, resolved_type.*);
+			}
 
 			expr.resolved_type = resolved_type;
-			return resolved_type, true;
+			return resolved_type;
 		case Node_Sizeof_Expr;
 			sizeof := expr.(*Node_Sizeof_Expr);
 			resolved := New(Resolved_Type);
@@ -572,7 +578,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			resolved.alignment = 8;
 			sizeof.resolved_type = resolved;
 			resolve_expr(tc, sizeof.expr);
-			return resolved, true;
+			return resolved;
 		case Node_Sizeof_Type;
 			sizeof := expr.(*Node_Sizeof_Type);
 			resolved := New(Resolved_Type);
@@ -583,25 +589,24 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			sizeof.resolved_type = resolved;
 			decl := ifx sizeof.base.declarators.count > 0 then sizeof.base.declarators[0] else null;
 			sizeof.target_type = resolve_decl(tc, *sizeof.base, decl);
-			return resolved, true;
+			return resolved;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
 			compound.resolved_type = resolve_decl(tc, *compound.base_info, compound.declarator);
 			resolve_initializer(tc, compound.resolved_type, compound.init);
-			return compound.resolved_type, true;
+			return compound.resolved_type;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
 			left_info := resolve_expr(tc, assign.left);
 			right_info := resolve_expr(tc, assign.right);
 			
-			if !can_coerce_to(left_info, right_info) {
-				return null, false;
+			if !coerceable(left_info, right_info) {
+				return null;
 			}
-			
-			coerce(*assign.right, left_info);
+
 			assign.left.resolved_type = left_info;
 			assign.resolved_type = left_info;
-			return left_info, true;
+			return left_info;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
 			left_info := resolve_expr(tc, binary.left);
@@ -610,14 +615,14 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			if (left_info.kind == .Pointer || right_info.kind == .Pointer) && (binary.op.type == .Plus || binary.op.type == .Minus) {
 				resolved_type := pointer_arithmetic_type(binary, left_info, right_info);
 				expr.resolved_type = resolved_type;
-				return resolved_type, resolved_type != null;
+				return resolved_type;
 			}
 			
 			resolved_type := common_type(left_info, right_info);
-			if !resolved_type return null, false;
+			if !resolved_type return null;
 
-			coerce(*binary.left, resolved_type);
-			coerce(*binary.right, resolved_type);
+			if !coerceable(left_info, resolved_type) {}
+			if !coerceable(right_info, resolved_type) {}
 					
 			if binary.op.type == {
 				case .Less; #through;
@@ -633,11 +638,11 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					resolved_type = comparison_result;
 			}
 			binary.resolved_type = resolved_type;
-			return resolved_type, true;
+			return resolved_type;
 		case Node_Number;
 			info := resolve_number(expr.(*Node_Number));
 			expr.(*Node_Number).resolved_type = info;
-			return info, true;
+			return info;
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 			member_access.left.resolved_type = resolve_expr(tc, member_access.left);
@@ -653,7 +658,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					if id == identifier_from_declarator(declarator) {
 						rt := resolve_decl(tc, it, declarator);
 						member_access.resolved_type = rt;
-						return member_access.resolved_type, true;
+						return member_access.resolved_type;
 					}
 				}
 			}
@@ -667,7 +672,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 			info.unsigned = true;
 			array_access.index = insert_cast(array_access.index, info);
 			array_access.resolved_type = array_access.left.resolved_type.inner;
-			return array_access.left.resolved_type.inner, true;
+			return array_access.left.resolved_type.inner;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
@@ -682,7 +687,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
 				expr.resolved_type.unsigned = true;
 			}
-			return expr.resolved_type, true;
+			return expr.resolved_type;
 		case Node_Unary;
 			info := resolve_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
@@ -698,27 +703,27 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					info = info.inner;
 			}
 			expr.resolved_type = info;
-			return info, info.kind != .Composite;
+			return info;
 		case Node_Cast;
 			source := resolve_expr(tc, expr.(*Node_Cast).expr);
 			target := resolve_base(tc, expr.(*Node_Cast).base);
 			expr.(*Node_Cast).resolved_type = target;
 			expr.(*Node_Cast).expr.resolved_type = source;
-			return target, can_coerce_to(target, source);
+			return target;
 		case Node_String;
 			info := New(Resolved_Type);
 			info.size_in_bytes = 8;
 			info.alignment = 8;
 			info.kind = .Pointer;
 			expr.resolved_type = info;
-			return info, true;
+			return info;
 		case Node_Char;
 			info := New(Resolved_Type);
 			info.size_in_bytes = 4;
 			info.alignment = 4;
 			info.kind = .Integral;
 			expr.resolved_type = info;
-			return info, true;
+			return info;
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -738,18 +743,15 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type, bool {
 					} else {
 						param_type = resolve_base(tc, param.base);
 					}
-					if param_type {
-						coerce(*call.args[it_index], param_type);
-					}
 				}
 			}
 			
 			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
 			call.resolved_type = ret_type;
-			return ret_type, true;
+			return ret_type;
 	}
 
-	return null, false;
+	return null;
 }
 
 typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
@@ -766,7 +768,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Return;
 			ret := stmt.(*Node_Return);
 			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
-			coerce(*ret.expr, tc.current_function_return_type);
+			if coerceable(ret.expr.resolved_type, tc.current_function_return_type) {}
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
@@ -885,8 +887,8 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 		case Node_Scalar_Initializer;
 			scalar := init.(*Node_Scalar_Initializer).expr;
 			expr_type := resolve_expr(tc, scalar);
-			if !can_coerce_to(target, expr_type) {
-				print("Scalar does not match left hand type\n");
+			if !coerceable(target, expr_type) {
+				report_error(tc, "scalar does not match left hand type\n");
 			}
 			if !types_equal(target, expr_type) {
 				init.(*Node_Scalar_Initializer).expr = insert_cast(scalar, target);
