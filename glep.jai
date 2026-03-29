@@ -1348,18 +1348,18 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 				base_info: Node_Decl_Info;
 				parse_declaration_specifiers(p, *base_info);
 				declarator := parse_declarator(p);
-				sizeof := New(Node_Sizeof_Type);
+				sizeof := make_node(p, Node_Sizeof_Type);
 				array_add(*base_info.declarators, declarator);
 				sizeof.base = base_info;
 				expect(p, .RightParenthesis);
 				result = sizeof;
 			} else {
-				sizeof := New(Node_Sizeof_Expr);
+				sizeof := make_node(p, Node_Sizeof_Expr);
 				sizeof.expr = parse_unary(p);
 				result = sizeof;
 			}
 		} else {
-			sizeof := New(Node_Sizeof_Expr);
+			sizeof := make_node(p, Node_Sizeof_Expr);
 			sizeof.expr = parse_unary(p);
 			result = sizeof;
 		}
@@ -1367,7 +1367,7 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		op := current(p);
 		skip(p);
 		rhs := parse_unary(p);
-		unary := New(Node_Unary);
+		unary := make_node(p, Node_Unary);
 		unary.op = op;
 		unary.expr = rhs;
 		result = unary;
@@ -1378,13 +1378,13 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		declarator := parse_declarator(p);
 		expect(p, .RightParenthesis);
 		if current(p).type == .LeftBrace {
-			compound := New(Node_Compound);
+			compound := make_node(p, Node_Compound);
 			compound.base_info = base_info;
 			compound.declarator = declarator;
 			compound.init = parse_initializer(p);
 			result = compound;
 		} else {
-			_cast := New(Node_Cast);
+			_cast := make_node(p, Node_Cast);
 			_cast.base = base_info;
 			array_add(*_cast.base.declarators, declarator);
 			_cast.expr = parse_unary(p);
@@ -1412,7 +1412,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		next_min := prec + is_left_associative(op).(int);
 		if op.type == .Question {
 			skip(p);
-			ternary := New(Node_Ternary);
+			ternary := make_node(p, Node_Ternary);
 			ternary.cond = lhs;
 			ternary.on_true = parse_expr(p);
 
@@ -1423,7 +1423,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		} else if is_assign_op(op) {
 			skip(p);
 			rhs := parse_expr(p, next_min);
-			assign := New(Node_Assign);
+			assign := make_node(p, Node_Assign);
 			assign.op = op;
 			assign.left = lhs;
 			assign.right = rhs;
@@ -1433,7 +1433,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 			rhs := parse_expr(p, next_min);
 
 			
-			binary := New(Node_Binary);
+			binary := make_node(p, Node_Binary);
 			binary.op = op;
 			binary.left = lhs;
 			binary.right = rhs;
@@ -1450,14 +1450,14 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 	      current(p).type == .LeftBracket || current(p).type == .Arrow ||
 		  current(p).type == .PlusPlus || current(p).type == .MinusMinus {
 		if current(p).type == .PlusPlus || current(p).type == .MinusMinus {
-			unary := New(Node_Unary);
+			unary := make_node(p, Node_Unary);
 			unary.op = current(p);
 			skip(p);
 			unary.expr = result;
 			unary.postfix = true;
 			result = unary;
 		} else if current(p).type == .Period {
-			access := New(Node_Member_Access);
+			access := make_node(p, Node_Member_Access);
 			access.op = current(p);
 			skip(p);
 			access.left = result;
@@ -1466,7 +1466,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			expect(p, .Identifier);
 		} else if current(p).type == .LeftBracket {
 			skip(p);
-			access := New(Node_Array_Access);
+			access := make_node(p, Node_Array_Access);
 			access.index = parse_expr(p);
 			access.left = result;
 			result = access;
@@ -1474,7 +1474,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 		} else if current(p).type == .LeftParenthesis {
 			name := current(p);
 			skip(p);
-			call := New(Node_Call);
+			call := make_node(p, Node_Call);
 			call.id = result;
 			while current(p).type != .RightParenthesis {
 				array_add(*call.args, parse_expr(p, precedence_of(.Comma) + 1));
@@ -1485,7 +1485,7 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			expect(p, .RightParenthesis);
 			result = call;
 		} else if current(p).type == .Arrow {
-			access := New(Node_Member_Access);
+			access := make_node(p, Node_Member_Access);
 			access.left = result;
 			access.op = current(p);
 			skip(p);
@@ -1502,7 +1502,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	// This needs to be done properly, currently it only does a single number...
 	result: *Node_Expr;
 	if current(p).type == .Number {
-		result = New(Node_Number);
+		result = make_node(p, Node_Number);
 		token := current(p);
 		result.(*Node_Number).token_with_suffix = token;
 		// HACK(Oliver): This could include apostrophes, remove them
@@ -1529,7 +1529,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		}
 		skip(p);
 	} else if current(p).type == .Char {
-		result = New(Node_Char);
+		result = make_node(p, Node_Char);
 		value: int;
 		for current(p).view {
 			value = value * 10 + it;
@@ -1537,7 +1537,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result.(*Node_Char).token = current(p);
 		skip(p);
 	} else if current(p).type == .String {
-		result = New(Node_String);
+		result = make_node(p, Node_String);
 		concat := current(p).view;
 		skip(p);
 		while current(p).type == .String {
@@ -1557,7 +1557,7 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		result = parse_expr(p);
 		expect(p, .RightParenthesis);
 	} else if current(p).type == .Identifier {
-		result = New(Node_Identifier);
+		result = make_node(p, Node_Identifier);
 		result.(*Node_Identifier).id = current(p);
 		skip(p);
 	}
@@ -1733,7 +1733,7 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 }
 
 parse_param_decl :: (p: *Parser) -> *Node_Decl {
-	decl := New(Node_Decl);
+	decl := make_node(p, Node_Decl);
 	parse_declaration_specifiers(p, *decl.base);
 	declarator := parse_declarator(p);
 	if declarator {
@@ -1751,7 +1751,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			expect(p, .RightParenthesis);
 		}
 	} else if current(p).type == .Identifier {
-		declarator = New(Node_Identifier_Declarator);
+		declarator = make_node(p, Node_Identifier_Declarator);
 		declarator.(*Node_Identifier_Declarator).name = current(p).view;
 		skip(p);
 	}
@@ -1759,7 +1759,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 	while current(p).type == .LeftParenthesis || current(p).type == .LeftBracket {
 		if current(p).type == .LeftParenthesis {
 			expect(p, .LeftParenthesis);
-			func := New(Node_Function_Declarator);
+			func := make_node(p, Node_Function_Declarator);
 			while current(p).type != .RightParenthesis {
 				if current(p).type == .Ellipsis {
 					func.variadic = true;
@@ -1773,7 +1773,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			func.inner = declarator;
 			declarator = func;
 		} else if current(p).type == .LeftBracket {
-			array := New(Node_Array_Declarator);
+			array := make_node(p, Node_Array_Declarator);
 			expect(p, .LeftBracket);
 			if current(p).view == "static" then skip(p);
 			if is_type_qualifier(current(p)) {
@@ -1807,7 +1807,7 @@ parse_declarator :: (p: *Parser) -> *Node_Declarator {
 	last: *Node_Pointer_Declarator;
 	while current(p).type == .Asterisk {
 		skip(p);
-		next := New(Node_Pointer_Declarator);
+		next := make_node(p, Node_Pointer_Declarator);
 		while is_type_qualifier(current(p)) {
 			array_add(*next.qualifiers, current(p).view);
 			skip(p);
@@ -1847,21 +1847,21 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 	initializer: *Node_Initializer;
 	if current(p).type == .LeftBrace {
 		skip(p);
-		designated := New(Node_Designated_Initializer);
+		designated := make_node(p, Node_Designated_Initializer);
 		while current(p).type != .RightBrace {
-			designation := New(Node_Designation);
+			designation := make_node(p, Node_Designation);
 			equals := false;
 			while current(p).type == .LeftBracket ||
 				  current(p).type == .Period {
 				if current(p).type == .LeftBracket {
 					expect(p, .LeftBracket);
-					index := New(Node_Index_Designator);
+					index := make_node(p, Node_Index_Designator);
 					index.index = parse_expr(p);
 					expect(p, .RightBracket);
 					array_add(*designation.designators, index);
 				} else if current(p).type == .Period {
 					expect(p, .Period);
-					field := New(Node_Field_Designator);
+					field := make_node(p, Node_Field_Designator);
 					field.name = current(p);
 					expect(p, .Identifier);
 					array_add(*designation.designators, field);
@@ -1881,7 +1881,7 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 		initializer = designated;
 		expect(p, .RightBrace);
 	} else {
-		scalar := New(Node_Scalar_Initializer);
+		scalar := make_node(p, Node_Scalar_Initializer);
 		scalar.expr = parse_expr(p, precedence_of(.Comma) + 1);
 		initializer = scalar;
 	}
@@ -1893,10 +1893,10 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 	statement: *Node_Statement;
 	if current(p).type == .LeftBrace {
 		expect(p, .LeftBrace);
-		block := New(Node_Block);
+		block := make_node(p, Node_Block);
 		while current(p).type != .RightBrace {
 			if is_declaration_start(p) {
-				decl_stmt := New(Node_Decl_Statement);
+				decl_stmt := make_node(p, Node_Decl_Statement);
 				decl_stmt.decl = parse_decl(p);
 				expect(p, .Semicolon);
 				array_add(*block.statements, decl_stmt);
@@ -1910,13 +1910,13 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 		if current(p).type == .Identifier {
 			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
 				if current(p).type == .Identifier {
-					label := New(Node_Label);
+					label := make_node(p, Node_Label);
 					label.token = current(p);
 					skip(p);
 					expect(p, .Colon);
 					statement = label;
 				} else {
-					_case := New(Node_Case);
+					_case := make_node(p, Node_Case);
 					skip(p);
 					if current(p).view == "default" {
 						_case.is_default = true;
@@ -1927,28 +1927,28 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					statement = _case;
 				}
 			} else if current(p).view == "continue" {
-				statement = New(Node_Continue);
+				statement = make_node(p, Node_Continue);
 				skip(p);
 				expect(p, .Semicolon);
 			} else if current(p).view == "break" {
-				statement = New(Node_Break);
+				statement = make_node(p, Node_Break);
 				skip(p);
 				expect(p, .Semicolon);
 			}  else if current(p).view == "goto" {
-				goto := New(Node_Goto);
+				goto := make_node(p, Node_Goto);
 				skip(p);
 				goto.to = current(p);
 				expect(p, .Identifier);
 				statement = goto;
 			} else if current(p).view == "return" {
 				skip(p);
-				ret := New(Node_Return);
+				ret := make_node(p, Node_Return);
 				ret.expr = parse_expr(p);
 				statement = ret;
 				expect(p, .Semicolon);
 			} else if current(p).view == "for" {
 				skip(p);
-				_for := New(Node_For);
+				_for := make_node(p, Node_For);
 				expect(p, .LeftParenthesis);
 				_for.init = parse_statement(p);
 				_for.cond = parse_expr(p);
@@ -1959,7 +1959,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = _for;
 			} else if current(p).view == "while" {
 				skip(p);
-				_while := New(Node_While);
+				_while := make_node(p, Node_While);
 				expect(p, .LeftParenthesis);
 				_while.cond = parse_expr(p);
 				expect(p, .RightParenthesis);
@@ -1967,7 +1967,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = _while;
 			} else if current(p).view == "do" {
 				skip(p);
-				_do := New(Node_Do);
+				_do := make_node(p, Node_Do);
 				_do.body = parse_statement(p);
 				if current(p).view != "while" {
 					assert(false);
@@ -1981,7 +1981,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = _do;
 			} else if current(p).view == "switch" {
 				skip(p);
-				_switch := New(Node_Switch);
+				_switch := make_node(p, Node_Switch);
 				expect(p, .LeftParenthesis);
 				_switch.expr = parse_expr(p);
 				expect(p, .RightParenthesis);
@@ -1989,7 +1989,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				statement = _switch;
 			} else if current(p).view == "if" {
 				skip(p);
-				_if := New(Node_If);
+				_if := make_node(p, Node_If);
 				expect(p, .LeftParenthesis);
 				_if.cond = parse_expr(p);
 				expect(p, .RightParenthesis);
@@ -2000,21 +2000,21 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 				}
 				statement = _if;
 			} else if is_declaration_start(p) {
-				decl_stmt := New(Node_Decl_Statement);
+				decl_stmt := make_node(p, Node_Decl_Statement);
 				decl_stmt.decl = parse_decl(p);
 				statement = decl_stmt;
 				expect(p, .Semicolon);
 			} else {
-				expr_stmt := New(Node_Expr_Statement);
+				expr_stmt := make_node(p, Node_Expr_Statement);
 				expr_stmt.expr = parse_expr(p);
 				statement = expr_stmt;
 				expect(p, .Semicolon);
 			}
 		} else if current(p).type == .Semicolon {
-			statement = New(Node_Statement);
+			statement = make_node(p, Node_Statement);
 			expect(p, .Semicolon);
 		} else {
-			expr_stmt := New(Node_Expr_Statement);
+			expr_stmt := make_node(p, Node_Expr_Statement);
 			expr_stmt.expr = parse_expr(p);
 			statement = expr_stmt;
 			expect(p, .Semicolon);
@@ -2024,7 +2024,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 }
 
 parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
-	result := New(Node_Translation_Unit);
+	result := make_node(p, Node_Translation_Unit);
 	while p.at < p.tokens.count {
 		decl := parse_decl(p);
 		if !decl.body {
@@ -2376,8 +2376,9 @@ run_test :: (filename: string) -> passed: bool {
 	tu := parse_translation_unit(*parser);
 
 	typechecker: Type_Checker;
+	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
-	typecheck(*typechecker, tu);
+	if !typecheck(*typechecker, tu) then return false;
 
 	c_builder: String_Builder;
 	for tu.declarations {
@@ -2462,7 +2463,7 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
-	//filename = "test.c";
+	filename = "test.c";
 	//filename = "tests/big_fuzz.c";
 	minimal := read_entire_file(filename);
 
@@ -2493,8 +2494,9 @@ main :: () {
 	tu := parse_translation_unit(*parser);
 
 	typechecker: Type_Checker;
+	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
-	typecheck(*typechecker, tu);
+	if !typecheck(*typechecker, tu) then return;
 
 	builder: String_Builder;
 	for tu.declarations {

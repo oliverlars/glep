@@ -57,6 +57,9 @@ Type_Checker :: struct {
 
 	current_function_return_type: *Resolved_Type;
 
+	// HACK(Oliver): Expect to have more of these...
+	filename: string;
+
 	// Put more info in this
 	errors: [..]string;
 }
@@ -304,7 +307,7 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 		resolved.unsigned = b.unsigned || a.unsigned;
 		resolved.size_in_bytes = max(max(a.size_in_bytes, b.size_in_bytes), 4);
 	} else {
-		assert(false);
+		return null;
 	}
 	
 	return resolved;
@@ -327,20 +330,14 @@ pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *
 
 		scale.resolved_type.* = size_number.resolved_type.*;
 
-		// The scaled index must be 8 bytes wide to match pointer width in the add
-		index_type := New(Resolved_Type);
-		index_type.kind = .Integral;
-		index_type.size_in_bytes = 8;
-		index_type.unsigned = true;
-
 		if side == .Left {
 			scale.left = at.left;
 			scale.right = size_number;
-			at.left = insert_cast(scale, index_type);
+			at.left = scale;
 		} else {
 			scale.left = at.right;
 			scale.right = size_number;
-			at.right = insert_cast(scale, index_type);
+			at.right = scale;
 		}
 	}
 
@@ -449,53 +446,6 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 	return info;
 }
 
-decl_info_from_resolved_type :: (target: *Resolved_Type) -> Node_Decl_Info {
-	info: Node_Decl_Info;
-	if target.kind == {
-		case .Floating;
-			if target.size_in_bytes == 4  array_add(*info.specifiers, "float");
-			else                          array_add(*info.specifiers, "double");
-		case .Integral;
-			if target.unsigned  array_add(*info.specifiers, "unsigned");
-			if target.size_in_bytes == {
-				case 1; array_add(*info.specifiers, "char");
-				case 2; array_add(*info.specifiers, "short");
-				case 4; array_add(*info.specifiers, "int");
-				case 8; array_add(*info.specifiers, "long");
-			}
-		case .Composite;
-			if target.symbol_name {
-				array_add(*info.specifiers, target.symbol_name);
-			} else {
-				_struct := target.composite.(*Node_Struct);
-				info._struct = _struct;
-				info.reference = true;
-			}
-		case .Pointer;
-			inner_info := decl_info_from_resolved_type(target.inner);
-			ptr_decl := New(Node_Declarator);
-			ptr_decl.declarator_type = Node_Pointer_Declarator;
-			if inner_info.declarators.count > 0 {
-				ptr_decl.inner = inner_info.declarators[0];
-				inner_info.declarators[0] = ptr_decl;
-			} else {
-				array_add(*inner_info.declarators, ptr_decl);
-			}
-			info = inner_info;
-	}
-	return info;
-}
-
-insert_cast :: (at: *Node_Expr, target: *Resolved_Type) -> *Node_Cast {
-	c := New(Node_Cast);
-	c.expr = at;
-	c.resolved_type = target;
-	c.base = decl_info_from_resolved_type(target);
-	assert(c.resolved_type != null);
-	assert(c.expr.resolved_type != null);
-	return c;
-}
-
 coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 	if !target || !source return false;
 
@@ -525,7 +475,7 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 }
 
 report_error :: (tc: *Type_Checker, fmt: string, args: ..Any) {
-	error := tprint("Type Mismatch: %", tprint(fmt, ..args));
+	error := tprint(fmt, ..args);
 	array_add(*tc.errors, error);
 } 
 
@@ -561,10 +511,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			}
 
 			if !coerceable(on_true, resolved_type) {
-				report_error(tc, "couldnt convert % to %", on_true.*, resolved_type.*);
+				report_error(tc, "Couldnt convert % to %", on_true.*, resolved_type.*);
 			}
 			if !coerceable(on_false, resolved_type) {
-				report_error(tc, "couldnt convert ternary % to %", on_false.*, resolved_type.*);
+				report_error(tc, "Couldnt convert ternary % to %", on_false.*, resolved_type.*);
 			}
 
 			expr.resolved_type = resolved_type;
@@ -619,9 +569,13 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			}
 			
 			resolved_type := common_type(left_info, right_info);
-			if !resolved_type return null;
+			if !resolved_type {
+				report_error(tc, "Incompatible types");
+				return null;
+			}
 
-			if !coerceable(left_info, resolved_type) {}
+			if !coerceable(left_info, resolved_type) {
+			}
 			if !coerceable(right_info, resolved_type) {}
 					
 			if binary.op.type == {
@@ -666,11 +620,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
-			info := New(Resolved_Type);
-			info.size_in_bytes = 8;
-			info.kind = .Integral;
-			info.unsigned = true;
-			array_access.index = insert_cast(array_access.index, info);
 			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner;
 		case Node_Identifier;
@@ -820,7 +769,7 @@ index_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: str
 			index += 1;
 		}
 	}
-	assert(false);
+	report_error(tc, "Couldnt find member '%' from srtuct '%'", name, _struct.name.view);
 	return index;
 }
 
@@ -834,7 +783,7 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 			current_index += 1;
 		}
 	}
-	assert(false);
+	report_error(tc, "Couldnt find member from index '%'", index);
 	return null;
 }
 
@@ -888,10 +837,10 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 			scalar := init.(*Node_Scalar_Initializer).expr;
 			expr_type := resolve_expr(tc, scalar);
 			if !coerceable(target, expr_type) {
-				report_error(tc, "scalar does not match left hand type\n");
+				report_error(tc, "%:%:%: Scalar does not match left hand type\n", tc.filename, init.line, init.col);
 			}
 			if !types_equal(target, expr_type) {
-				init.(*Node_Scalar_Initializer).expr = insert_cast(scalar, target);
+				init.(*Node_Scalar_Initializer).expr = scalar;
 			} else {
 				init.(*Node_Scalar_Initializer).expr.resolved_type = target;
 			}
@@ -929,10 +878,17 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	}
 }
 
-typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) {
+typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
 	push_scope(tc);
 	for decl: tu.declarations {
 		typecheck_decl(tc, decl);
 	}
 	pop_scope(tc);
+
+	for tc.errors {
+		print(it);
+		print("\n");
+	}
+
+	return tc.errors.count == 0;
 }
