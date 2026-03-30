@@ -15,6 +15,29 @@
 
 #load "lower_arm64.jai";
 
+Terminal_Colour :: enum u8 {
+	RED     :: 31;
+	GREEN   :: 32;
+	YELLOW  :: 33;
+	BLUE    :: 34;
+	MAGENTA :: 35;
+	CYAN    :: 36;
+	WHITE   :: 37;
+}
+
+colour :: (msg: string, colour: Terminal_Colour) -> string {
+	return tprint("\x1b[%m%\x1b[0m", cast(u8) colour, msg);
+}
+
+bold :: (msg: string) -> string {
+	return tprint("\x1b[1m%\x1b[0m", msg);
+}
+
+bold_colour :: (msg: string, color: Terminal_Colour) -> string {
+	return tprint("\x1b[1;%m%\x1b[0m", cast(u8) color, msg);
+}
+
+
 Token_Type :: enum {
 	Invalid;
 	Hash;

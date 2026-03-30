@@ -99,6 +99,12 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 	return false, .{};
 }
 
+// HACK(Oliver): weird
+__poison_type: Resolved_Type;
+poison_type :: () -> *Resolved_Type {
+	return *__poison_type;
+}
+
 resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type {
 	if decl_info.typedef {
 		typedef := resolve_base(tc, decl_info.typedef.base);
@@ -250,7 +256,7 @@ resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *R
 // This takes a declarator because the base decl stores all the comma separated declarators,
 // so it's just easier for now to specify which one and get a type that.
 resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
-	if !decl return null;
+	if !decl return poison_type();
 
 	base_info := resolve_base(tc, decl.base);
 	base_info = resolve_declarator(base_info, declarator);
@@ -260,7 +266,7 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 }
 
 resolve_decl :: (tc: *Type_Checker, base: *Node_Decl_Info, declarator: *Node_Declarator) -> *Resolved_Type {
-	if !base return null;
+	if !base return poison_type();
 
 	base_info := resolve_base(tc, base);
 	base_info = resolve_declarator(base_info, declarator);
@@ -307,7 +313,7 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 		resolved.unsigned = b.unsigned || a.unsigned;
 		resolved.size_in_bytes = max(max(a.size_in_bytes, b.size_in_bytes), 4);
 	} else {
-		return null;
+		return poison_type();
 	}
 	
 	return resolved;
@@ -447,6 +453,7 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 }
 
 coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
+	if target == poison_type() || source == poison_type() return false;
 	if !target || !source return false;
 
 	if target.kind == .Integral && source.kind == .Integral return true;
@@ -474,13 +481,18 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 	return result.(*Node_Function_Declarator);
 }
 
+report_error :: (tc: *Type_Checker, line: int, col: int, fmt: string, args: ..Any) {
+	error := tprint(fmt, ..args);
+	array_add(*tc.errors, tprint("%: %:%:%: %", colour("ERROR", .RED), tc.filename, line, col, error));
+}
+
 report_error :: (tc: *Type_Checker, fmt: string, args: ..Any) {
 	error := tprint(fmt, ..args);
-	array_add(*tc.errors, error);
+	array_add(*tc.errors, tprint("%: %", colour("ERROR", .RED), error));
 } 
 
 resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
-	if !expr return null;
+	if !expr return poison_type();
 	if expr.expr_type == {
 		case Node_Ternary;
 			ternary := expr.(*Node_Ternary);
@@ -506,12 +518,13 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			}
 
 			resolved_type := common_type(on_true, on_false);
-			if !resolved_type {
-				return null;
+			if resolved_type == poison_type() {
+				report_error(tc, expr.line, expr.col, "Unable to operate on types");
+				return resolved_type;
 			}
 
 			if !coerceable(on_true, resolved_type) {
-				report_error(tc, "Couldnt convert % to %", on_true.*, resolved_type.*);
+				report_error(tc, expr.line, expr.col, "Couldnt convert % to %", on_true.*, resolved_type.*);
 			}
 			if !coerceable(on_false, resolved_type) {
 				report_error(tc, "Couldnt convert ternary % to %", on_false.*, resolved_type.*);
@@ -569,9 +582,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			}
 			
 			resolved_type := common_type(left_info, right_info);
-			if !resolved_type {
-				report_error(tc, "Incompatible types");
-				return null;
+			if resolved_type == poison_type() {
+				report_error(tc, expr.line, expr.col, "Unable to operate on types");
+				return resolved_type;
 			}
 
 			if !coerceable(left_info, resolved_type) {
@@ -769,7 +782,7 @@ index_from_struct_member :: (tc: *Type_Checker, _struct: *Node_Struct, name: str
 			index += 1;
 		}
 	}
-	report_error(tc, "Couldnt find member '%' from srtuct '%'", name, _struct.name.view);
+	//report_error(tc, "Couldnt find member '%' from srtuct '%'", name, _struct.name.view);
 	return index;
 }
 
@@ -836,8 +849,9 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 		case Node_Scalar_Initializer;
 			scalar := init.(*Node_Scalar_Initializer).expr;
 			expr_type := resolve_expr(tc, scalar);
+			if expr_type == poison_type() { return poison_type(); }
 			if !coerceable(target, expr_type) {
-				report_error(tc, "%:%:%: Scalar does not match left hand type\n", tc.filename, init.line, init.col);
+				report_error(tc, init.line, init.col, "does not match type\n");
 			}
 			if !types_equal(target, expr_type) {
 				init.(*Node_Scalar_Initializer).expr = scalar;
