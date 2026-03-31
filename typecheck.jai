@@ -17,6 +17,7 @@ Resolved_Type :: struct {
 		Array;
 	};
 
+	addressable: bool;
 	array_count: int;
 	size_in_bytes: int;
 	alignment: int;
@@ -649,11 +650,16 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
 				expr.resolved_type.unsigned = true;
 			}
+			expr.resolved_type.addressable = true;
 			return expr.resolved_type;
 		case Node_Unary;
 			info := resolve_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
 				case .Ampersand;
+					if !info.addressable {
+						report_error(tc, expr.line, expr.col, "Unable to take address of type");
+						return poison_type();
+					}
 					inner := info;
 					info = New(Resolved_Type);
 					info.kind = .Pointer;
@@ -662,7 +668,19 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 					info.inner = inner;
 					info.unsigned = true;
 				case .Asterisk;
+					if !info.addressable {
+						report_error(tc, expr.line, expr.col, "Unable to deference non-addressable type");
+						return poison_type();
+					}
 					info = info.inner;
+				case .Bang;  #through;
+				case .Minus; #through;
+				case .Plus;  #through;
+				case .Tilde; #through;
+				case .Caret;
+					if info.composite && info.composite.type == Node_Struct {
+						report_error(tc, expr.line, expr.col, "Right hand side type cannot be a struct");
+					}
 			}
 			expr.resolved_type = info;
 			return info;
@@ -677,6 +695,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			info.size_in_bytes = 8;
 			info.alignment = 8;
 			info.kind = .Pointer;
+			info.addressable = true;
 			expr.resolved_type = info;
 			return info;
 		case Node_Char;
@@ -705,11 +724,15 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 					} else {
 						param_type = resolve_base(tc, param.base);
 					}
+					if !coerceable(param_type, arg_type) {
+						report_error(tc, it.line, it.col, "Argument '%' does not match parameter", 1 + it_index);
+					}
 				}
 			}
 			
 			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
 			call.resolved_type = ret_type;
+			call.resolved_type.addressable = true;
 			return ret_type;
 	}
 
@@ -871,7 +894,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		tc.current_function_return_type = decl.declarators[0].resolved_type;
 		push_scope(tc);
 		for function.params {
-			typecheck_decl(tc, it);
+			it.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
 			// 'void' is the only type you can have as a function
 			// parameter without a declarator
 			if it.base.specifiers[0] != "void" {
