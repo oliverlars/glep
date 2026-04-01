@@ -58,15 +58,19 @@ int main() {
 
 	//int a = test + 1;
 
-	abc(1, 2, test);
+	// abc(1, 2, test);
 
-	Vec asdfasdf = abc(1, 2, 3);
+	// Vec asdfasdf = abc(1, 2, 3);
 
-	int a = *1;
+	// int a = *1;
 
-	int b[10];
+	// int b[10];
 
-	b[0.5];
+	// b[0.5];
+
+	int a = (int)10.5;
+
+	printf("a = %d\n", a);
 
 	return 0;
 }

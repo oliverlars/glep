@@ -643,7 +643,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
 			found, decl := table_find(*tc.ordinary, name);
-			assert(found);
+			if !found {
+				report_error(tc, expr.line, expr.col, "Could not find variable '%'", name);
+				return poison_type();
+			}
 			function := function_declarator(decl.(*Node_Decl).declarators[0]);
 			
 			for call.args {
