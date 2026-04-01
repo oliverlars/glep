@@ -320,70 +320,6 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 	return resolved;
 }
 
-pointer_arithmetic_type :: (binary: *Node_Binary, left: *Resolved_Type, right: *Resolved_Type) -> *Resolved_Type {
-	add := binary.op.type == .Plus;
-	subtract := binary.op.type == .Minus;
-
-	insert_scale :: (at: *Node_Binary, side: enum { Left; Right; }, size_in_bytes: int) {
-		scale := New(Node_Binary);
-		scale.op.view = "*";
-		scale.op.type = .Asterisk;
-		scale.resolved_type = New(Resolved_Type);
-
-		size_number := New(Node_Number);
-		size_number.kind = .INTEGER;
-		size_number.as_u64 = xx size_in_bytes;
-		size_number.resolved_type = resolve_number(size_number);
-
-		scale.resolved_type.* = size_number.resolved_type.*;
-
-		if side == .Left {
-			scale.left = at.left;
-			scale.right = size_number;
-			at.left = scale;
-		} else {
-			scale.left = at.right;
-			scale.right = size_number;
-			at.right = scale;
-		}
-	}
-
-	insert_divide_by_size :: (at: *Node_Binary, size_in_bytes: int) {
-		div := New(Node_Binary);
-		div.op.view = "/";
-		div.op.type = .ForwardSlash;
-		div.resolved_type = New(Resolved_Type);
-
-		size_number := New(Node_Number);
-		size_number.kind = .INTEGER;
-		size_number.as_u64 = xx size_in_bytes;
-		size_number.resolved_type = resolve_number(size_number);
-
-		div.resolved_type.* = size_number.resolved_type.*;
-
-		div.left = at.left;
-		div.right = size_number;
-		at.left = div;
-	}
-
-	resolved: *Resolved_Type;
-	if left.kind == .Pointer && right.kind == .Integral {
-		insert_scale(binary, .Right, left.inner.size_in_bytes);
-		resolved = left;
-	} else if left.kind == .Integral && right.kind == .Pointer {
-		insert_scale(binary, .Left, right.inner.size_in_bytes);
-		resolved = right;
-	} else if subtract && left.kind == .Pointer && right.kind == .Pointer {
-		assert(left.inner.size_in_bytes == right.inner.size_in_bytes);
-		insert_divide_by_size(binary, left.inner.size_in_bytes);
-		resolved = New(Resolved_Type);
-		resolved.kind = .Integral;
-		resolved.size_in_bytes = 8;
-		resolved.unsigned = false;
-	}
-	return resolved;
-}
-
 split_suffix_from_number :: (number_with_suffix: string) -> string, string {
 	suffix := number_with_suffix;
 	suffix.count = 0;
@@ -575,12 +511,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			binary := expr.(*Node_Binary);
 			left_info := resolve_expr(tc, binary.left);
 			right_info := resolve_expr(tc, binary.right);
-
-			if (left_info.kind == .Pointer || right_info.kind == .Pointer) && (binary.op.type == .Plus || binary.op.type == .Minus) {
-				resolved_type := pointer_arithmetic_type(binary, left_info, right_info);
-				expr.resolved_type = resolved_type;
-				return resolved_type;
-			}
 			
 			resolved_type := common_type(left_info, right_info);
 			if resolved_type == poison_type() {
@@ -634,6 +564,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
+			if array_access.index.resolved_type.kind != .Integral {
+				report_error(tc, expr.line, expr.col, "Array subscript index must be integer");
+				return poison_type();
+			}
 			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner;
 		case Node_Identifier;
@@ -850,7 +784,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 								} else if constant_index.kind == .U64 {
 									index = constant_index.as_u64.(s64);
 								} else {
-									index = constant_index.as_f64.(s64);
+									report_error(tc, it.line, it.col, "Designator index must be integer");
 								}
 								offset += index * type.inner.size_in_bytes;
 								type = type.inner;
@@ -874,12 +808,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 			expr_type := resolve_expr(tc, scalar);
 			if expr_type == poison_type() { return poison_type(); }
 			if !coerceable(target, expr_type) {
-				report_error(tc, init.line, init.col, "does not match type\n");
-			}
-			if !types_equal(target, expr_type) {
-				init.(*Node_Scalar_Initializer).expr = scalar;
-			} else {
-				init.(*Node_Scalar_Initializer).expr.resolved_type = target;
+				report_error(tc, init.line, init.col, "does not match type");
 			}
 	}
 	return target;
