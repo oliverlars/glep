@@ -69,8 +69,9 @@ int main() {
 	// b[0.5];
 
 	int a = 10.5;
+	int b = 10.5 + 11;
 
-	printf("a = %d %d\n", a, a + 1);
+	printf("a = %d %d\n", a, b);
 
 	return 0;
 }

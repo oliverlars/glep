@@ -96,6 +96,12 @@ operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 	}
 }
 
+types_equal :: (a: IR_Operand_Type, b: IR_Operand_Type) -> bool {
+	return a.kind == a.kind &&
+		   a.size_in_bytes == b.size_in_bytes &&
+		   a.unsigned == b.unsigned;
+}
+
 next_register :: (compiler: *Compiler) -> int {
 	next := compiler.register;
 	compiler.register += 1;
@@ -291,11 +297,16 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_label(end));
 			} else {
 				left := compile_expr(compiler, binary.left);
+				if !types_equal(dst.type, left.type) {
+					converted := ir_register(next_register(compiler), dst.type);
+					ir_emit(function, ir_cast(converted, left));
+					left = converted;
+				}
 				right := compile_expr(compiler, binary.right);
-				if left.type.kind != right.type.kind ||
-				   left.type.size_in_bytes != right.type.size_in_bytes ||
-				   left.type.unsigned != right.type.unsigned {
-					ir_emit(function, ir_cast(left, right));
+				if !types_equal(dst.type, right.type) {
+					converted := ir_register(next_register(compiler), dst.type);
+					ir_emit(function, ir_cast(converted, right));
+					right = converted;
 				}
 				if binary.op.type == {
 					case .Plus;
@@ -488,10 +499,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			} else {
 				rhs := compile_expr(compiler, assign.right);
-				if lhs.type.kind != rhs.type.kind ||
-				   lhs.type.size_in_bytes != rhs.type.size_in_bytes ||
-				   lhs.type.unsigned != rhs.type.unsigned {
-					ir_emit(function, ir_cast(lhs, rhs));
+				if !types_equal(lhs.type, rhs.type) {
+					converted := ir_register(next_register(compiler), lhs.type);
+					ir_emit(function, ir_cast(converted, rhs));
+					rhs = converted;
 				}
 				ir_emit(function, ir_store(lhs, rhs));
 			}
