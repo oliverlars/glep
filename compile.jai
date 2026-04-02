@@ -264,7 +264,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			binary := expr.(*Node_Binary);
 
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
-
 			if binary.op.type == .AmpersandAmpersand {
 				on_false := next_label(compiler);
 				end := next_label(compiler);
@@ -293,6 +292,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			} else {
 				left := compile_expr(compiler, binary.left);
 				right := compile_expr(compiler, binary.right);
+				if left.type.kind != right.type.kind ||
+				   left.type.size_in_bytes != right.type.size_in_bytes ||
+				   left.type.unsigned != right.type.unsigned {
+					ir_emit(function, ir_cast(left, right));
+				}
 				if binary.op.type == {
 					case .Plus;
 						ir_emit(function, ir_add(dst, left, right));
@@ -484,6 +488,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			} else {
 				rhs := compile_expr(compiler, assign.right);
+				if lhs.type.kind != rhs.type.kind ||
+				   lhs.type.size_in_bytes != rhs.type.size_in_bytes ||
+				   lhs.type.unsigned != rhs.type.unsigned {
+					ir_emit(function, ir_cast(lhs, rhs));
+				}
 				ir_emit(function, ir_store(lhs, rhs));
 			}
 			result = lhs;
@@ -593,8 +602,8 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 	function := compiler.current_function;
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
+		rhs := compile_expr(compiler, expr);
 		if expr.resolved_type.kind == .Composite {
-			rhs := compile_expr(compiler, expr);
 			size := expr.resolved_type.size_in_bytes;
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 			ir_emit(function, ir_param(dst));
@@ -602,8 +611,14 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 
 		} else {
-			value := compile_expr(compiler, expr);
-			ir_emit(function, ir_store(dst, value));
+			if dst.type.kind != rhs.type.kind ||
+			   dst.type.size_in_bytes != rhs.type.size_in_bytes ||
+			   dst.type.unsigned != rhs.type.unsigned {
+				converted := ir_register(next_register(compiler), dst.type);
+				ir_emit(function, ir_cast(converted, rhs));
+				rhs = converted;
+			}
+			ir_emit(function, ir_store(dst, rhs));
 		}
 	} else {
 		for init.(*Node_Designated_Initializer).designations {

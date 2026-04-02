@@ -1,4 +1,4 @@
-//#include <stdio.h>
+#include <stdio.h>
 
 //#include <assert.h>
 
@@ -68,9 +68,9 @@ int main() {
 
 	// b[0.5];
 
-	int a = (int)10.5;
+	int a = 10.5;
 
-	printf("a = %d\n", a);
+	printf("a = %d %d\n", a, a + 1);
 
 	return 0;
 }

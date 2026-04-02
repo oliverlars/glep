@@ -653,10 +653,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 				arg_type := resolve_expr(tc, it);
 				it.resolved_type = arg_type;
 				
-				if it_index < function.params.count {
+				if it_index < function.params.count - 1 {
 					param := function.params[it_index];
 					param_type: *Resolved_Type;
-					if param.declarators.count > 0{
+					if param.declarators.count > 0 {
 						param_type = param.declarators[0].resolved_type;
 					} else {
 						param_type = resolve_base(tc, param.base);
