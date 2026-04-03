@@ -58,17 +58,17 @@ IR_Operand_Type :: struct {
 	unsigned: bool;
 }
 
-IR_U8  :: IR_Operand_Type.{.Integer, 1, true};
-IR_U16 :: IR_Operand_Type.{.Integer, 2, true};
-IR_U32 :: IR_Operand_Type.{.Integer, 4, true};
-IR_U64 :: IR_Operand_Type.{.Integer, 8, true};
-IR_S8  :: IR_Operand_Type.{.Integer, 1, false};
-IR_S16 :: IR_Operand_Type.{.Integer, 2, false};
-IR_S32 :: IR_Operand_Type.{.Integer, 4, false};
-IR_S64 :: IR_Operand_Type.{.Integer, 8, false};
-IR_F32 :: IR_Operand_Type.{.Float, 4, false};
-IR_F64 :: IR_Operand_Type.{.Float, 8, false};
-IR_PTR :: IR_Operand_Type.{.Integer, 8, true};
+IR_U8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = true};
+IR_U16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = true};
+IR_U32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = true};
+IR_U64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true};
+IR_S8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = false};
+IR_S16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = false};
+IR_S32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = false};
+IR_S64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = false};
+IR_F32 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 4, unsigned = false};
+IR_F64 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 8, unsigned = false};
+IR_PTR :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true};
 
 IR_Operand :: struct {
 	kind: IR_Operand_Kind;

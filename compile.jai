@@ -139,6 +139,12 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			//   pointer → Load (loads the pointer value from the alloca)
 			array := compile_expr(compiler, array_access.left);
 
+			if !types_equal(index.type, IR_U64) {
+				converted := ir_register(next_register(compiler), IR_U64);
+				ir_emit(function, ir_cast(converted, index));
+				index = converted;
+			}
+
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
 			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
 			ir_emit(function, ir_add(dst, array, index));
@@ -233,9 +239,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					result = dst;
 				case .Asterisk;
 					value := compile_expr(compiler, unary.expr);
-					dst := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type.inner));
-					ir_emit(function, ir_load(dst, value));
-					result = dst;
+					if unary.expr.resolved_type.inner.kind != .Array {
+						dst := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type.inner));
+						ir_emit(function, ir_load(dst, value));
+						result = dst;
+					} else {
+						result = value;
+					}
 				case .PlusPlus;
 					address := compile_lvalue(compiler, unary.expr);
 					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
@@ -244,6 +254,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					offset := 1;
 					if unary.expr.resolved_type.kind == .Pointer {
 						offset = unary.expr.resolved_type.inner.size_in_bytes;
+					} else if unary.expr.resolved_type.kind == .Array {
+						offset = unary.expr.resolved_type.inner.size_in_bytes / unary.expr.resolved_type.inner.array_count;
 					}
 
 					post := ir_register(next_register(compiler), pre.type);
@@ -268,6 +280,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
+
+			left_type := binary.left.resolved_type;
+			right_type := binary.right.resolved_type;
 
 			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
 			if binary.op.type == .AmpersandAmpersand {
@@ -310,6 +325,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				}
 				if binary.op.type == {
 					case .Plus;
+						if (left_type.kind == .Pointer || left_type.kind == .Array) && (right_type.kind != .Pointer && right_type.kind != .Array) {
+							pointer := ir_register(next_register(compiler), IR_PTR);
+							size_of_pointee := left_type.inner.size_in_bytes;
+							ir_emit(function, ir_mul(pointer, right, ir_constant(xx size_of_pointee, IR_PTR)));
+							right = pointer;
+						} else if (right_type.kind == .Pointer || right_type.kind == .Array) && (left_type.kind != .Pointer && left_type.kind != .Array) {
+							pointer := ir_register(next_register(compiler), IR_PTR);
+							size_of_pointee := right_type.inner.size_in_bytes;
+							ir_emit(function, ir_mul(pointer, left, ir_constant(xx size_of_pointee, IR_PTR)));
+							left = pointer;
+						}
 						ir_emit(function, ir_add(dst, left, right));
 					case .Minus;
 						ir_emit(function, ir_sub(dst, left, right));
@@ -374,7 +400,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			}
 		case Node_Array_Access;
 			address := compile_lvalue(compiler, expr);
-			if expr.resolved_type.kind == .Composite {
+			if expr.resolved_type.kind == .Composite || expr.resolved_type.kind == .Array {
 				result = address;
 			} else {
 				dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));

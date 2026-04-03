@@ -17,7 +17,7 @@ Resolved_Type :: struct {
 		Array;
 	};
 
-	addressable: bool;
+	memoryless: bool;
 	array_count: int;
 	size_in_bytes: int;
 	alignment: int;
@@ -295,8 +295,19 @@ types_equal :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
 
  
 common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
-	resolved: *Resolved_Type;
-	if a.kind == .Floating || b.kind == .Floating {
+	resolved := poison_type();
+	if a.kind == .Array || b.kind == .Array {
+		resolved = New(Resolved_Type);
+		resolved.kind = .Pointer;
+		resolved.size_in_bytes = 8;
+		resolved.alignment = 8;
+		resolved.unsigned = true;
+		if a.kind == .Array {
+			resolved.inner = a.inner;
+		} else {
+			resolved.inner = b.inner;
+		}
+	} else if a.kind == .Floating || b.kind == .Floating {
 		resolved = New(Resolved_Type);
 		if a.kind != .Floating {
 			resolved.* = b.*;
@@ -313,8 +324,12 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 		resolved.* = a.*;
 		resolved.unsigned = b.unsigned || a.unsigned;
 		resolved.size_in_bytes = max(max(a.size_in_bytes, b.size_in_bytes), 4);
-	} else {
-		return poison_type();
+	} else if a.kind == .Pointer && b.kind == .Integral {
+		resolved = New(Resolved_Type);
+		resolved.* = a.*;
+	} else if b.kind == .Pointer && a.kind == .Integral {
+		resolved = New(Resolved_Type);
+		resolved.* = b.*;
 	}
 	
 	return resolved;
@@ -386,6 +401,7 @@ resolve_number :: (number_node: *Node_Number) -> *Resolved_Type {
 			}
 		}
 	}
+	info.memoryless = true;
 	return info;
 }
 
@@ -428,7 +444,7 @@ report_error :: (tc: *Type_Checker, fmt: string, args: ..Any) {
 	array_add(*tc.errors, tprint("%: %", colour("ERROR", .RED), error));
 } 
 
-resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
+resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resolved_Type {
 	if !expr return poison_type();
 	if expr.expr_type == {
 		case Node_Ternary;
@@ -477,7 +493,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			resolved.unsigned = true;
 			resolved.alignment = 8;
 			sizeof.resolved_type = resolved;
-			resolve_expr(tc, sizeof.expr);
+			sizeof.expr.resolved_type = resolve_expr(tc, sizeof.expr, true);
 			return resolved;
 		case Node_Sizeof_Type;
 			sizeof := expr.(*Node_Sizeof_Type);
@@ -517,10 +533,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 				report_error(tc, expr.line, expr.col, "Unable to operate on types");
 				return resolved_type;
 			}
-
-			if !coerceable(left_info, resolved_type) {
-			}
-			if !coerceable(right_info, resolved_type) {}
 					
 			if binary.op.type == {
 				case .Less; #through;
@@ -568,7 +580,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 				report_error(tc, expr.line, expr.col, "Array subscript index must be integer");
 				return poison_type();
 			}
-			array_access.resolved_type = array_access.left.resolved_type.inner;
 			return array_access.left.resolved_type.inner;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
@@ -576,7 +587,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			
 			assert(found);
 			expr.resolved_type = decl.declarator.resolved_type;
-			if expr.resolved_type.kind == .Array {
+			if !sizeof && expr.resolved_type.kind == .Array {
 				expr.resolved_type = New(Resolved_Type);
 				expr.resolved_type.kind = .Pointer;
 				expr.resolved_type.alignment = 8;
@@ -584,25 +595,34 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
 				expr.resolved_type.unsigned = true;
 			}
-			expr.resolved_type.addressable = true;
 			return expr.resolved_type;
 		case Node_Unary;
 			info := resolve_expr(tc, expr.(*Node_Unary).expr);
 			if expr.(*Node_Unary).op.type == {
 				case .Ampersand;
-					if !info.addressable {
+					if info.memoryless {
 						report_error(tc, expr.line, expr.col, "Unable to take address of type");
 						return poison_type();
 					}
-					inner := info;
-					info = New(Resolved_Type);
-					info.kind = .Pointer;
-					info.size_in_bytes = 8;
-					info.alignment = 8;
-					info.inner = inner;
-					info.unsigned = true;
+					if expr.resolved_type.kind == .Array {
+						decay := New(Resolved_Type);
+						decay.kind = .Pointer;
+						decay.size_in_bytes = 8;
+						decay.alignment = 8;
+						decay.inner = decay.inner;
+						decay.unsigned = true;
+						info = decay;
+					} else {
+						inner := info;
+						info = New(Resolved_Type);
+						info.kind = .Pointer;
+						info.size_in_bytes = 8;
+						info.alignment = 8;
+						info.inner = inner;
+						info.unsigned = true;
+					}
 				case .Asterisk;
-					if !info.addressable {
+					if info.memoryless {
 						report_error(tc, expr.line, expr.col, "Unable to deference non-addressable type");
 						return poison_type();
 					}
@@ -629,7 +649,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			info.size_in_bytes = 8;
 			info.alignment = 8;
 			info.kind = .Pointer;
-			info.addressable = true;
 			expr.resolved_type = info;
 			return info;
 		case Node_Char;
@@ -669,7 +688,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr) -> *Resolved_Type {
 			
 			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
 			call.resolved_type = ret_type;
-			call.resolved_type.addressable = true;
 			return ret_type;
 	}
 
@@ -690,7 +708,9 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 		case Node_Return;
 			ret := stmt.(*Node_Return);
 			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
-			if coerceable(ret.expr.resolved_type, tc.current_function_return_type) {}
+			if !coerceable(ret.expr.resolved_type, tc.current_function_return_type) {
+				report_error(tc, ret.line, ret.col, "Expression doesn't match return type");
+			}
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
 			for decl.declarators {
