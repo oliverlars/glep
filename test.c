@@ -33,14 +33,15 @@ typedef struct {
 } TileGrid;
 
 
-// int light_less(Light *lights, int a, int b) {
-// 	// if (lights[a].type != lights[b].type)
-// 	// 	return lights[a].type < lights[b].type;
-// 	// return lights[a].z < lights[b].z;
+void light_less(Light *lights, int a, int b) {
+	// if (lights[a].type != lights[b].type)
+	// 	return lights[a].type < lights[b].type;
+	// return lights[a].z < lights[b].z;
 
-// 	printf("Light pointer?: %d", lights[0].id);
-// 	return 0;
-// }
+	printf("Light pointer?: %d", lights[0].id);
+
+	return;
+}
 
 int main() {
 

@@ -711,9 +711,11 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			resolve_expr(tc, stmt.(*Node_Expr_Statement).expr);
 		case Node_Return;
 			ret := stmt.(*Node_Return);
-			ret.expr.resolved_type = resolve_expr(tc, ret.expr);
-			if !coerceable(ret.expr.resolved_type, tc.current_function_return_type) {
-				report_error(tc, ret.line, ret.col, "Expression doesn't match return type");
+			if ret.expr {
+				ret.expr.resolved_type = resolve_expr(tc, ret.expr);
+				if !coerceable(ret.expr.resolved_type, tc.current_function_return_type) {
+					report_error(tc, ret.line, ret.col, "Expression doesn't match return type");
+				}
 			}
 		case Node_Decl_Statement;
 			decl := stmt.(*Node_Decl_Statement).decl;
@@ -853,7 +855,8 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 			a := 5;
 		}
 		for function.params {
-			it.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
+			print("PARAM: %\n", identifier_from_declarator(it.declarators[0]));
+			it.declarators[0].resolved_type = resolve_decl(tc, it, it.declarators[0]);
 			// 'void' is the only type you can have as a function
 			// parameter without a declarator
 			if it.base.specifiers[0] != "void" {
