@@ -330,6 +330,11 @@ common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 	} else if b.kind == .Pointer && a.kind == .Integral {
 		resolved = New(Resolved_Type);
 		resolved.* = b.*;
+	} else if a.kind == .Pointer && b.kind == .Pointer {
+		resolved = New(Resolved_Type);
+		resolved.alignment = 8;
+		resolved.size_in_bytes = 8;
+		resolved.unsigned = true;
 	}
 	
 	return resolved;
@@ -556,7 +561,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 		case Node_Member_Access;
 			member_access := expr.(*Node_Member_Access);
 			member_access.left.resolved_type = resolve_expr(tc, member_access.left);
-			assert(member_access.left.resolved_type.kind != .Floating);
 			left_type := member_access.left.resolved_type;
 			id := member_access.right.view;
 			if left_type.composite == null {
@@ -604,7 +608,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 						report_error(tc, expr.line, expr.col, "Unable to take address of type");
 						return poison_type();
 					}
-					if expr.resolved_type.kind == .Array {
+					if info.kind == .Array {
 						decay := New(Resolved_Type);
 						decay.kind = .Pointer;
 						decay.size_in_bytes = 8;
@@ -845,6 +849,9 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		prev_return_type := tc.current_function_return_type;
 		tc.current_function_return_type = decl.declarators[0].resolved_type;
 		push_scope(tc);
+		if identifier_from_declarator(decl.declarators[0]) == "light_less" {
+			a := 5;
+		}
 		for function.params {
 			it.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
 			// 'void' is the only type you can have as a function
