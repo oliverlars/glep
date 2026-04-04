@@ -578,9 +578,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				}
 			}
 		case Node_Array_Access;
-			array_access := expr.(*Node_Array_Access);
+		array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
+			array_access.resolved_type = array_access.left.resolved_type.inner;
 			if array_access.index.resolved_type.kind != .Integral {
 				report_error(tc, expr.line, expr.col, "Array subscript index must be integer");
 				return poison_type();

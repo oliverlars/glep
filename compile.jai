@@ -83,7 +83,7 @@ operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 }
 
 types_equal :: (a: IR_Operand_Type, b: IR_Operand_Type) -> bool {
-	return a.kind == a.kind &&
+	return a.kind == b.kind &&
 		   a.size_in_bytes == b.size_in_bytes &&
 		   a.unsigned == b.unsigned;
 }
@@ -309,6 +309,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					ir_emit(function, ir_cast(converted, right));
 					right = converted;
 				}
+				assert(types_equal(left.type, right.type));
 				if binary.op.type == {
 					case .Plus;
 						if (left_type.kind == .Pointer || left_type.kind == .Array) && (right_type.kind != .Pointer && right_type.kind != .Array) {
@@ -386,6 +387,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			}
 		case Node_Array_Access;
 			address := compile_lvalue(compiler, expr);
+			line := expr.line;
+			col := expr.col;
 			if expr.resolved_type.kind == .Composite || expr.resolved_type.kind == .Array {
 				result = address;
 			} else {
@@ -516,6 +519,20 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					ir_emit(function, ir_cast(converted, rhs));
 					rhs = converted;
 				}
+				if assign.op.type != .Equals {
+					op := ir_register(next_register(compiler), lhs.type);
+					if assign.op.type == {
+						case .PlusEqual;
+							ir_emit(function, ir_add(op, lhs, rhs));
+						case .MinusEqual;
+							ir_emit(function, ir_sub(op, lhs, rhs));
+						case .AsteriskEqual;
+							ir_emit(function, ir_mul(op, lhs, rhs));
+						case .ForwardSlashEqual;
+							ir_emit(function, ir_div(op, lhs, rhs));
+					}
+					rhs = op;
+				}
 				ir_emit(function, ir_store(lhs, rhs));
 			}
 			result = lhs;
@@ -531,6 +548,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			}
 		case Node_Cast;
 			_cast := expr.(*Node_Cast);
+			line := _cast.line;
+			col := _cast.col;
 			dst := ir_register(next_register(compiler), operand_type(_cast.resolved_type));
 			ir_emit(function, ir_cast(dst, compile_expr(compiler, _cast.expr)));
 			result = dst;

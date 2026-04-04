@@ -155,6 +155,7 @@ ir_sub :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
 }
 
 ir_mul :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
+	assert(a.type.kind == b.type.kind);
 	return .{ .Mul, dst, a, b };
 }
 
