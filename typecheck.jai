@@ -422,6 +422,7 @@ coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 	if target.kind == .Pointer && source.kind == .Pointer return true; 
 	if target.kind == .Pointer && source.kind == .Integral return true;
 	if target.kind == .Integral && source.kind == .Pointer return true;
+	if target.kind == .Pointer && source.kind == .Array return true;
 
 	if target.kind == .Composite && source.kind == .Composite {
 		return target.composite == source.composite;
@@ -680,7 +681,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 					param := function.params[it_index];
 					param_type: *Resolved_Type;
 					if param.declarators.count > 0 {
-						param_type = param.declarators[0].resolved_type;
+						param_type = resolve_decl(tc, *param.base, param.declarators[0]);
 					} else {
 						param_type = resolve_base(tc, param.base);
 					}
@@ -845,35 +846,34 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 
 typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	if !decl return;
-	if decl.body {
-		function := function_declarator(decl.declarators[0]);
-		decl.declarators[0].resolved_type = resolve_decl(tc, decl, decl.declarators[0]);
-		prev_return_type := tc.current_function_return_type;
-		tc.current_function_return_type = decl.declarators[0].resolved_type;
-		push_scope(tc);
-		if identifier_from_declarator(decl.declarators[0]) == "light_less" {
-			a := 5;
-		}
-		for function.params {
-			print("PARAM: %\n", identifier_from_declarator(it.declarators[0]));
-			it.declarators[0].resolved_type = resolve_decl(tc, it, it.declarators[0]);
-			// 'void' is the only type you can have as a function
-			// parameter without a declarator
-			if it.base.specifiers[0] != "void" {
-				push_decl(tc, it.base, it.declarators[0]);
+	for declarator: decl.declarators {
+		push_decl(tc, decl.base, declarator);
+		if is_function_declaration(declarator) {
+			function := function_declarator(declarator);
+			declarator.resolved_type = resolve_decl(tc, decl, declarator);
+			prev_return_type := tc.current_function_return_type;
+			tc.current_function_return_type = declarator.resolved_type;
+			push_scope(tc);
+			if identifier_from_declarator(declarator) == "memset" {
+				a := 5;
 			}
+			for function.params {
+				if it.declarators.count {
+					it.declarators[0].resolved_type = resolve_decl(tc, it, it.declarators[0]);
+					// 'void' is the only type you can have as a function
+					// parameter without a declarator
+					if it.base.specifiers.count && it.base.specifiers[0] != "void" {
+						push_decl(tc, it.base, it.declarators[0]);
+					}
+				}
+			}
+			typecheck_statement(tc, decl.body);
+			pop_scope(tc);
+			tc.current_function_return_type = prev_return_type;
 		}
-		typecheck_statement(tc, decl.body);
-		pop_scope(tc);
-		tc.current_function_return_type = prev_return_type;
-	} else {
-		for declarator: decl.declarators {
-			push_decl(tc, decl.base, declarator);
-			name := identifier_from_declarator(declarator);
-			decl_type := resolve_decl(tc, decl, declarator);
-			declarator.resolved_type = decl_type;
-			resolve_initializer(tc, decl_type, declarator.init);
-		}
+		decl_type := resolve_decl(tc, decl, declarator);
+		declarator.resolved_type = decl_type;
+		resolve_initializer(tc, decl_type, declarator.init);
 	}
 }
 

@@ -2109,6 +2109,27 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	return decl;
 }
 
+is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
+	return is_function_declaration(declarator) && decl.body != null;
+}
+
+is_function_declaration :: (declarator: *Node_Declarator) -> bool {
+	while declarator {
+		if declarator.declarator_type == Node_Function_Declarator {
+			return true;
+		}
+		declarator = declarator.inner;
+	}
+	return false;
+}
+
+first_declarator :: (decl: *Node_Decl) -> *Node_Declarator {
+	if decl.declarators.count > 0 {
+		return decl.declarators[0];
+	}
+	return null;
+}
+
 indent :: (builder: *String_Builder, depth: int) {
 	for 0..depth*4-1 append(builder, " ");
 }
@@ -2487,7 +2508,7 @@ main :: () {
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
 	filename = "test.c";
-	//filename = "tests/lights.c";
+	filename = "tests/lights.c";
 	minimal := read_entire_file(filename);
 
 	t0 := current_time_monotonic();

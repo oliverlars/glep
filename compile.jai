@@ -59,20 +59,6 @@ next_label :: (compiler: *Compiler) -> string {
 	return tprint("l%", compiler.label_counter);
 }
 
-is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
-	return is_function_declaration(declarator) && decl.body != null;
-}
-
-is_function_declaration :: (declarator: *Node_Declarator) -> bool {
-	while declarator {
-		if declarator.declarator_type == Node_Function_Declarator {
-			return true;
-		}
-		declarator = declarator.inner;
-	}
-	return false;
-}
-
 find_binding :: (compiler: *Compiler, name: string) -> Binding, bool {
 	is_global := 0;
 	for < scope: compiler.scopes {

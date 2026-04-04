@@ -52,9 +52,12 @@ int main() {
 	int array[10];
 	int after_array = 0;
 
+
+	memset(array, 0, sizeof array);
+
 	printf("distance = %lu | %lu", &after_array - array, sizeof array);
 
-	//light_less(&light, 0, 1);
+	light_less(&light, 0, 1);
 
 	return 0;
 }
