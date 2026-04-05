@@ -15,6 +15,9 @@ Compiler :: struct {
 
 	current_function: *IR_Function;
 
+	label_continue: string;
+	label_break: string;
+
 	label_counter: int;
 }
 
@@ -626,14 +629,22 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			_for := statement.(*Node_For);
 			start := next_label(compiler);
 			end := next_label(compiler);
+			cont := next_label(compiler);
+
+			compiler.label_break = end;
+			compiler.label_continue = cont;
+
 			ir_emit(function, "for init");
 			compile_statement(compiler, _for.init);
 			ir_emit(function, ir_label(start));
 			ir_emit(function, "for cond");
-			cond := compile_expr(compiler, _for.cond);
-			ir_emit(function, ir_ifz(cond, end));
+			if _for.cond {
+				cond := compile_expr(compiler, _for.cond);
+				ir_emit(function, ir_ifz(cond, end));
+			}
 			ir_emit(function, "for body");
 			compile_statement(compiler, _for.body);
+			ir_emit(function, ir_label(cont));
 			compile_expr(compiler, _for.expr);
 			ir_emit(function, ir_goto(start));
 			ir_emit(function, "for end");
@@ -642,6 +653,10 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			_while := statement.(*Node_While);
 			start := next_label(compiler);
 			end := next_label(compiler);
+			cont := next_label(compiler);
+
+			compiler.label_break = end;
+			compiler.label_continue = end;
 
 			ir_emit(function, ir_label(start));
 			cond := compile_expr(compiler, _while.cond);
@@ -649,6 +664,10 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			compile_statement(compiler, _while.body);
 			ir_emit(function, ir_goto(start));
 			ir_emit(function, ir_label(end));
+		case Node_Continue;
+			ir_emit(function, ir_goto(compiler.label_continue));
+		case Node_Break;
+			ir_emit(function, ir_goto(compiler.label_break));
 		case Node_If;
 			_if := statement.(*Node_If);
 			on_false := next_label(compiler);

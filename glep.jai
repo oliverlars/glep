@@ -1784,6 +1784,11 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			expect(p, .LeftParenthesis);
 			func := make_node(p, Node_Function_Declarator);
 			while current(p).type != .RightParenthesis {
+				// Hack(Oliver): foo(void) is a C thing, just handling it here because im lazy
+				if current(p).view == "void" && next(p).type == .RightParenthesis {
+					skip(p);
+					break;
+				}
 				if current(p).type == .Ellipsis {
 					func.variadic = true;
 					skip(p);

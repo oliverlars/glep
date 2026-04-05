@@ -245,6 +245,7 @@ ir_if :: (cond: IR_Operand, name: string) -> IR_Instruction {
 }
 
 ir_ifz :: (cond: IR_Operand, name: string) -> IR_Instruction {
+	assert(cond.kind != .None);
 	return .{ .Ifz, .{}, cond, .{ kind = .Label, label = name } };
 }
 
