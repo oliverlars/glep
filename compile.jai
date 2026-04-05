@@ -402,7 +402,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			member_access := expr.(*Node_Member_Access);
 			
 			address := compile_lvalue(compiler, member_access);
-			if member_access.resolved_type.kind == .Composite {
+			if member_access.resolved_type.kind == .Composite ||
+			   member_access.resolved_type.kind == .Array {
 				result = address;
 			} else {
 				dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
