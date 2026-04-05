@@ -253,6 +253,27 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					} else {
 						result = post;
 					}
+				case .MinusMinus;
+					address := compile_lvalue(compiler, unary.expr);
+					pre := ir_register(next_register(compiler), operand_type(unary.expr.resolved_type));
+					ir_emit(function, ir_load(pre, address));
+
+					offset := 1;
+					if unary.expr.resolved_type.kind == .Pointer {
+						offset = unary.expr.resolved_type.inner.size_in_bytes;
+					} else if unary.expr.resolved_type.kind == .Array {
+						offset = unary.expr.resolved_type.inner.size_in_bytes / unary.expr.resolved_type.inner.array_count;
+					}
+
+					post := ir_register(next_register(compiler), pre.type);
+					ir_emit(function, ir_sub(post, pre, ir_constant(xx offset, pre.type)));
+					ir_emit(function, ir_store(address, post));
+
+					if unary.postfix {
+						result = pre;
+					} else {
+						result = post;
+					}
 			}
 		case Node_Compound;
 			result = compile_lvalue(compiler, expr);
@@ -514,22 +535,36 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 			} else {
 				rhs := compile_expr(compiler, assign.right);
-				if !types_equal(lhs.type, rhs.type) {
-					converted := ir_register(next_register(compiler), lhs.type);
+				value_type := operand_type(assign.left.resolved_type);
+				if !types_equal(value_type, rhs.type) {
+					converted := ir_register(next_register(compiler), value_type);
 					ir_emit(function, ir_cast(converted, rhs));
 					rhs = converted;
 				}
 				if assign.op.type != .Equals {
-					op := ir_register(next_register(compiler), lhs.type);
+					op := ir_register(next_register(compiler), value_type);
+					value := compile_expr(compiler, assign.left);
 					if assign.op.type == {
 						case .PlusEqual;
-							ir_emit(function, ir_add(op, lhs, rhs));
+							ir_emit(function, ir_add(op, value, rhs));
 						case .MinusEqual;
-							ir_emit(function, ir_sub(op, lhs, rhs));
+							ir_emit(function, ir_sub(op, value, rhs));
 						case .AsteriskEqual;
-							ir_emit(function, ir_mul(op, lhs, rhs));
+							ir_emit(function, ir_mul(op, value, rhs));
 						case .ForwardSlashEqual;
-							ir_emit(function, ir_div(op, lhs, rhs));
+							ir_emit(function, ir_div(op, value, rhs));
+						case .LessLessEqual;
+							ir_emit(function, ir_shl(op, value, rhs));
+						case .GreaterGreaterEqual;
+							ir_emit(function, ir_shr(op, value, rhs));
+						case .AmpersandEqual;
+							ir_emit(function, ir_and(op, value, rhs));
+						case .PipeEqual;
+							ir_emit(function, ir_or(op, value, rhs));
+						case .CaretEqual;
+							ir_emit(function, ir_xor(op, value, rhs));
+						case .PercentEqual;
+							ir_emit(function, ir_mod(op, value, rhs));
 					}
 					rhs = op;
 				}
@@ -591,14 +626,17 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			_for := statement.(*Node_For);
 			start := next_label(compiler);
 			end := next_label(compiler);
-
+			ir_emit(function, "for init");
 			compile_statement(compiler, _for.init);
 			ir_emit(function, ir_label(start));
+			ir_emit(function, "for cond");
 			cond := compile_expr(compiler, _for.cond);
 			ir_emit(function, ir_ifz(cond, end));
+			ir_emit(function, "for body");
 			compile_statement(compiler, _for.body);
 			compile_expr(compiler, _for.expr);
 			ir_emit(function, ir_goto(start));
+			ir_emit(function, "for end");
 			ir_emit(function, ir_label(end));
 		case Node_While;
 			_while := statement.(*Node_While);

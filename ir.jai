@@ -99,6 +99,10 @@ IR :: struct {
 	globals: [..]IR_Global;
 }
 
+ir_emit :: (function: *IR_Function, comment: string) {
+	append(*function.builder, tprint("; %\n", comment));
+}
+
 ir_emit :: (function: *IR_Function, ins: IR_Instruction, at := -1) {
 	
 	if at >= 0 {
@@ -156,6 +160,7 @@ ir_sub :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
 
 ir_mul :: (dst: IR_Operand, a: IR_Operand, b: IR_Operand) -> IR_Instruction {
 	assert(a.type.kind == b.type.kind);
+	assert(a.type.size_in_bytes == b.type.size_in_bytes);
 	return .{ .Mul, dst, a, b };
 }
 
