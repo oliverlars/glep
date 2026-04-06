@@ -149,7 +149,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_param(ir_constant(0, IR_S64)));
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 
-			compile_initializer(compiler, compound.init, dst);
+			compile_initializer(compiler, compound.init, operand_type(compound.resolved_type), dst);
 			dst = compound_address;
 			return dst;
 		case Node_Identifier;
@@ -580,7 +580,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			type := operand_type(number.resolved_type);
 			if number.kind == .FLOAT {
 				value: u64;
-				memcpy(*value, *number.as_f64, 8);
+				if number.resolved_type.size_in_bytes == 4 {
+					as_f32 := number.as_f64.(float32);
+					print("NUMBER: %\n", as_f32);
+					memcpy(*value, *as_f32, 4);
+				} else {
+					memcpy(*value, *number.as_f64, 8);
+				}
 				result = ir_constant(value, type);
 			} else {
 				result = ir_constant(number.as_u64, type);
@@ -608,7 +614,7 @@ compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Bin
 	slot := ir_register(next_register(compiler), IR_PTR);
 	ir_emit(function, ir_alloca(slot, xx declarator.resolved_type.size_in_bytes));
 	binding := bind_decl(compiler, name, slot, declarator.resolved_type);
-	compile_initializer(compiler, declarator.init, slot);
+	compile_initializer(compiler, declarator.init, operand_type(declarator.resolved_type), slot);
 	return binding;
 }
 
@@ -619,6 +625,7 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 		case Node_Decl_Statement;
 			decl := statement.(*Node_Decl_Statement).decl;
 			for decl.declarators {
+				name := identifier_from_declarator(it);
 				compile_declarator(compiler, it);
 			}
 		case Node_Expr_Statement;
@@ -697,7 +704,7 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 	}
 }
 
-compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Operand) {
+compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: IR_Operand_Type, dst: IR_Operand) {
 	if !init return;
 	function := compiler.current_function;
 	if init.initializer_type == Node_Scalar_Initializer {
@@ -711,9 +718,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 			ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 
 		} else {
-			if dst.type.kind != rhs.type.kind ||
-			   dst.type.size_in_bytes != rhs.type.size_in_bytes ||
-			   dst.type.unsigned != rhs.type.unsigned {
+			if !types_equal(lhs_type, rhs.type) {
 				converted := ir_register(next_register(compiler), dst.type);
 				ir_emit(function, ir_cast(converted, rhs));
 				rhs = converted;
@@ -727,7 +732,8 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, dst: IR_Op
 				member_address = ir_register(next_register(compiler), IR_PTR);
 				ir_emit(function, ir_add(member_address, dst, ir_constant(xx it.byte_offset, IR_U64)));
 			}
-			compile_initializer(compiler, it.expr, member_address);
+			
+			compile_initializer(compiler, it.expr, operand_type(it.target_resolved_type), member_address);
 		}
 	}
 }

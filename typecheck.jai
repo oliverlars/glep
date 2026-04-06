@@ -831,7 +831,8 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 					}
 				}
 				designation.byte_offset = offset;
-				resolve_initializer(tc, type, designation.expr);
+				designation.target_resolved_type = type;
+				designation.resolved_type = resolve_initializer(tc, type, designation.expr);
 				index += 1;
 			}
 		case Node_Scalar_Initializer;

@@ -48,10 +48,14 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 	if op.kind == .None return "";
 
 	if op.kind == .Constant {
+		dst := scratch_name(op.type, scratch);
 		if op.type.size_in_bytes <= 4 {
 			emit(emitter, "movz w%, #%", scratch, op.constant & 0xFFFF);
 			high := (op.constant >> 16) & 0xFFFF;
 			emit(emitter, "movk w%, #%, lsl #16", scratch, high);
+			if op.type.kind == .Float {
+				emit(emitter, "fmov %, w%", dst, scratch);
+			}
 		} else {
 			emit(emitter, "movz x%, #%, lsl #0",  scratch, op.constant & 0xFFFF);
 			w1 := (op.constant >> 16) & 0xFFFF;
@@ -60,11 +64,11 @@ value_from_operand :: (emitter: *Emitter, op: IR_Operand, info: Function_Info, s
 			emit(emitter, "movk x%, #%, lsl #16", scratch, w1);
 			emit(emitter, "movk x%, #%, lsl #32", scratch, w2);
 			emit(emitter, "movk x%, #%, lsl #48", scratch, w3);
+			if op.type.kind == .Float {
+				emit(emitter, "fmov %, x%", dst, scratch);
+			}
 		}
-		dst := scratch_name(op.type, scratch);
-		if op.type.kind == .Float {
-			emit(emitter, "fmov %, x%", dst, scratch);
-		}
+
 		return dst;
 	}
 
@@ -287,9 +291,16 @@ lower :: (emitter: *Emitter) {
 					while param_end + variadic_count < function.instructions.count &&
 						  function.instructions[param_end + variadic_count].op == .Param {
 						param := function.instructions[param_end + variadic_count];
-						src := value_from_operand(emitter, param.a, info, 12);
-						base := sp_offset(emitter, 9, variadic_count*8);
-						emit(emitter, "str %, [%]", src, base);
+						if param.a.type.kind == .Float && param.a.type.size_in_bytes == 4 {
+							src := value_from_operand(emitter, param.a, info, 12);
+							emit(emitter, "fcvt d12, %", src);
+							base := sp_offset(emitter, 9, variadic_count*8);
+							emit(emitter, "str d12, [%]", base);
+						} else {
+							src := value_from_operand(emitter, param.a, info, 12);
+							base := sp_offset(emitter, 9, variadic_count*8);
+							emit(emitter, "str %, [%]", src, base);
+						}
 						param_index += 1;
 						variadic_count += 1;
 					}

@@ -360,6 +360,11 @@ Node_Designation :: struct {
 	#as using node: Node;
 	type = #this;
 	resolved_type: *Resolved_Type;
+	// HACK(Oliver): it's too annoying to
+	// iterate both the initializer and the source structs
+	// to compare types, we do it once then put the target type here
+	// and let the backend cast if appropriate
+	target_resolved_type: *Resolved_Type;
 	designators: [..]*Node_Designator;
 	expr: *Node_Initializer;
 	// HACK(Oliver): This just feels weird
