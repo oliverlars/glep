@@ -592,7 +592,11 @@ lower :: (emitter: *Emitter) {
 					} else if dst_type.kind == .Integer && src_type.kind == .Integer {
 						if dst_type.size_in_bytes > src_type.size_in_bytes {
 							if src_type.unsigned {
-								emit(emitter, "mov %, %", dst, a);
+								// Zero-extension: write to w-form of dst.
+								// ARM64 always zero-extends a 32-bit write into the full 64-bit register,
+								// so mov w9, w10 correctly zero-extends w10 into x9.
+								w_dst := tprint("w%", 9);
+								emit(emitter, "mov %, %", w_dst, a);
 							} else if src_type.size_in_bytes == {
 								case 1;
 									emit(emitter, "sxtb %, %", dst, a);
@@ -602,7 +606,11 @@ lower :: (emitter: *Emitter) {
 									emit(emitter, "sxtw %, %", dst, a);
 							}
 						} else {
-							emit(emitter, "mov %, %", dst, a);
+							// Narrowing or same size.
+							// If the source is 64-bit (a = "x10"), we must use its w-form
+							// to avoid the invalid mov w9, x10 — w10 gives the lower 32 bits of x10.
+							src := ifx src_type.size_in_bytes == 8 then tprint("w%", 10) else a;
+							emit(emitter, "mov %, %", dst, src);
 						}
 					} else if dst_type.kind == .Float && src_type.kind == .Float {
 						if dst_type.size_in_bytes != src_type.size_in_bytes {

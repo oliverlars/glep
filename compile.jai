@@ -282,11 +282,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = compile_lvalue(compiler, expr);
 		case Node_Sizeof_Type;
 			sizeof := expr.(*Node_Sizeof_Type);
-			dst := ir_constant(xx sizeof.target_type.size_in_bytes, operand_type(sizeof.target_type));
+			dst := ir_constant(xx sizeof.target_type.size_in_bytes, IR_U64);
 			result = dst;
 		case Node_Sizeof_Expr;
 			sizeof := expr.(*Node_Sizeof_Expr);
-			dst := ir_constant(xx sizeof.expr.resolved_type.size_in_bytes, operand_type(sizeof.expr.resolved_type));
+			dst := ir_constant(xx sizeof.expr.resolved_type.size_in_bytes, IR_U64);
 			result = dst;
 		case Node_Binary;
 			binary := expr.(*Node_Binary);
@@ -719,7 +719,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: 
 
 		} else {
 			if !types_equal(lhs_type, rhs.type) {
-				converted := ir_register(next_register(compiler), dst.type);
+				converted := ir_register(next_register(compiler), lhs_type);
 				ir_emit(function, ir_cast(converted, rhs));
 				rhs = converted;
 			}
