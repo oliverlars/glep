@@ -607,9 +607,9 @@ lower :: (emitter: *Emitter) {
 							}
 						} else {
 							// Narrowing or same size.
-							// If the source is 64-bit (a = "x10"), we must use its w-form
-							// to avoid the invalid mov w9, x10 — w10 gives the lower 32 bits of x10.
-							src := ifx src_type.size_in_bytes == 8 then tprint("w%", 10) else a;
+							// When narrowing from 64-bit to 32-bit (x10 -> w9), we must use the
+							// w-form of the source to avoid the invalid "mov w9, x10".
+							src := ifx (src_type.size_in_bytes == 8 && dst_type.size_in_bytes <= 4) then tprint("w%", 10) else a;
 							emit(emitter, "mov %, %", dst, src);
 						}
 					} else if dst_type.kind == .Float && src_type.kind == .Float {

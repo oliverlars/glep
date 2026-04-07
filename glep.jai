@@ -826,6 +826,7 @@ tokenise :: (t: *Tokeniser) {
 					token.view.count += 1;
 				} else if is_char(t, #char ">") {
 					t.at += 1;
+					token.view.count += 1;
 					token.type = .GreaterGreater;
 					if is_char(t, #char "=") {
 						t.at += 1;
@@ -2349,7 +2350,6 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			append(builder, "for ");
 			append(builder, "(");
 			print_statement(builder, stmt.(*Node_For).init);
-			append(builder, "; ");
 			print_expr(builder, stmt.(*Node_For).cond);
 			append(builder, "; ");
 			print_expr(builder, stmt.(*Node_For).expr);
@@ -2361,6 +2361,8 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			append(builder, ";\n");
 		case Node_Expr_Statement;
 			print_expr(builder, stmt.(*Node_Expr_Statement).expr);
+			append(builder, ";\n");
+		case;
 			append(builder, ";\n");
 	}
 }
