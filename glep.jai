@@ -13,7 +13,16 @@
 #load "typecheck.jai";
 #load "compile.jai";
 
-#load "lower_arm64.jai";
+LOWER_C :: 0;
+LOWER_ARM64 :: 1;
+
+LOWERER :: LOWER_C;
+
+#if LOWERER == LOWER_ARM64 {
+	#load "lower_arm64.jai";
+} else {
+	#load "lower_c.jai";
+}
 
 Terminal_Colour :: enum u8 {
 	RED     :: 31;
@@ -2597,9 +2606,10 @@ main :: () {
 
 
 
-	emitter := lower_to_arm64e(*compiler.ir);
+	emitter := lower(*compiler.ir);
 
-	write_entire_file("out.s", builder_to_string(*emitter.builder));
+	
+	write_entire_file("out.c", builder_to_string(*emitter.builder));
 
 	print("\nCompiling assembly...\n\n");
 	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
