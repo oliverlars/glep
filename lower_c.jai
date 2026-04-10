@@ -48,6 +48,31 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 	return "";
 }
 
+materialise :: (operand: IR_Operand) -> string {
+	if operand.kind == {
+		case .Constant;
+			if operand.type.kind == .Float {
+				if operand.type.size_in_bytes == 8 {
+					as_f64: float32;
+					memcpy(*as_f64, *operand.constant, 4);
+					return tprint("%", as_f64);
+				} else {
+					as_f32: float32;
+					as_u32 := operand.constant.(u32);
+					memcpy(*as_f32, *as_u32, 4);
+					return tprint("%", as_f32);
+				}
+			} else {
+				return tprint("%", operand.constant);
+			}
+		case .Register;
+			return tprint("v%", operand.register);
+		case .Label;
+			return operand.label;
+	}
+	return "";
+}
+
 lower :: (emitter: *Emitter) {
 	for function: emitter.ir.functions {
 		name := function.name;
@@ -66,7 +91,7 @@ lower :: (emitter: *Emitter) {
 		if function.instructions.count > 0 {
 			for function.instructions {
 				if it.op == .LoadParam {
-					param := tprint("% v%", ctype_from_ir_type(it.dst.type), it.dst.register);
+					param := tprint("% v%", ctype_from_ir_type(it.dst.type), materialise(it.dst));
 					if it_index >= function.params.count {
 						emit(emitter, "%", param);
 						break;
@@ -80,7 +105,20 @@ lower :: (emitter: *Emitter) {
 			for function.instructions {
 				if it.op == {
 					case .Add;
-						emit(emitter, "% v% = v% + v%;", ctype_from_ir_type(it.dst.type), it.a.register, it.b.register);
+						emit(emitter, "// Add");
+						emit(emitter, "% v% = % + %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Load;
+						emit(emitter, "// Load");
+						emit(emitter, "% v% = %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+					case .Store;
+						emit(emitter, "// Store");
+						emit(emitter, "*((%*)v%) = %;", ctype_from_ir_type(it.b.type), it.a.register, materialise(it.b));
+					case .Address;
+						emit(emitter, "// Address");
+						emit(emitter, "% v% = &%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+					case .Alloca;
+						emit(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
+						emit(emitter, "unsigned long long v% = (unsigned long long)alloca_v%;", it.dst.register, it.dst.register);
 				}
 			}
 			emit(emitter, "}");
