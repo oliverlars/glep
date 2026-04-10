@@ -119,6 +119,26 @@ lower :: (emitter: *Emitter) {
 					case .Alloca;
 						emit(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
 						emit(emitter, "unsigned long long v% = (unsigned long long)alloca_v%;", it.dst.register, it.dst.register);
+					case .Call;
+						emit(emitter, "%(", it.a.label);
+						param_count := it.b.constant.(int);
+						arg_index := 0;
+						arg_count := 0;
+						while arg_count + it_index + 1 < function.instructions.count &&
+							  function.instructions[it_index + arg_index + 1].op == .Param {
+							arg_count += 1;
+						}
+						while arg_index < arg_count {
+							arg := function.instructions[arg_index + it_index + 1];
+							if arg_index < arg_count - 1 {
+								emit(emitter, "%, ", materialise(arg.a));
+							} else {
+								emit(emitter, "%", materialise(arg.a));
+							}
+							arg_index += 1;
+						}
+						emit(emitter, ");", it.a.label);
+					case .Param;
 				}
 			}
 			emit(emitter, "}");
