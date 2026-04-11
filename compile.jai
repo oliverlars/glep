@@ -766,6 +766,21 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 }
 
 
+append_struct_params :: (_struct: *Node_Struct, layout: Struct_Layout, params: *[..]IR_Operand_Type) {
+	index := 0;
+	for _struct.members {
+		for declarator: it.declarators {
+			member_type := declarator.resolved_type;
+			if member_type.kind == .Composite {
+				append_struct_params(member_type.composite.(*Node_Struct), member_type.layout, params);
+			} else {
+				array_add(params, operand_type(member_type));
+			}
+			index += 1;
+		}
+	}
+}
+
 compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 	push_scope(compiler);
@@ -780,21 +795,6 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				compiler.register = 0;
 				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;
-
-				append_struct_params :: (_struct: *Node_Struct, layout: Struct_Layout, params: *[..]IR_Operand_Type) {
-					index := 0;
-					for _struct.members {
-						for declarator: it.declarators {
-							member_type := declarator.resolved_type;
-							if member_type.kind == .Composite {
-								append_struct_params(member_type.composite.(*Node_Struct), member_type.layout, params);
-							} else {
-								array_add(params, operand_type(member_type));
-							}
-							index += 1;
-						}
-					}
-				}
 
 				emit_struct_load_params :: (compiler: *Compiler, function: *IR_Function, _struct: *Node_Struct, layout: Struct_Layout, base: IR_Operand, param_index: int) -> int {
 					index := 0;
@@ -854,6 +854,28 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
 				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type.size_in_bytes);
 				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
+			} else if is_function_declaration(declarator) {
+				external: IR_External;
+				external.name = name;
+
+				function := function_declarator(declarator);
+				for function.params {
+					param_type := it.declarators[0].resolved_type;
+					if param_type.kind == .Composite {
+						append_struct_params(param_type.composite.(*Node_Struct), param_type.layout, *external.params);
+					} else {
+						array_add(*external.params, operand_type(param_type));
+					}
+				}
+
+				ret_type := declarator.resolved_type;
+				if ret_type.kind == .Composite {
+					append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *external.results);
+				} else {
+					array_add(*external.results, operand_type(ret_type));
+				}
+
+				array_add(*compiler.ir.externals, external);
 			}
 		}
 	}

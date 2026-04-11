@@ -1774,9 +1774,10 @@ parse_param_decl :: (p: *Parser) -> *Node_Decl {
 	decl := make_node(p, Node_Decl);
 	parse_declaration_specifiers(p, *decl.base);
 	declarator := parse_declarator(p);
-	if declarator {
-		array_add(*decl.declarators, declarator);
+	if !declarator {
+		declarator = make_node(p, Node_Declarator);
 	}
+	array_add(*decl.declarators, declarator);
 	return decl;
 }
 

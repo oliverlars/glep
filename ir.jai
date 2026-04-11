@@ -85,6 +85,13 @@ IR_Global :: struct {
 	alignment: int;
 }
 
+
+IR_External :: struct {
+	name: string;
+	params: [..]IR_Operand_Type;
+	results: [..]IR_Operand_Type;
+}
+
 IR_Function :: struct {
 	name: string;
 	params: [..]IR_Operand_Type;
@@ -96,6 +103,7 @@ IR_Function :: struct {
 
 IR :: struct {
 	functions: [..]IR_Function;
+	externals: [..]IR_External;
 	globals: [..]IR_Global;
 }
 

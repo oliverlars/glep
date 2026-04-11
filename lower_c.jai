@@ -12,12 +12,29 @@ Function_Info :: struct {
 Emitter :: struct {
 	ir: *IR;
 	builder: String_Builder;
+	indent: int;
+}
+
+emitln :: (emitter: *Emitter, fmt: string, args: ..Any) {
+	to_append := tprint(fmt, ..args);
+	for 0..emitter.indent-1 {
+		append(*emitter.builder, "    ");
+	}
+	append(*emitter.builder, to_append);
+	append(*emitter.builder, "\n");
 }
 
 emit :: (emitter: *Emitter, fmt: string, args: ..Any) {
 	to_append := tprint(fmt, ..args);
 	append(*emitter.builder, to_append);
-	append(*emitter.builder, "\n");
+}
+
+indent :: (emitter: *Emitter) {
+	emitter.indent += 1;
+}
+
+unindent :: (emitter: *Emitter) {
+	emitter.indent -= 1;
 }
 
 ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
@@ -74,20 +91,35 @@ materialise :: (operand: IR_Operand) -> string {
 }
 
 lower :: (emitter: *Emitter) {
+	for external: emitter.ir.externals {
+		name := external.name;
+		if external.results.count == 1 {
+				ctype := ctype_from_ir_type(external.results[0]);
+				emit(emitter, "% ", ctype);
+		} else {
+			emitln(emitter, "typedef struct %_return {");
+			for result_member: external.results { 
+				ctype := ctype_from_ir_type(result_member);
+				emit(emitter, "% r%;", ctype, it_index);
+			}
+			emit(emitter, "} %_return;", name);
+		}
+		emit(emitter, "%();\n", name);
+	}
 	for function: emitter.ir.functions {
 		name := function.name;
 		if function.results.count == 1 {
 				ctype := ctype_from_ir_type(function.results[0]);
-				emit(emitter, "% %(", ctype, name);
+				emit(emitter, "% ", ctype);
 		} else {
-			emit(emitter, "typedef struct %_return {", name);
+			emitln(emitter, "typedef struct %_return {");
 			for result_member: function.results { 
 				ctype := ctype_from_ir_type(result_member);
 				emit(emitter, "% r%;", ctype, it_index);
 			}
 			emit(emitter, "} %_return;", name);
-			emit(emitter, "%_return %(", name, name);
 		}
+		emit(emitter, "%(\n", name);
 		if function.instructions.count > 0 {
 			for function.instructions {
 				if it.op == .LoadParam {
@@ -96,32 +128,28 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "%", param);
 						break;
 					} else {
-						emit(emitter, "%,", param);
+						emit(emitter, "%,\n", param);
 					}
 				}
 			}
-			emit(emitter, ") ");
-			emit(emitter, "{");
+			emitln(emitter, ") {");
+			indent(emitter);
 			for function.instructions {
 				if it.op == {
 					case .Add;
-						emit(emitter, "// Add");
-						emit(emitter, "% v% = % + %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "% v% = % + %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
 					case .Load;
-						emit(emitter, "// Load");
-						emit(emitter, "% v% = %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+						emitln(emitter, "% v% = *((%*)v%);", ctype_from_ir_type(it.dst.type), it.dst.register, ctype_from_ir_type(it.dst.type), it.a.register);
 					case .Store;
-						emit(emitter, "// Store");
-						emit(emitter, "*((%*)v%) = %;", ctype_from_ir_type(it.b.type), it.a.register, materialise(it.b));
+						emitln(emitter, "*((%*)v%) = %;", ctype_from_ir_type(it.b.type), it.a.register, materialise(it.b));
 					case .Address;
-						emit(emitter, "// Address");
-						emit(emitter, "% v% = &%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+						emitln(emitter, "void *v% = (void*)&%;", it.dst.register, materialise(it.a));
 					case .Alloca;
-						emit(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
-						emit(emitter, "unsigned long long v% = (unsigned long long)alloca_v%;", it.dst.register, it.dst.register);
+						emitln(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
+						emitln(emitter, "void *v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
 					case .Call;
+						for 0..emitter.indent-1 { append(*emitter.builder, "    "); }
 						emit(emitter, "%(", it.a.label);
-						param_count := it.b.constant.(int);
 						arg_index := 0;
 						arg_count := 0;
 						while arg_count + it_index + 1 < function.instructions.count &&
@@ -137,13 +165,14 @@ lower :: (emitter: *Emitter) {
 							}
 							arg_index += 1;
 						}
-						emit(emitter, ");", it.a.label);
+						emitln(emitter, ");");
 					case .Param;
 				}
 			}
-			emit(emitter, "}");
+			unindent(emitter);
+			emitln(emitter, "}");
 		} else {
-			emit(emitter, ");");
+			emitln(emitter, ");");
 		}
 	}
 }
