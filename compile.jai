@@ -79,9 +79,9 @@ is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> b
 
 operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 	if resolved_type.kind == .Floating {
-		return .{ .Float, resolved_type.size_in_bytes, false };
-	} else {
-		return .{ .Integer, resolved_type.size_in_bytes, resolved_type.unsigned };
+		return .{ .Float, resolved_type.size_in_bytes, false, false };
+	} else { 
+		return .{ .Integer, resolved_type.size_in_bytes, resolved_type.unsigned, resolved_type.inner != null };
 	}
 }
 
@@ -433,7 +433,7 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				table_set(*compiler.strings, str.token.view, count);
 			}
 			label := tprint("str%", count);
-			dst := ir_register(next_register(compiler), .{ .Integer, 8, true });
+			dst := ir_register(next_register(compiler), IR_PTR);
 			ir_emit(function, ir_address(dst, ir_label_operand(label)));
 			result = dst;
 		case Node_Ternary;
@@ -492,8 +492,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 			args: [..] IR_Operand;
 			non_variadic_expanded_param_count := 0;
+			variadic: bool;
 			for call.args {
-				variadic := it_index >= source_param_count;
+				variadic = it_index >= source_param_count;
 				if it.resolved_type.kind == .Composite {
 					address := compile_lvalue(compiler, it);
 					param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
@@ -504,6 +505,8 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					if !variadic then non_variadic_expanded_param_count += 1;
 				}
 			}
+
+			function.variadic = variadic;
 
 			if call.resolved_type.kind == .Composite {
 				ret_slot := ir_register(next_register(compiler), IR_PTR);
@@ -867,6 +870,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						array_add(*external.params, operand_type(param_type));
 					}
 				}
+				external.variadic = function.variadic;
 
 				ret_type := declarator.resolved_type;
 				if ret_type.kind == .Composite {

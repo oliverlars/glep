@@ -57,7 +57,11 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 			case 4;
 				result = tprint("%int", result);
 			case 8;
-				result = tprint("%long long", result);
+				if ir_type.pointer {
+					result = tprint("void *");
+				} else {
+					result = tprint("%long long", result);
+				}
 		}
 		return result;
 	}
@@ -91,11 +95,22 @@ materialise :: (operand: IR_Operand) -> string {
 }
 
 lower :: (emitter: *Emitter) {
+	for global: emitter.ir.globals {
+		emit(emitter, "char %[] = {\n", global.name);
+		for global.bytes {
+			if it_index < global.bytes.count - 1 {
+				emit(emitter, "%, ", it);
+			} else {
+				emit(emitter, "% ", it);
+			}
+		}
+		emit(emitter, "\n};\n", global.name);
+	}
 	for external: emitter.ir.externals {
 		name := external.name;
 		if external.results.count == 1 {
-				ctype := ctype_from_ir_type(external.results[0]);
-				emit(emitter, "% ", ctype);
+			ctype := ctype_from_ir_type(external.results[0]);
+			emit(emitter, "% ", ctype);
 		} else {
 			emitln(emitter, "typedef struct %_return {");
 			for result_member: external.results { 
@@ -104,7 +119,18 @@ lower :: (emitter: *Emitter) {
 			}
 			emit(emitter, "} %_return;", name);
 		}
-		emit(emitter, "%();\n", name);
+		emit(emitter, "%(", name);
+		for external.params {
+			if it_index < external.params.count - 1 {
+				emit(emitter, "%,", ctype_from_ir_type(it));
+			} else {
+				emit(emitter, "%", ctype_from_ir_type(it));
+			}
+		}
+		if external.variadic {
+			emit(emitter, ", ...");
+		}
+		emit(emitter, ");\n");
 	}
 	for function: emitter.ir.functions {
 		name := function.name;
@@ -119,7 +145,7 @@ lower :: (emitter: *Emitter) {
 			}
 			emit(emitter, "} %_return;", name);
 		}
-		emit(emitter, "%(\n", name);
+		emit(emitter, "%(", name);
 		if function.instructions.count > 0 {
 			for function.instructions {
 				if it.op == .LoadParam {

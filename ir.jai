@@ -56,19 +56,21 @@ IR_Operand_Type :: struct {
 	};
 	size_in_bytes: int;
 	unsigned: bool;
+	// Mainly for the C backend
+	pointer: bool;
 }
 
-IR_U8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = true};
-IR_U16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = true};
-IR_U32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = true};
-IR_U64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true};
-IR_S8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = false};
-IR_S16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = false};
-IR_S32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = false};
-IR_S64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = false};
-IR_F32 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 4, unsigned = false};
-IR_F64 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 8, unsigned = false};
-IR_PTR :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true};
+IR_U8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = true, pointer = false};
+IR_U16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = true, pointer = false};
+IR_U32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = true, pointer = false};
+IR_U64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true, pointer = false};
+IR_S8  :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 1, unsigned = false, pointer = false};
+IR_S16 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 2, unsigned = false, pointer = false};
+IR_S32 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 4, unsigned = false, pointer = false};
+IR_S64 :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = false, pointer = false};
+IR_F32 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 4, unsigned = false, pointer = false};
+IR_F64 :: IR_Operand_Type.{ kind = .Float,   size_in_bytes = 8, unsigned = false, pointer = false};
+IR_PTR :: IR_Operand_Type.{ kind = .Integer, size_in_bytes = 8, unsigned = true, pointer = true};
 
 IR_Operand :: struct {
 	kind: IR_Operand_Kind;
@@ -90,6 +92,7 @@ IR_External :: struct {
 	name: string;
 	params: [..]IR_Operand_Type;
 	results: [..]IR_Operand_Type;
+	variadic: bool;
 }
 
 IR_Function :: struct {
@@ -97,6 +100,7 @@ IR_Function :: struct {
 	params: [..]IR_Operand_Type;
 	results: [..]IR_Operand_Type;
 	instructions: [..]IR_Instruction;
+	variadic: bool;
 	builder: String_Builder;
 	registers_needed: int;
 }
