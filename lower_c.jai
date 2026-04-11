@@ -74,8 +74,8 @@ materialise :: (operand: IR_Operand) -> string {
 		case .Constant;
 			if operand.type.kind == .Float {
 				if operand.type.size_in_bytes == 8 {
-					as_f64: float32;
-					memcpy(*as_f64, *operand.constant, 4);
+					as_f64: float64;
+					memcpy(*as_f64, *operand.constant, 8);
 					return tprint("%", as_f64);
 				} else {
 					as_f32: float32;
