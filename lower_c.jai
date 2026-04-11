@@ -112,7 +112,7 @@ lower :: (emitter: *Emitter) {
 			ctype := ctype_from_ir_type(external.results[0]);
 			emit(emitter, "% ", ctype);
 		} else {
-			emitln(emitter, "typedef struct %_return {");
+			emitln(emitter, "typedef struct %_return {", name);
 			for result_member: external.results { 
 				ctype := ctype_from_ir_type(result_member);
 				emit(emitter, "% r%;", ctype, it_index);
@@ -138,7 +138,7 @@ lower :: (emitter: *Emitter) {
 				ctype := ctype_from_ir_type(function.results[0]);
 				emit(emitter, "% ", ctype);
 		} else {
-			emitln(emitter, "typedef struct %_return {");
+			emitln(emitter, "typedef struct %_return {", name);
 			for result_member: function.results { 
 				ctype := ctype_from_ir_type(result_member);
 				emit(emitter, "% r%;", ctype, it_index);

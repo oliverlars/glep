@@ -769,13 +769,19 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, siz
 }
 
 
+is_struct_composite :: (type: *Resolved_Type) -> bool {
+	return type.kind == .Composite && type.composite.type == Node_Struct;
+}
+
 append_struct_params :: (_struct: *Node_Struct, layout: Struct_Layout, params: *[..]IR_Operand_Type) {
 	index := 0;
 	for _struct.members {
 		for declarator: it.declarators {
 			member_type := declarator.resolved_type;
-			if member_type.kind == .Composite {
-				append_struct_params(member_type.composite.(*Node_Struct), member_type.layout, params);
+			if !member_type then continue;
+			if is_struct_composite(member_type) {
+				inner_struct := cast(*Node_Struct) member_type.composite;
+				append_struct_params(inner_struct, member_type.layout, params);
 			} else {
 				array_add(params, operand_type(member_type));
 			}
@@ -804,18 +810,18 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					for _struct.members {
 						for declarator: it.declarators {
 							member_type := declarator.resolved_type;
+							if !member_type { index += 1; continue; }
 							offset := layout.members[index].offset;
 
-							if member_type.kind == .Composite {
-								member_base := base;
-								member_base = ir_register(next_register(compiler), IR_PTR);
+							if is_struct_composite(member_type) {
+								inner_struct := cast(*Node_Struct) member_type.composite;
+								member_base := ir_register(next_register(compiler), IR_PTR);
 								ir_emit(function, ir_add(member_base, base, ir_constant(xx offset, IR_U64)));
-								param_index = emit_struct_load_params(compiler, function, member_type.composite.(*Node_Struct), member_type.layout, member_base, param_index);
+								param_index = emit_struct_load_params(compiler, function, inner_struct, member_type.layout, member_base, param_index);
 							} else {
 								dst := ir_register(next_register(compiler), operand_type(member_type));
 								ir_emit(function, ir_load_param(dst, ir_constant(xx param_index, IR_U64)));
-								address := base;
-								address = ir_register(next_register(compiler), IR_PTR);
+								address := ir_register(next_register(compiler), IR_PTR);
 								ir_emit(function, ir_add(address, base, ir_constant(xx offset, IR_U64)));
 								ir_emit(function, ir_store(address, dst));
 								param_index += 1;
@@ -828,10 +834,12 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				param_index := 0;
 				for function.params {
+					if it.declarators.count == 0 then continue;
 					binding := compile_declarator(compiler, it.declarators[0]);
 					param_type := it.declarators[0].resolved_type;
-					if param_type.kind == .Composite {
-						_struct := param_type.composite.(*Node_Struct);
+					if !param_type then continue;
+					if is_struct_composite(param_type) {
+						_struct := cast(*Node_Struct) param_type.composite;
 						param_index = emit_struct_load_params(compiler, *ir_function, _struct, param_type.layout, binding.slot, param_index);
 						append_struct_params(_struct, param_type.layout, *ir_function.params);
 					} else {
@@ -845,7 +853,12 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				ret_type := declarator.resolved_type;
 				if ret_type.kind == .Composite {
-					append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *ir_function.results);
+					if is_struct_composite(ret_type) {
+						ret_struct := cast(*Node_Struct) ret_type.composite;
+						append_struct_params(ret_struct, ret_type.layout, *ir_function.results);
+					} else {
+						array_add(*ir_function.results, operand_type(ret_type));
+					}
 				} else {
 					array_add(*ir_function.results, operand_type(ret_type));
 				}
@@ -863,9 +876,12 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				function := function_declarator(declarator);
 				for function.params {
+					if it.declarators.count == 0 then continue;
 					param_type := it.declarators[0].resolved_type;
-					if param_type.kind == .Composite {
-						append_struct_params(param_type.composite.(*Node_Struct), param_type.layout, *external.params);
+					if !param_type then continue;
+					if is_struct_composite(param_type) {
+						ext_struct := cast(*Node_Struct) param_type.composite;
+						append_struct_params(ext_struct, param_type.layout, *external.params);
 					} else {
 						array_add(*external.params, operand_type(param_type));
 					}
@@ -873,9 +889,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				external.variadic = function.variadic;
 
 				ret_type := declarator.resolved_type;
-				if ret_type.kind == .Composite {
-					append_struct_params(ret_type.composite.(*Node_Struct), ret_type.layout, *external.results);
-				} else {
+				if is_struct_composite(ret_type) {
+					ext_ret_struct := cast(*Node_Struct) ret_type.composite;
+					append_struct_params(ext_ret_struct, ret_type.layout, *external.results);
+				} else if ret_type.kind != .Composite {
 					array_add(*external.results, operand_type(ret_type));
 				}
 
