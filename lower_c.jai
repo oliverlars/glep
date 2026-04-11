@@ -164,6 +164,47 @@ lower :: (emitter: *Emitter) {
 				if it.op == {
 					case .Add;
 						emitln(emitter, "% v% = % + %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Sub;
+						emitln(emitter, "% v% = % - %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Mul;
+						emitln(emitter, "% v% = % * %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Div;
+						emitln(emitter, "% v% = % / %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Neg;
+						emitln(emitter, "% v% = -%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+					case .Not;
+						emitln(emitter, "% v% = !%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+					case .Eq;
+						emitln(emitter, "% v% = % == %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Ne;
+						emitln(emitter, "% v% = % != %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Le;
+						emitln(emitter, "% v% = % <= %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Lt;
+						emitln(emitter, "% v% = % < %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Shr;
+						emitln(emitter, "% v% = % << %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Shl;
+						emitln(emitter, "% v% = % >> %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Xor;
+						emitln(emitter, "% v% = % ^ %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .And;
+						emitln(emitter, "% v% = % & %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Or;
+						emitln(emitter, "% v% = % | %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+					case .Copy;
+						emitln(emitter, "% v% = %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+					case .Goto;
+						emitln(emitter, "goto %;", materialise(it.a));
+					case .Label;
+						emitln(emitter, "%:", materialise(it.a));
+					case .Ifz;
+						emitln(emitter, "if(% == 0) goto %;", materialise(it.a), materialise(it.b));
+					case .If;
+						emitln(emitter, "if(% != 0) goto %;", materialise(it.a), materialise(it.b));
+					case .Return;
+					case .Cast;
+						emitln(emitter, "% v% = (%)%;", ctype_from_ir_type(it.dst.type), it.dst.register, ctype_from_ir_type(it.dst.type), materialise(it.a));
 					case .Load;
 						emitln(emitter, "% v% = *((%*)v%);", ctype_from_ir_type(it.dst.type), it.dst.register, ctype_from_ir_type(it.dst.type), it.a.register);
 					case .Store;
@@ -178,8 +219,8 @@ lower :: (emitter: *Emitter) {
 						emit(emitter, "%(", it.a.label);
 						arg_index := 0;
 						arg_count := 0;
-						while arg_count + it_index + 1 < function.instructions.count &&
-							  function.instructions[it_index + arg_index + 1].op == .Param {
+						while it_index + arg_count + 1 < function.instructions.count &&
+							  function.instructions[it_index + arg_count + 1].op == .Param {
 							arg_count += 1;
 						}
 						while arg_index < arg_count {
