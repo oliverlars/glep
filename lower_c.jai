@@ -57,11 +57,8 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 			case 4;
 				result = tprint("%int", result);
 			case 8;
-				if ir_type.pointer_depth {
-					stars := "";
-					depth := max(ir_type.pointer_depth, 1);
-					for 1..depth { stars = tprint("%*", stars); }
-					result = tprint("void %", stars);
+				if ir_type.pointer {
+					result = tprint("void *");
 				} else {
 					result = tprint("%long long", result);
 				}
@@ -144,6 +141,9 @@ lower :: (emitter: *Emitter) {
 	}
 	for function: emitter.ir.functions {
 		name := function.name;
+		if name == "main" {
+			name = "entry";
+		}
 		if function.results.count == 1 {
 				ctype := ctype_from_ir_type(function.results[0]);
 				emit(emitter, "% ", ctype);
@@ -186,7 +186,9 @@ lower :: (emitter: *Emitter) {
 			for function.instructions {
 				if it.op == {
 					case .Add;
-						emitln(emitter, "v% = % + %;", it.dst.register, materialise(it.a), materialise(it.b));
+						a := ifx it.a.type.pointer then tprint("((char*)%)", materialise(it.a)) else tprint("%", materialise(it.a));
+						b := ifx it.b.type.pointer then tprint("((char*)%)", materialise(it.b)) else tprint("%", materialise(it.b));
+						emitln(emitter, "v% = % + %;", it.dst.register, a, b);
 					case .Sub;
 						emitln(emitter, "v% = % - %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Mul;
@@ -226,6 +228,15 @@ lower :: (emitter: *Emitter) {
 					case .If;
 						emitln(emitter, "if(% != 0) goto %;", materialise(it.a), materialise(it.b));
 					case .Return;
+						if it.a.kind != .None {
+							if function.results.count > 1 {
+								emitln(emitter, "return *((%_return*)%);", name, materialise(it.a));
+							} else {
+								emitln(emitter, "return %;", materialise(it.a));
+							}
+						} else {
+							emitln(emitter, "return;");
+						}
 					case .Cast;
 						emitln(emitter, "v% = (%)%;", it.dst.register, ctype_from_ir_type(it.dst.type), materialise(it.a));
 					case .Load;
@@ -239,7 +250,31 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, "v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
 					case .Call;
 						for 0..emitter.indent-1 { append(*emitter.builder, "    "); }
-						emit(emitter, "%(", it.a.label);
+						callee_name := it.a.label;
+						callee_is_struct_return := false;
+						for f: emitter.ir.functions {
+							if f.name == callee_name {
+								callee_is_struct_return = f.results.count > 1;
+								break;
+							}
+						}
+						if !callee_is_struct_return {
+							for ext: emitter.ir.externals {
+								if ext.name == callee_name {
+									callee_is_struct_return = ext.results.count > 1;
+									break;
+								}
+							}
+						}
+						if it.dst.kind == .Register {
+							if callee_is_struct_return {
+								emit(emitter, "*((%_return*)v%) = %(", callee_name, it.dst.register, callee_name);
+							} else {
+								emit(emitter, "v% = %(", it.dst.register, callee_name);
+							}
+						} else {
+							emit(emitter, "%(", callee_name);
+						}
 						arg_index := 0;
 						arg_count := 0;
 						while it_index + arg_count + 1 < function.instructions.count &&
@@ -265,6 +300,7 @@ lower :: (emitter: *Emitter) {
 			emitln(emitter, ");");
 		}
 	}
+	emit(emitter, "int main(int argc, char **args) { entry(argc, args); }");
 }
 
 lower :: (ir: *IR) -> Emitter {

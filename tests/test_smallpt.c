@@ -185,14 +185,13 @@ Vec radiance(Ray r, int depth, unsigned *seed) {
 
 int main(int argc, char **argv) {
 
-    int w = 256*4;
-    int h = 192*4;
+    int w = 256;
+    int h = 192;
 
 	int samps = 5;
 	if(argc > 1) {
 		samps = atoi(argv[1]);
 	}
-	samps = 64;
 
     Ray cam = (Ray){(Vec){50, 52, 295.6}, vnorm(vec(0, -0.042612, -1))};
     Vec cx = vec(w * .5135 / h, 0, 0);
