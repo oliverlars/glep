@@ -2530,7 +2530,7 @@ main :: () {
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
 	//filename = "test.c";
-	//filename = "tests/lights.c";
+	filename = "tests/lights.c";
 	minimal := read_entire_file(filename);
 
 	t0 := current_time_monotonic();

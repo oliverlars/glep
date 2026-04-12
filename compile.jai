@@ -79,9 +79,15 @@ is_variable_declaration :: (decl: *Node_Decl, declarator: *Node_Declarator) -> b
 
 operand_type :: (resolved_type: *Resolved_Type) -> IR_Operand_Type {
 	if resolved_type.kind == .Floating {
-		return .{ .Float, resolved_type.size_in_bytes, false, false };
-	} else { 
-		return .{ .Integer, resolved_type.size_in_bytes, resolved_type.unsigned, resolved_type.inner != null };
+		return .{ .Float, resolved_type.size_in_bytes, false, 0 };
+	} else {
+		depth := 0;
+		t := resolved_type;
+		while t.inner != null {
+			depth += 1;
+			t = t.inner;
+		}
+		return .{ .Integer, resolved_type.size_in_bytes, resolved_type.unsigned, depth };
 	}
 }
 

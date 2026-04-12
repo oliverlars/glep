@@ -57,8 +57,11 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 			case 4;
 				result = tprint("%int", result);
 			case 8;
-				if ir_type.pointer {
-					result = tprint("void *");
+				if ir_type.pointer_depth {
+					stars := "";
+					depth := max(ir_type.pointer_depth, 1);
+					for 1..depth { stars = tprint("%*", stars); }
+					result = tprint("void %", stars);
 				} else {
 					result = tprint("%long long", result);
 				}
@@ -84,7 +87,11 @@ materialise :: (operand: IR_Operand) -> string {
 					return tprint("%", as_f32);
 				}
 			} else {
-				return tprint("%", operand.constant);
+				if operand.type.unsigned {
+					return tprint("%llu", operand.constant);
+				} else {
+					return tprint("%ll", operand.constant);
+				}
 			}
 		case .Register;
 			return tprint("v%", operand.register);
@@ -96,7 +103,7 @@ materialise :: (operand: IR_Operand) -> string {
 
 lower :: (emitter: *Emitter) {
 	for global: emitter.ir.globals {
-		emit(emitter, "char %[] = {\n", global.name);
+		emit(emitter, "char %[%] = {\n", global.name, global.bytes.count);
 		for global.bytes {
 			if it_index < global.bytes.count - 1 {
 				emit(emitter, "%, ", it);
@@ -106,6 +113,9 @@ lower :: (emitter: *Emitter) {
 		}
 		emit(emitter, "\n};\n", global.name);
 	}
+	emit(emitter, "int memset(void *, int, unsigned int);\n");
+	emit(emitter, "int memcpy(void *, void *, unsigned int);\n");
+	emit(emitter, "int noop = 0;\n");
 	for external: emitter.ir.externals {
 		name := external.name;
 		if external.results.count == 1 {
@@ -137,6 +147,7 @@ lower :: (emitter: *Emitter) {
 		if function.results.count == 1 {
 				ctype := ctype_from_ir_type(function.results[0]);
 				emit(emitter, "% ", ctype);
+				emit(emitter, "%(", name);
 		} else {
 			emitln(emitter, "typedef struct %_return {", name);
 			for result_member: function.results { 
@@ -144,8 +155,8 @@ lower :: (emitter: *Emitter) {
 				emit(emitter, "% r%;", ctype, it_index);
 			}
 			emit(emitter, "} %_return;", name);
+			emit(emitter, "%_return %(", name, name);
 		}
-		emit(emitter, "%(", name);
 		if function.instructions.count > 0 {
 			param_index := 0;
 			for function.instructions {
@@ -209,7 +220,7 @@ lower :: (emitter: *Emitter) {
 					case .Goto;
 						emitln(emitter, "goto %;", materialise(it.a));
 					case .Label;
-						emitln(emitter, "%:", materialise(it.a));
+						emitln(emitter, "%: (void)noop;", materialise(it.a));
 					case .Ifz;
 						emitln(emitter, "if(% == 0) goto %;", materialise(it.a), materialise(it.b));
 					case .If;
