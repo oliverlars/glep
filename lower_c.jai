@@ -110,7 +110,7 @@ lower :: (emitter: *Emitter) {
 		name := external.name;
 		if external.results.count == 1 {
 			ctype := ctype_from_ir_type(external.results[0]);
-			emit(emitter, "% ", ctype);
+			emit(emitter, "% %(", ctype, name);
 		} else {
 			emitln(emitter, "typedef struct %_return {", name);
 			for result_member: external.results { 
@@ -118,8 +118,8 @@ lower :: (emitter: *Emitter) {
 				emit(emitter, "% r%;", ctype, it_index);
 			}
 			emit(emitter, "} %_return;", name);
+			emit(emitter, "%_return %(", name, name);
 		}
-		emit(emitter, "%(", name);
 		for external.params {
 			if it_index < external.params.count - 1 {
 				emit(emitter, "%,", ctype_from_ir_type(it));
@@ -147,10 +147,13 @@ lower :: (emitter: *Emitter) {
 		}
 		emit(emitter, "%(", name);
 		if function.instructions.count > 0 {
+			param_index := 0;
 			for function.instructions {
+				if it.op != .LoadParam then continue;
 				if it.op == .LoadParam {
-					param := tprint("% v%", ctype_from_ir_type(it.dst.type), materialise(it.dst));
-					if it_index >= function.params.count {
+					param := tprint("% %", ctype_from_ir_type(it.dst.type), materialise(it.dst));
+					param_index += 1;
+					if param_index >= function.params.count {
 						emit(emitter, "%", param);
 						break;
 					} else {
@@ -160,40 +163,49 @@ lower :: (emitter: *Emitter) {
 			}
 			emitln(emitter, ") {");
 			indent(emitter);
+			seen: [..] bool;
+			array_resize(*seen, function.registers_needed);
+			for function.instructions {
+				if it.op == .LoadParam then continue;
+				if it.dst.kind == .Register && !seen[it.dst.register] {
+					seen[it.dst.register] = true;
+					emitln(emitter, "% v%;", ctype_from_ir_type(it.dst.type), it.dst.register);
+				}
+			}
 			for function.instructions {
 				if it.op == {
 					case .Add;
-						emitln(emitter, "% v% = % + %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % + %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Sub;
-						emitln(emitter, "% v% = % - %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % - %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Mul;
-						emitln(emitter, "% v% = % * %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % * %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Div;
-						emitln(emitter, "% v% = % / %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % / %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Neg;
-						emitln(emitter, "% v% = -%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+						emitln(emitter, "v% = -%;", it.dst.register, materialise(it.a));
 					case .Not;
-						emitln(emitter, "% v% = !%;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+						emitln(emitter, "v% = !%;", it.dst.register, materialise(it.a));
 					case .Eq;
-						emitln(emitter, "% v% = % == %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % == %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Ne;
-						emitln(emitter, "% v% = % != %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % != %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Le;
-						emitln(emitter, "% v% = % <= %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % <= %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Lt;
-						emitln(emitter, "% v% = % < %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % < %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Shr;
-						emitln(emitter, "% v% = % << %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % << %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Shl;
-						emitln(emitter, "% v% = % >> %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % >> %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Xor;
-						emitln(emitter, "% v% = % ^ %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % ^ %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .And;
-						emitln(emitter, "% v% = % & %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % & %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Or;
-						emitln(emitter, "% v% = % | %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % | %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Copy;
-						emitln(emitter, "% v% = %;", ctype_from_ir_type(it.dst.type), it.dst.register, materialise(it.a));
+						emitln(emitter, "v% = %;", it.dst.register, materialise(it.a));
 					case .Goto;
 						emitln(emitter, "goto %;", materialise(it.a));
 					case .Label;
@@ -204,16 +216,16 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, "if(% != 0) goto %;", materialise(it.a), materialise(it.b));
 					case .Return;
 					case .Cast;
-						emitln(emitter, "% v% = (%)%;", ctype_from_ir_type(it.dst.type), it.dst.register, ctype_from_ir_type(it.dst.type), materialise(it.a));
+						emitln(emitter, "v% = (%)%;", it.dst.register, ctype_from_ir_type(it.dst.type), materialise(it.a));
 					case .Load;
-						emitln(emitter, "% v% = *((%*)v%);", ctype_from_ir_type(it.dst.type), it.dst.register, ctype_from_ir_type(it.dst.type), it.a.register);
+						emitln(emitter, "v% = *((%*)v%);", it.dst.register, ctype_from_ir_type(it.dst.type), it.a.register);
 					case .Store;
 						emitln(emitter, "*((%*)v%) = %;", ctype_from_ir_type(it.b.type), it.a.register, materialise(it.b));
 					case .Address;
-						emitln(emitter, "void *v% = (void*)&%;", it.dst.register, materialise(it.a));
+						emitln(emitter, "v% = (void*)&%;", it.dst.register, materialise(it.a));
 					case .Alloca;
 						emitln(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
-						emitln(emitter, "void *v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
+						emitln(emitter, "v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
 					case .Call;
 						for 0..emitter.indent-1 { append(*emitter.builder, "    "); }
 						emit(emitter, "%(", it.a.label);

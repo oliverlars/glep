@@ -135,8 +135,9 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			}
 
 			bytes_per_element := array_access.left.resolved_type.inner.size_in_bytes;
-			ir_emit(function, ir_mul(index, index, ir_constant(xx bytes_per_element, IR_U64)));
-			ir_emit(function, ir_add(dst, array, index));
+			stride := ir_register(next_register(compiler), index.type);
+			ir_emit(function, ir_mul(stride, index, ir_constant(xx bytes_per_element, IR_U64)));
+			ir_emit(function, ir_add(dst, array, stride));
 			return dst;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
@@ -796,9 +797,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
 			name := identifier_from_declarator(declarator);
+			print("decl: % is_func_def=% is_var_decl=% is_func_decl=%\n", name, is_function_definition(decl, declarator), is_variable_declaration(decl, declarator), is_function_declaration(declarator));
 			if is_function_definition(decl, declarator) {
 				ir_function: IR_Function;
 				ir_function.name = name;
+				print("compiling function: %\n", name);
 
 				function := function_declarator(declarator);
 				compiler.register = 0;
