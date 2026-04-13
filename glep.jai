@@ -6,6 +6,8 @@
 #import "Hash_Table";
 #import "Hash";
 
+#import "Command_Line";
+
 #import "String";
 
 #load "eval.jai";
@@ -2525,11 +2527,10 @@ run_tests :: () {
 }
 
 main :: () {
-
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
-	filename = "test.c";
+	//filename = "test.c";
 	//filename = "tests/lights.c";
 	minimal := read_entire_file(filename);
 
@@ -2612,10 +2613,10 @@ main :: () {
 	
 	write_entire_file("out.c", builder_to_string(*emitter.builder));
 
-	print("\nCompiling assembly...\n\n");
-	run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
-	print("Compile same program with clang...\n");
-	run_command("clang", "-S", filename, "-oclang_out.s");
-	print("Running program...\n\n");
-	run_command("./out");
+	// print("\nCompiling assembly...\n\n");
+	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
+	// print("Compile same program with clang...\n");
+	// run_command("clang", "-S", filename, "-oclang_out.s");
+	// print("Running program...\n\n");
+	// run_command("./out");
 }

@@ -76,12 +76,13 @@ materialise :: (operand: IR_Operand) -> string {
 				if operand.type.size_in_bytes == 8 {
 					as_f64: float64;
 					memcpy(*as_f64, *operand.constant, 8);
-					return tprint("%", as_f64);
+					return tprint("%", FormatFloat.{value=as_f64, zero_removal=.ONE_ZERO_AFTER_DECIMAL});
 				} else {
 					as_f32: float32;
 					as_u32 := operand.constant.(u32);
 					memcpy(*as_f32, *as_u32, 4);
-					return tprint("%", as_f32);
+					s := tprint("%", FormatFloat.{value=as_f32, zero_removal=.ONE_ZERO_AFTER_DECIMAL});
+					return tprint("%f", s);
 				}
 			} else {
 				if operand.type.unsigned {
