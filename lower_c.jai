@@ -111,7 +111,7 @@ lower :: (emitter: *Emitter) {
 		}
 		emit(emitter, "\n};\n", global.name);
 	}
-	emit(emitter, "int memset(void *, int, unsigned int);\n");
+	emit(emitter, "void *memset(void *, int, unsigned int);\n");
 	emit(emitter, "int memcpy(void *, void *, unsigned int);\n");
 	emit(emitter, "int noop = 0;\n");
 	for external: emitter.ir.externals {
@@ -185,7 +185,15 @@ lower :: (emitter: *Emitter) {
 				}
 			}
 			for function.instructions {
+				if it.op == .Alloca {
+					emitln(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
+					emitln(emitter, "v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
+				}
+			}
+			for function.instructions {
 				if it.op == {
+					case .Mod;
+						emitln(emitter, "v% = % % %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Add;
 						a := ifx it.a.type.pointer then tprint("((char*)%)", materialise(it.a)) else tprint("%", materialise(it.a));
 						b := ifx it.b.type.pointer then tprint("((char*)%)", materialise(it.b)) else tprint("%", materialise(it.b));
@@ -209,9 +217,9 @@ lower :: (emitter: *Emitter) {
 					case .Lt;
 						emitln(emitter, "v% = % < %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Shr;
-						emitln(emitter, "v% = % << %;", it.dst.register, materialise(it.a), materialise(it.b));
-					case .Shl;
 						emitln(emitter, "v% = % >> %;", it.dst.register, materialise(it.a), materialise(it.b));
+					case .Shl;
+						emitln(emitter, "v% = % << %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Xor;
 						emitln(emitter, "v% = % ^ %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .And;
@@ -245,10 +253,12 @@ lower :: (emitter: *Emitter) {
 					case .Store;
 						emitln(emitter, "*((%*)v%) = %;", ctype_from_ir_type(it.b.type), it.a.register, materialise(it.b));
 					case .Address;
-						emitln(emitter, "v% = (void*)&%;", it.dst.register, materialise(it.a));
+						if it.a.kind == .Register {
+							emitln(emitter, "v% = v%;", it.dst.register, it.a.register);
+						} else {
+							emitln(emitter, "v% = (void*)&%;", it.dst.register, materialise(it.a));
+						}
 					case .Alloca;
-						emitln(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
-						emitln(emitter, "v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
 					case .Call;
 						for 0..emitter.indent-1 { append(*emitter.builder, "    "); }
 						callee_name := it.a.label;
