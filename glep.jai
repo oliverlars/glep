@@ -2530,8 +2530,13 @@ main :: () {
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
-	filename = "tests/lights.c";
-	filename = "tests/lights.c";
+	//filename = "test.c";
+	//filename = "tests/lights.c";
+	args := get_command_line_arguments();
+	defer array_free(args);
+	if args.count > 1 {
+		filename = args[1];
+	}
 	minimal := read_entire_file(filename);
 
 	t0 := current_time_monotonic();
