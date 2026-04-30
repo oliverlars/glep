@@ -91,6 +91,34 @@ types_equal :: (a: IR_Operand_Type, b: IR_Operand_Type) -> bool {
 		   a.unsigned == b.unsigned;
 }
 
+is_void_type :: (type: *Resolved_Type) -> bool {
+	return type && type.memoryless && type.size_in_bytes == 0;
+}
+
+is_comparison_token :: (type: Token_Type) -> bool {
+	return type == .Less || type == .Greater ||
+		   type == .LessEqual || type == .GreaterEqual ||
+		   type == .EqualEqual || type == .BangEqual;
+}
+
+common_operand_type :: (a: IR_Operand_Type, b: IR_Operand_Type) -> IR_Operand_Type {
+	if types_equal(a, b) return a;
+	if a.pointer return a;
+	if b.pointer return b;
+	if a.kind == .Float || b.kind == .Float {
+		if a.kind == .Float && b.kind == .Float {
+			if a.size_in_bytes >= b.size_in_bytes return a;
+			return b;
+		}
+		if a.kind == .Float return a;
+		return b;
+	}
+	result := a;
+	if b.size_in_bytes > a.size_in_bytes result = b;
+	result.unsigned = a.unsigned || b.unsigned;
+	return result;
+}
+
 next_register :: (compiler: *Compiler) -> int {
 	next := compiler.register;
 	compiler.register += 1;
@@ -289,16 +317,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			sizeof := expr.(*Node_Sizeof_Expr);
 			dst := ir_constant(xx sizeof.expr.resolved_type.size_in_bytes, IR_U64);
 			result = dst;
-		case Node_Binary;
-			binary := expr.(*Node_Binary);
+			case Node_Binary;
+				binary := expr.(*Node_Binary);
 
-			left_type := binary.left.resolved_type;
-			right_type := binary.right.resolved_type;
+				left_type := binary.left.resolved_type;
+				right_type := binary.right.resolved_type;
 
-			dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
-			if binary.op.type == .AmpersandAmpersand {
-				on_false := next_label(compiler);
-				end := next_label(compiler);
+				if binary.op.type == .Comma {
+					compile_expr(compiler, binary.left);
+					result = compile_expr(compiler, binary.right);
+					return result;
+				}
+
+				dst := ir_register(next_register(compiler), operand_type(expr.resolved_type));
+				if binary.op.type == .AmpersandAmpersand {
+					on_false := next_label(compiler);
+					end := next_label(compiler);
 
 				left := compile_expr(compiler, binary.left);
 				ir_emit(function, ir_ifz(left, on_false));
@@ -323,14 +357,22 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				ir_emit(function, ir_label(end));
 			} else {
 				left := compile_expr(compiler, binary.left);
-				if !types_equal(dst.type, left.type) {
-					converted := ir_register(next_register(compiler), dst.type);
+				operand_target_type := dst.type;
+				if is_comparison_token(binary.op.type) {
+					right_type := operand_type(binary.right.resolved_type);
+					operand_target_type = common_operand_type(left.type, right_type);
+				}
+				if !types_equal(operand_target_type, left.type) {
+					converted := ir_register(next_register(compiler), operand_target_type);
 					ir_emit(function, ir_cast(converted, left));
 					left = converted;
 				}
 				right := compile_expr(compiler, binary.right);
-				if !types_equal(dst.type, right.type) {
-					converted := ir_register(next_register(compiler), dst.type);
+				if is_comparison_token(binary.op.type) {
+					operand_target_type = common_operand_type(left.type, right.type);
+				}
+				if !types_equal(operand_target_type, right.type) {
+					converted := ir_register(next_register(compiler), operand_target_type);
 					ir_emit(function, ir_cast(converted, right));
 					right = converted;
 				}
@@ -433,27 +475,31 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				count = compiler.strings.count;
 				table_set(*compiler.strings, str.token.view, count);
 			}
-			label := tprint("str%", count);
-			dst := ir_register(next_register(compiler), IR_PTR);
-			ir_emit(function, ir_address(dst, ir_label_operand(label)));
-			result = dst;
-		case Node_Ternary;
-			ternary := expr.(*Node_Ternary);
-			on_false := next_label(compiler);
-			end := next_label(compiler);
+				label := tprint("str%", count);
+				dst := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_address(dst, ir_label_operand(label)));
+				result = dst;
+			case Node_Ternary;
+				ternary := expr.(*Node_Ternary);
+				on_false := next_label(compiler);
+				end := next_label(compiler);
 
-			dst := ir_register(next_register(compiler), operand_type(ternary.resolved_type));
+				is_void := is_void_type(ternary.resolved_type);
+				dst: IR_Operand;
+				if !is_void {
+					dst = ir_register(next_register(compiler), operand_type(ternary.resolved_type));
+				}
 
-			cond := compile_expr(compiler, ternary.cond);
-			ir_emit(function, ir_ifz(cond, on_false));
-			expr_true := compile_expr(compiler, ternary.on_true);
-			ir_emit(function, ir_copy(dst, expr_true));
-			ir_emit(function, ir_goto(end));
-			ir_emit(function, ir_label(on_false));
-			expr_false := compile_expr(compiler, ternary.on_false);
-			ir_emit(function, ir_copy(dst, expr_false));
-			ir_emit(function, ir_label(end));
-			result = dst;
+				cond := compile_expr(compiler, ternary.cond);
+				ir_emit(function, ir_ifz(cond, on_false));
+				expr_true := compile_expr(compiler, ternary.on_true);
+				if !is_void ir_emit(function, ir_copy(dst, expr_true));
+				ir_emit(function, ir_goto(end));
+				ir_emit(function, ir_label(on_false));
+				expr_false := compile_expr(compiler, ternary.on_false);
+				if !is_void ir_emit(function, ir_copy(dst, expr_false));
+				ir_emit(function, ir_label(end));
+				result = dst;
 		case Node_Call;
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
@@ -491,18 +537,20 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			source_function := function_declarator(decl.(*Node_Decl).declarators[0]);
 			source_param_count := source_function.params.count;
 
-			args: [..] IR_Operand;
-			non_variadic_expanded_param_count := 0;
-			variadic: bool;
-			for call.args {
-				variadic = it_index >= source_param_count;
-				if it.resolved_type.kind == .Composite {
-					address := compile_lvalue(compiler, it);
-					param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
-					if !variadic then non_variadic_expanded_param_count += param_count;
-				} else {
-					arg := compile_expr(compiler, it);
-					array_add(*args, arg);
+				args: [..] IR_Operand;
+				non_variadic_expanded_param_count := 0;
+				variadic: bool;
+				for call.args {
+					variadic = it_index >= source_param_count;
+					if is_void_type(it.resolved_type) {
+						compile_expr(compiler, it);
+					} else if it.resolved_type.kind == .Composite {
+						address := compile_lvalue(compiler, it);
+						param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
+						if !variadic then non_variadic_expanded_param_count += param_count;
+					} else {
+						arg := compile_expr(compiler, it);
+						array_add(*args, arg);
 					if !variadic then non_variadic_expanded_param_count += 1;
 				}
 			}
@@ -516,18 +564,21 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 				for args {
 					ir_emit(function, ir_param(it));
-				}
+					}
 
-				addr := ir_register(next_register(compiler), IR_PTR);
-				ir_emit(function, ir_address(addr, ret_slot));
-				result = addr;
-			} else {
-				dst := ir_register(next_register(compiler), operand_type(call.resolved_type));
-				ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+					addr := ir_register(next_register(compiler), IR_PTR);
+					ir_emit(function, ir_address(addr, ret_slot));
+					result = addr;
+				} else {
+					dst: IR_Operand;
+					if !is_void_type(call.resolved_type) {
+						dst = ir_register(next_register(compiler), operand_type(call.resolved_type));
+					}
+					ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
 
-				for args {
-					ir_emit(function, ir_param(it));
-				}
+					for args {
+						ir_emit(function, ir_param(it));
+					}
 
 				result = dst;
 			}
@@ -599,6 +650,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			_cast := expr.(*Node_Cast);
 			line := _cast.line;
 			col := _cast.col;
+			if is_void_type(_cast.resolved_type) {
+				compile_expr(compiler, _cast.expr);
+				return .{};
+			}
 			dst := ir_register(next_register(compiler), operand_type(_cast.resolved_type));
 			ir_emit(function, ir_cast(dst, compile_expr(compiler, _cast.expr)));
 			result = dst;
@@ -632,11 +687,15 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 				name := identifier_from_declarator(it);
 				compile_declarator(compiler, it);
 			}
-		case Node_Expr_Statement;
-			compile_expr(compiler, statement.(*Node_Expr_Statement).expr);
-		case Node_Return;
-			ret := ir_return(compile_expr(compiler, statement.(*Node_Return).expr));
-			ir_emit(function, ret);
+			case Node_Expr_Statement;
+				compile_expr(compiler, statement.(*Node_Expr_Statement).expr);
+			case Node_Return;
+				return_expr := statement.(*Node_Return).expr;
+				if return_expr {
+					ir_emit(function, ir_return(compile_expr(compiler, return_expr)));
+				} else {
+					ir_emit(function, ir_return(.{}));
+				}
 		case Node_For;
 			_for := statement.(*Node_For);
 			start := next_label(compiler);
@@ -742,30 +801,34 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: 
 	}
 }
 
-compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, size_in_bytes: int) -> []u8 {
+compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type) -> []u8 {
 	if !init return {};
-	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, bytes: []u8, byte_offset := 0) -> int {
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type, bytes: []u8, byte_offset := 0) -> int {
 		if !init return byte_offset;
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
-			value := eval_constant_expr(expr);
-			if expr.resolved_type.kind == .Floating && expr.resolved_type.size_in_bytes == 4 {
-				f32_val := cast(float32) value.as_f64;
-				memcpy(bytes.data + byte_offset, *f32_val, 4);
+			value := convert_constant(eval_constant_expr(expr), target_type);
+			if target_type.kind == .Floating {
+				if target_type.size_in_bytes == 4 {
+					f32_val := cast(float32) value.as_f64;
+					memcpy(bytes.data + byte_offset, *f32_val, 4);
+				} else {
+					memcpy(bytes.data + byte_offset, *value.as_f64, 8);
+				}
 			} else {
-				memcpy(bytes.data + byte_offset, *value.as_u64, expr.resolved_type.size_in_bytes);
+				memcpy(bytes.data + byte_offset, *value.as_u64, target_type.size_in_bytes);
 			}
-			return byte_offset + expr.resolved_type.size_in_bytes;
+			return byte_offset + target_type.size_in_bytes;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
-				compile_global_initializer(compiler, it.expr, bytes, byte_offset + it.byte_offset);
+				compile_global_initializer(compiler, it.expr, it.target_resolved_type, bytes, byte_offset + it.byte_offset);
 			}
 		}
 		return byte_offset;
 	}
-	bytes := NewArray(size_in_bytes, u8);
-	compile_global_initializer(compiler, init, bytes);
+	bytes := NewArray(target_type.size_in_bytes, u8);
+	compile_global_initializer(compiler, init, target_type, bytes);
 	return bytes;
 }
 
@@ -835,33 +898,36 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					return param_index;
 				}
 
-				param_index := 0;
-				for function.params {
-					if it.declarators.count == 0 then continue;
-					binding := compile_declarator(compiler, it.declarators[0]);
-					param_type := it.declarators[0].resolved_type;
-					if !param_type then continue;
-					if is_struct_composite(param_type) {
-						_struct := cast(*Node_Struct) param_type.composite;
-						param_index = emit_struct_load_params(compiler, *ir_function, _struct, param_type.layout, binding.slot, param_index);
-						append_struct_params(_struct, param_type.layout, *ir_function.params);
-					} else {
-						array_add(*ir_function.params, operand_type(param_type));
+					param_index := 0;
+					for function.params {
+						if it.declarators.count == 0 then continue;
+						param_type := it.declarators[0].resolved_type;
+						if !param_type then continue;
+						if is_void_type(param_type) then continue;
+						binding := compile_declarator(compiler, it.declarators[0]);
+						if is_struct_composite(param_type) {
+							_struct := cast(*Node_Struct) param_type.composite;
+							param_index = emit_struct_load_params(compiler, *ir_function, _struct, param_type.layout, binding.slot, param_index);
+							append_struct_params(_struct, param_type.layout, *ir_function.params);
+						} else {
+							array_add(*ir_function.params, operand_type(param_type));
 						dst := ir_register(next_register(compiler), operand_type(param_type));
 						ir_emit(*ir_function, ir_load_param(dst, ir_constant(xx param_index, IR_U64)));
 						ir_emit(*ir_function, ir_store(binding.slot, dst));
 						param_index += 1;
 					}
-				}
-
-				ret_type := declarator.resolved_type;
-				if ret_type.kind == .Composite {
-					if is_struct_composite(ret_type) {
-						ret_struct := cast(*Node_Struct) ret_type.composite;
-						append_struct_params(ret_struct, ret_type.layout, *ir_function.results);
-					} else {
-						array_add(*ir_function.results, operand_type(ret_type));
 					}
+
+					ret_type := declarator.resolved_type;
+					if is_void_type(ret_type) {
+						// No result values for void functions.
+					} else if ret_type.kind == .Composite {
+						if is_struct_composite(ret_type) {
+							ret_struct := cast(*Node_Struct) ret_type.composite;
+							append_struct_params(ret_struct, ret_type.layout, *ir_function.results);
+						} else {
+							array_add(*ir_function.results, operand_type(ret_type));
+						}
 				} else {
 					array_add(*ir_function.results, operand_type(ret_type));
 				}
@@ -871,33 +937,36 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				array_add(*compiler.ir.functions, ir_function);
 			} else if is_variable_declaration(decl, declarator) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
-				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type.size_in_bytes);
+				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
 				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
 			} else if is_function_declaration(declarator) {
 				external: IR_External;
-				external.name = name;
+					external.name = name;
 
-				function := function_declarator(declarator);
-				for function.params {
-					if it.declarators.count == 0 then continue;
-					param_type := it.declarators[0].resolved_type;
-					if !param_type then continue;
-					if is_struct_composite(param_type) {
-						ext_struct := cast(*Node_Struct) param_type.composite;
-						append_struct_params(ext_struct, param_type.layout, *external.params);
-					} else {
-						array_add(*external.params, operand_type(param_type));
+					function := function_declarator(declarator);
+					for function.params {
+						if it.declarators.count == 0 then continue;
+						param_type := it.declarators[0].resolved_type;
+						if !param_type then continue;
+						if is_void_type(param_type) then continue;
+						if is_struct_composite(param_type) {
+							ext_struct := cast(*Node_Struct) param_type.composite;
+							append_struct_params(ext_struct, param_type.layout, *external.params);
+						} else {
+							array_add(*external.params, operand_type(param_type));
+						}
+				}
+					external.variadic = function.variadic;
+
+					ret_type := declarator.resolved_type;
+					if is_void_type(ret_type) {
+						// No result values for void externs.
+					} else if is_struct_composite(ret_type) {
+						ext_ret_struct := cast(*Node_Struct) ret_type.composite;
+						append_struct_params(ext_ret_struct, ret_type.layout, *external.results);
+					} else if ret_type.kind != .Composite {
+						array_add(*external.results, operand_type(ret_type));
 					}
-				}
-				external.variadic = function.variadic;
-
-				ret_type := declarator.resolved_type;
-				if is_struct_composite(ret_type) {
-					ext_ret_struct := cast(*Node_Struct) ret_type.composite;
-					append_struct_params(ext_ret_struct, ret_type.layout, *external.results);
-				} else if ret_type.kind != .Composite {
-					array_add(*external.results, operand_type(ret_type));
-				}
 
 				array_add(*compiler.ir.externals, external);
 			}

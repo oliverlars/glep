@@ -46,6 +46,12 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 		}
 	} else {
 		result: string;
+		if ir_type.pointer {
+			// The IR treats pointers as byte addresses: it adds scaled
+			// integer offsets to them and stores them in vregs. Emit them
+			// as an integer carrier in C, and cast at load/store sites.
+			return "unsigned long long";
+		}
 		if ir_type.unsigned {
 			result = "unsigned ";
 		}
@@ -57,11 +63,7 @@ ctype_from_ir_type :: (ir_type: IR_Operand_Type) -> string {
 			case 4;
 				result = tprint("%int", result);
 			case 8;
-				if ir_type.pointer {
-					result = tprint("void *");
-				} else {
-					result = tprint("%long long", result);
-				}
+				result = tprint("%long long", result);
 		}
 		return result;
 	}
@@ -101,7 +103,8 @@ materialise :: (operand: IR_Operand) -> string {
 
 lower :: (emitter: *Emitter) {
 	for global: emitter.ir.globals {
-		emit(emitter, "char %[%] = {\n", global.name, global.bytes.count);
+		alignment := max(global.alignment, 1);
+		emit(emitter, "__attribute__((aligned(%))) char %[%] = {\n", alignment, global.name, global.bytes.count);
 		for global.bytes {
 			if it_index < global.bytes.count - 1 {
 				emit(emitter, "%, ", it);
@@ -111,12 +114,14 @@ lower :: (emitter: *Emitter) {
 		}
 		emit(emitter, "\n};\n", global.name);
 	}
-	emit(emitter, "void *memset(void *, int, unsigned int);\n");
-	emit(emitter, "int memcpy(void *, void *, unsigned int);\n");
+	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
+	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");
 	emit(emitter, "int noop = 0;\n");
 	for external: emitter.ir.externals {
 		name := external.name;
-		if external.results.count == 1 {
+		if external.results.count == 0 {
+			emit(emitter, "void %(", name);
+		} else if external.results.count == 1 {
 			ctype := ctype_from_ir_type(external.results[0]);
 			emit(emitter, "% %(", ctype, name);
 		} else {
@@ -145,7 +150,10 @@ lower :: (emitter: *Emitter) {
 		if name == "main" {
 			name = "entry";
 		}
-		if function.results.count == 1 {
+		if function.results.count == 0 {
+			emit(emitter, "void ");
+			emit(emitter, "%(", name);
+		} else if function.results.count == 1 {
 				ctype := ctype_from_ir_type(function.results[0]);
 				emit(emitter, "% ", ctype);
 				emit(emitter, "%(", name);
@@ -186,8 +194,8 @@ lower :: (emitter: *Emitter) {
 			}
 			for function.instructions {
 				if it.op == .Alloca {
-					emitln(emitter, "char alloca_v%[%];", it.dst.register, it.a.constant);
-					emitln(emitter, "v% = (void*)alloca_v%;", it.dst.register, it.dst.register);
+					emitln(emitter, "char alloca_v%[%] __attribute__((aligned(16)));", it.dst.register, it.a.constant);
+					emitln(emitter, "v% = (unsigned long long)alloca_v%;", it.dst.register, it.dst.register);
 				}
 			}
 			for function.instructions {
@@ -195,9 +203,7 @@ lower :: (emitter: *Emitter) {
 					case .Mod;
 						emitln(emitter, "v% = % % %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Add;
-						a := ifx it.a.type.pointer then tprint("((char*)%)", materialise(it.a)) else tprint("%", materialise(it.a));
-						b := ifx it.b.type.pointer then tprint("((char*)%)", materialise(it.b)) else tprint("%", materialise(it.b));
-						emitln(emitter, "v% = % + %;", it.dst.register, a, b);
+						emitln(emitter, "v% = % + %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Sub;
 						emitln(emitter, "v% = % - %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Mul;
@@ -256,7 +262,7 @@ lower :: (emitter: *Emitter) {
 						if it.a.kind == .Register {
 							emitln(emitter, "v% = v%;", it.dst.register, it.a.register);
 						} else {
-							emitln(emitter, "v% = (void*)&%;", it.dst.register, materialise(it.a));
+							emitln(emitter, "v% = (unsigned long long)&%;", it.dst.register, materialise(it.a));
 						}
 					case .Alloca;
 					case .Call;
@@ -304,14 +310,42 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, ");");
 					case .Param;
 				}
-			}
-			unindent(emitter);
-			emitln(emitter, "}");
+				}
+				unindent(emitter);
+				emitln(emitter, "}");
 		} else {
 			emitln(emitter, ");");
 		}
 	}
-	emit(emitter, "int main(int argc, char **args) { entry(argc, args); }");
+	entry: *IR_Function;
+	for * emitter.ir.functions {
+		if it.name == "main" {
+			entry = it;
+			break;
+		}
+	}
+	emit(emitter, "int main(int argc, char **args) { ");
+	if entry && entry.results.count == 1 {
+		emit(emitter, "return ");
+	}
+	emit(emitter, "entry(");
+	if entry {
+		for entry.params {
+			if it_index > 0 emit(emitter, ", ");
+			if it_index == 0 {
+				emit(emitter, "argc");
+			} else if it_index == 1 {
+				emit(emitter, "(unsigned long long)args");
+			} else {
+				emit(emitter, "0");
+			}
+		}
+	}
+	emit(emitter, ");");
+	if !entry || entry.results.count != 1 {
+		emit(emitter, " return 0;");
+	}
+	emit(emitter, " }");
 }
 
 lower :: (ir: *IR) -> Emitter {

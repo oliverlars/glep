@@ -129,6 +129,7 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	counts: [9]int;
 	for decl_info.specifiers {
 		if it == {
+			case "void";     counts[Type_Specifier.Void] += 1;
 			case "char";     counts[Type_Specifier.Char] += 1;
 			case "short";    counts[Type_Specifier.Short] += 1;
 			case "int";      counts[Type_Specifier.Int] += 1;
@@ -143,6 +144,12 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	info := New(Resolved_Type);
 
 	info.size_in_bytes = 4;
+
+	if counts[Type_Specifier.Void] {
+		info.size_in_bytes = 0;
+		info.alignment = 1;
+		info.memoryless = true;
+	}
 
 	if counts[Type_Specifier.Int] {
 		info.size_in_bytes = 4;
@@ -296,7 +303,9 @@ types_equal :: (a: *Resolved_Type, b: *Resolved_Type) -> bool {
  
 common_type :: (a: *Resolved_Type, b: *Resolved_Type) -> *Resolved_Type {
 	resolved := poison_type();
-	if a.kind == .Array || b.kind == .Array {
+	if is_void_type(a) && is_void_type(b) {
+		resolved = a;
+	} else if a.kind == .Array || b.kind == .Array {
 		resolved = New(Resolved_Type);
 		resolved.kind = .Pointer;
 		resolved.size_in_bytes = 8;
@@ -529,17 +538,22 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			assign.left.resolved_type = left_info;
 			assign.resolved_type = left_info;
 			return left_info;
-		case Node_Binary;
-			binary := expr.(*Node_Binary);
-			left_info := resolve_expr(tc, binary.left);
-			right_info := resolve_expr(tc, binary.right);
-			
-			resolved_type := common_type(left_info, right_info);
-			if resolved_type == poison_type() {
-				report_error(tc, expr.line, expr.col, "Unable to operate on types");
-				return resolved_type;
+			case Node_Binary;
+				binary := expr.(*Node_Binary);
+				left_info := resolve_expr(tc, binary.left);
+				right_info := resolve_expr(tc, binary.right);
+
+				if binary.op.type == .Comma {
+					binary.resolved_type = right_info;
+					return right_info;
+				}
+
+				resolved_type := common_type(left_info, right_info);
+				if resolved_type == poison_type() {
+					report_error(tc, expr.line, expr.col, "Unable to operate on types");
+					return resolved_type;
 			}
-					
+
 			if binary.op.type == {
 				case .Less; #through;
 				case .Greater; #through;

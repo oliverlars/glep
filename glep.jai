@@ -2395,6 +2395,21 @@ test_base_name :: (filename: string) -> string {
 	return result;
 }
 
+C_BACKEND_STACK_SIZE :: "0x1000000"; // 16 MiB.
+
+compile_c_backend_output :: (source: string, output: string) -> bool {
+	command := sprint("clang '%' -O2 -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, C_BACKEND_STACK_SIZE);
+	result, stdout, stderr := run_command("sh", "-c", command);
+	if result.exit_code != 0 {
+		if stdout.count > 0 print("%", stdout);
+		if stderr.count > 0 print("%", stderr);
+		print("C backend compile failed: %\n", command);
+		return false;
+	}
+	print("Wrote % from % with a 16 MiB stack\n", output, source);
+	return true;
+}
+
 run_test :: (filename: string) -> passed: bool {
 	base := test_base_name(filename);
 	clang_exe := sprint("tests/build/%_clang", base);
@@ -2617,6 +2632,7 @@ main :: () {
 
 	
 	write_entire_file("out.c", builder_to_string(*emitter.builder));
+	compile_c_backend_output("out.c", "out");
 
 	// print("\nCompiling assembly...\n\n");
 	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
