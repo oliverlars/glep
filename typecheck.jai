@@ -876,9 +876,9 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 			for function.params {
 				if it.declarators.count {
 					it.declarators[0].resolved_type = resolve_decl(tc, it, it.declarators[0]);
-					// 'void' is the only type you can have as a function
-					// parameter without a declarator
-					if it.base.specifiers.count && it.base.specifiers[0] != "void" {
+					// Unnamed parameters are type information only; named
+					// parameters become locals in the function body.
+					if identifier_from_declarator(it.declarators[0]) != "" {
 						push_decl(tc, it.base, it.declarators[0]);
 					}
 				}
