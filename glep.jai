@@ -122,6 +122,7 @@ Token :: struct {
 	number_type: Number_Type;
 	// Lord have mercy
 	hideset: [..]string;
+	source_path: string;
 	line: int;
 	col: int;
 }
@@ -129,6 +130,7 @@ Token :: struct {
 Tokeniser :: struct {
 	at: int;
 	source: string;
+	source_path: string;
 	tokens: [..]Token;
 	line: int = 1;
 	line_start: int;
@@ -150,6 +152,7 @@ Parser :: struct {
 
 Node :: struct {
 	type: Type;
+	source_path: string;
 	line: int;
 	col: int;
 }
@@ -504,9 +507,10 @@ Node_Translation_Unit :: struct {
 }
 
 
-tokenise :: (file: string) -> Tokeniser {
+tokenise :: (file: string, source_path := "") -> Tokeniser {
 	result: Tokeniser;
 	result.source = file;
+	result.source_path = source_path;
 	tokenise(*result);
 	return result;
 }
@@ -893,7 +897,9 @@ tokenise :: (t: *Tokeniser) {
 				}
 			}
 		}
-		token.line = t.line;
+		token.source_path = t.source_path;
+		token.line = token_line;
+		token.col = token_col;
 		array_add(*t.tokens, token);
 	}
 }
@@ -929,6 +935,7 @@ current :: (p: *Parser) -> Token {
 make_node :: (p: *Parser, $T: Type) -> *T {
 	node := New(T);
 	tok := current(p);
+	node.source_path = tok.source_path;
 	node.line = tok.line;
 	node.col  = tok.col;
 	return node;
@@ -1578,13 +1585,14 @@ parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 		skip(p);
 	} else if current(p).type == .String {
 		result = make_node(p, Node_String);
+		first_token := current(p);
 		concat := current(p).view;
 		skip(p);
 		while current(p).type == .String {
 			concat = join(concat, current(p).view);
 			skip(p);
 		}
-		token: Token;
+		token := first_token;
 		token.view = concat;
 		token.type = .String;
 		result.(*Node_String).token = token;
@@ -2082,10 +2090,14 @@ parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
 }
 
 parse_decl :: (p: *Parser) -> *Node_Decl {
+	start := current(p);
 	type: Node_Decl_Info;
 	parse_declaration_specifiers(p, *type);
 
 	decl := New(Node_Decl);
+	decl.source_path = start.source_path;
+	decl.line = start.line;
+	decl.col = start.col;
 	decl.base = type;
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
@@ -2396,6 +2408,71 @@ test_base_name :: (filename: string) -> string {
 }
 
 C_BACKEND_STACK_SIZE :: "0x1000000"; // 16 MiB.
+DEBUG_ARTIFACT_DIR :: "debug";
+
+append_token_as_c :: (builder: *String_Builder, token: Token) {
+	if token.type == {
+		case .String;
+			append(builder, sprint("\"%\"", token.view));
+		case .Char;
+			append(builder, sprint("'%'", token.view));
+		case;
+			append(builder, token.view);
+	}
+}
+
+write_tokenised_c_artifact :: (tokens: [..]Token, path: string) {
+	builder: String_Builder;
+	last_source_path := "";
+	last_line := -1;
+
+	for token: tokens {
+		if token.type == .Newline {
+			append(*builder, "\n");
+			continue;
+		}
+
+		if token.source_path.count > 0 && (token.source_path != last_source_path || token.line != last_line) {
+			append(*builder, sprint("\n#line % \"%\"\n", token.line, token.source_path));
+			last_source_path = token.source_path;
+			last_line = token.line;
+		}
+
+		append_token_as_c(*builder, token);
+		append(*builder, " ");
+	}
+
+	write_entire_file(path, builder_to_string(*builder));
+}
+
+write_token_dump_artifact :: (tokens: [..]Token, path: string) {
+	builder: String_Builder;
+	for token: tokens {
+		if token.type == .Newline {
+			append(*builder, sprint("%:%:%: %\n", token.source_path, token.line, token.col, token.type));
+		} else {
+			append(*builder, sprint("%:%:%: % `%`\n", token.source_path, token.line, token.col, token.type, token.view));
+		}
+	}
+	write_entire_file(path, builder_to_string(*builder));
+}
+
+print_translation_unit_as_c :: (tu: *Node_Translation_Unit) -> string {
+	builder: String_Builder;
+	for tu.declarations {
+		print_decl(*builder, it);
+		if !it.body {
+			append(*builder, ";");
+		}
+		append(*builder, "\n");
+	}
+	return builder_to_string(*builder);
+}
+
+reset_debug_artifacts :: () {
+	delete_directory(DEBUG_ARTIFACT_DIR);
+	make_directory_if_it_does_not_exist(DEBUG_ARTIFACT_DIR, recursive = true);
+}
 
 compile_c_backend_output :: (source: string, output: string) -> bool {
 	command := sprint("clang '%' -O2 -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, C_BACKEND_STACK_SIZE);
@@ -2439,12 +2516,15 @@ run_test :: (filename: string) -> passed: bool {
 
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
+	tokeniser.source_path = get_absolute_path(filename);
 	tokenise(*tokeniser);
 
 	cpp: Preprocessor;
 	array_add(*cpp.path_stack, get_absolute_path(filename));
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
+	write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
+	write_token_dump_artifact(tokens, sprint("%/tokens.txt", DEBUG_ARTIFACT_DIR));
 
 	tokens_no_newlines: [..]Token;
 	for tokens {
@@ -2463,15 +2543,8 @@ run_test :: (filename: string) -> passed: bool {
 	typechecker.ordinary = parser.ordinary;
 	if !typecheck(*typechecker, tu) then return false;
 
-	c_builder: String_Builder;
-	for tu.declarations {
-		print_decl(*c_builder, it);
-		if !it.body {
-			append(*c_builder, ";");
-		}
-		append(*c_builder, "\n");
-	}
-	write_entire_file("out.c", builder_to_string(*c_builder));
+	ast_c := print_translation_unit_as_c(tu);
+	write_entire_file("out.c", ast_c);
 
 	compiler: Compiler;
 	compiler.strings = parser.strings;
@@ -2542,6 +2615,8 @@ run_tests :: () {
 }
 
 main :: () {
+	reset_debug_artifacts();
+
 	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
 	// minimal := read_entire_file("friday.c");
 	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
@@ -2557,12 +2632,15 @@ main :: () {
 	t0 := current_time_monotonic();
 	tokeniser: Tokeniser;
 	tokeniser.source = minimal;
+	tokeniser.source_path = get_absolute_path(filename);
 	tokenise(*tokeniser);
 
 	cpp: Preprocessor;
 	array_add(*cpp.path_stack, get_absolute_path(filename));
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
+	write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
+	write_token_dump_artifact(tokens, sprint("%/tokens.txt", DEBUG_ARTIFACT_DIR));
 
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;
@@ -2579,21 +2657,13 @@ main :: () {
 
 
 	tu := parse_translation_unit(*parser);
+	ast_c := print_translation_unit_as_c(tu);
+	write_entire_file(sprint("%/ast.c", DEBUG_ARTIFACT_DIR), ast_c);
 
 	typechecker: Type_Checker;
 	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
 	if !typecheck(*typechecker, tu) then return;
-
-	builder: String_Builder;
-	for tu.declarations {
-		print_decl(*builder, it);
-		if !it.body {
-			append(*builder, ";");
-		}
-		append(*builder, "\n");
-	}
-	write_entire_file("out.c", builder_to_string(*builder));
 
 	compiler: Compiler;
 	compiler.strings = parser.strings;
@@ -2630,8 +2700,11 @@ main :: () {
 
 	emitter := lower(*compiler.ir);
 
-	
-	write_entire_file("out.c", builder_to_string(*emitter.builder));
+	ir_c := builder_to_string(*emitter.builder);
+	write_entire_file(sprint("%/ir.c", DEBUG_ARTIFACT_DIR), ir_c);
+	print("Wrote compile artifacts to %/\n", DEBUG_ARTIFACT_DIR);
+
+	write_entire_file("out.c", ir_c);
 	compile_c_backend_output("out.c", "out");
 
 	// print("\nCompiling assembly...\n\n");

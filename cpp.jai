@@ -63,6 +63,7 @@ add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 	object: Object;
 	tokeniser: Tokeniser;
 	tokeniser.source = body;
+	tokeniser.source_path = tprint("<builtin object %>", builtin);
 	tokenise(*tokeniser);
 	for tokeniser.tokens {
 		array_add(*object.tokens, it);
@@ -74,6 +75,7 @@ add_builtin_object :: (cpp: *Preprocessor, builtin: string, body: string) {
 add_function_builtin :: (cpp: *Preprocessor, macro: string) {
 	tokeniser: Tokeniser;
 	tokeniser.source = macro;
+	tokeniser.source_path = tprint("<builtin macro %>", macro);
 	tokenise(*tokeniser);
 	cpp.at = 0;
 	preprocess(cpp, tokeniser.tokens);
@@ -237,6 +239,9 @@ glue_tokens :: (left: Token, right: Token) -> Token {
 	glued.type = .Identifier;
 	glued.view = join(left.view, right.view);
 	glued.hideset = hideset_intersect(left.hideset, right.hideset);
+	glued.source_path = left.source_path;
+	glued.line = left.line;
+	glued.col = left.col;
 	return glued;
 }
 
@@ -264,6 +269,8 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			line.view = tprint("%", cpp.line);
 			line.type = .Number;
 			line.number_type = .Decimal;
+			line.source_path = peek(cpp.path_stack);
+			line.line = cpp.line;
 			array_add(*result, line);
 			at += 1;
 			continue;
@@ -271,6 +278,8 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			file: Token;
 			file.view = peek(cpp.path_stack);
 			file.type = .String;
+			file.source_path = peek(cpp.path_stack);
+			file.line = cpp.line;
 			array_add(*result, file);
 			at += 1;
 			continue;
@@ -280,6 +289,9 @@ subst :: (cpp: *Preprocessor, body: [..]Token, params: [..]Token, args: [..][..]
 			found, index := find_arg(params, args, body[at + 1]);
 			stringed: Token;
 			stringed.type = .String;
+			stringed.source_path = it.source_path;
+			stringed.line = it.line;
+			stringed.col = it.col;
 			view: string;
 			if found {
 				for args[index] {
@@ -472,12 +484,18 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 				line.view = tprint("%", cpp.line);
 				line.type = .Number;
 				line.number_type = .Decimal;
+				line.source_path = token.source_path;
+				line.line = token.line;
+				line.col = token.col;
 				array_add(*result, line);
 				at += 1;
 			} else if token.view == "__FILE__" {
 				file: Token;
 				file.view = peek(cpp.path_stack);
 				file.type = .String;
+				file.source_path = token.source_path;
+				file.line = token.line;
+				file.col = token.col;
 				array_add(*result, file);
 				at += 1;
 			} else {
@@ -813,7 +831,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								assert(found);
 								array_add(*cpp.path_stack, full_path);
 								//print("Loading include %\n", peek(cpp.path_stack));
-								include_tokeniser := tokenise(file);
+								include_tokeniser := tokenise(file, full_path);
 								at := cpp.at;
 								cpp.at = 0;
 								include_tokens := preprocess(cpp, include_tokeniser.tokens);
@@ -830,12 +848,12 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								path = join(path, skip(cpp, src_tokens).view);
 							}
 							skip(cpp, src_tokens);
-								full_path: string;
-								full_path = resolve_system_include(cpp, path);
-								if full_path.count == 0 {
-									print("Could not resolve system include <%> from %\n", path, peek(cpp.path_stack));
-								}
-								if !table_find(*cpp.includes, full_path) {
+							full_path: string;
+							full_path = resolve_system_include(cpp, path);
+							if full_path.count == 0 {
+								print("Could not resolve system include <%> from %\n", path, peek(cpp.path_stack));
+							}
+							if !table_find(*cpp.includes, full_path) {
 								if !table_contains(*cpp.includes, full_path) {
 									table_add(*cpp.includes, full_path, false);
 								}
@@ -845,7 +863,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								array_add(*cpp.path_stack, full_path);
 								assert(found);
 								//print("Loading include %\n", peek(cpp.path_stack));
-								include_tokeniser := tokenise(file);
+								include_tokeniser := tokenise(file, full_path);
 								at := cpp.at;
 								cpp.at = 0;
 								include_tokens := preprocess(cpp, include_tokeniser.tokens);
@@ -913,28 +931,32 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							no_defineds: [..]Token;
 							at := 0;
 							//print("TO_EXPAND: %\n", to_expand);
-							while at < to_expand.count {
-								// Hack maybe?
-								if to_expand[at].view == "defined" {
-									at += 1; // 'defined'
-									if to_expand[at].type == .LeftParenthesis {
+								while at < to_expand.count {
+									// Hack maybe?
+									if to_expand[at].view == "defined" {
+										defined_token := to_expand[at];
+										at += 1; // 'defined'
+										if to_expand[at].type == .LeftParenthesis {
+											at += 1;
+										}
+										value := table_contains(*cpp.objects, to_expand[at].view).(int);
+										value |= table_contains(*cpp.functions, to_expand[at].view).(int);
+										//print("ID TO CHECK: %\n", to_expand[at]);
 										at += 1;
-									}
-									value := table_contains(*cpp.objects, to_expand[at].view).(int);
-									value |= table_contains(*cpp.functions, to_expand[at].view).(int);
-									//print("ID TO CHECK: %\n", to_expand[at]);
-									at += 1;
-									if at < to_expand.count && to_expand[at].type == .RightParenthesis {
+										if at < to_expand.count && to_expand[at].type == .RightParenthesis {
+											at += 1;
+										}
+										value_token: Token;
+										value_token.view = tprint("%", value);
+										value_token.type = .Number;
+										value_token.number_type = .Decimal;
+										value_token.source_path = defined_token.source_path;
+										value_token.line = defined_token.line;
+										value_token.col = defined_token.col;
+										array_add(*no_defineds, value_token);
+									} else {
+										array_add(*no_defineds, to_expand[at]);
 										at += 1;
-									}
-									value_token: Token;
-									value_token.view = tprint("%", value);
-									value_token.type = .Number;
-									value_token.number_type = .Decimal;
-									array_add(*no_defineds, value_token);
-								} else {
-									array_add(*no_defineds, to_expand[at]);
-									at += 1;
 								}
 							}
 							expanded := expand(cpp, no_defineds);
@@ -1004,6 +1026,9 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 					token.view = tprint("%", name.line);
 					token.type = .Number;
 					token.number_type = .Decimal;
+					token.source_path = name.source_path;
+					token.line = name.line;
+					token.col = name.col;
 					insert(cpp, token, *dst_tokens);
 					paste(cpp, src_tokens, *dst_tokens);
 				} else if name.view == "__FILE__" {
@@ -1011,6 +1036,9 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 					token: Token;
 					token.view = peek(cpp.path_stack);
 					token.type = .String;
+					token.source_path = name.source_path;
+					token.line = name.line;
+					token.col = name.col;
 					insert(cpp, token, *dst_tokens);
 					paste(cpp, src_tokens, *dst_tokens);
 				} else {
