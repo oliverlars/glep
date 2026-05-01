@@ -22,6 +22,8 @@ Preprocessor :: struct {
 	functions: Table(string, Function);
 	expand_count: int;
 	includes: Table(string, PRAGMA_ONCED);
+	include_paths: [..]string;
+	framework_paths: [..]string;
 }
 
 Cond_State :: struct {
@@ -75,6 +77,120 @@ add_function_builtin :: (cpp: *Preprocessor, macro: string) {
 	tokenise(*tokeniser);
 	cpp.at = 0;
 	preprocess(cpp, tokeniser.tokens);
+}
+
+trim_command_output :: (s: string) -> string {
+	start := 0;
+	while start < s.count && (s[start] == #char " " || s[start] == #char "\t" || s[start] == #char "\n" || s[start] == #char "\r") {
+		start += 1;
+	}
+
+	end := s.count;
+	while end > start && (s[end - 1] == #char " " || s[end - 1] == #char "\t" || s[end - 1] == #char "\n" || s[end - 1] == #char "\r") {
+		end -= 1;
+	}
+
+	result: string;
+	result.data = s.data + start;
+	result.count = end - start;
+	return result;
+}
+
+dirname :: (path: string) -> string {
+	end := path.count;
+	while end > 0 && path[end - 1] != #char "/" {
+		end -= 1;
+	}
+	if end > 0 then end -= 1;
+
+	result: string;
+	result.data = path.data;
+	result.count = end;
+	return result;
+}
+
+command_output :: (command: string) -> string {
+	result, stdout, stderr := run_command("sh", "-c", command, capture_and_return_output = true);
+	if result.exit_code != 0 {
+		if stderr.count > 0 print("%", stderr);
+		return "";
+	}
+	return trim_command_output(stdout);
+}
+
+add_include_path :: (paths: *[..]string, path: string) {
+	if path.count == 0 return;
+	for paths.* {
+		if it == path return;
+	}
+	array_add(paths, copy_string(path));
+}
+
+configure_system_include_paths :: (cpp: *Preprocessor) {
+	sdk_path := command_output("xcrun --sdk macosx --show-sdk-path");
+	clang_path := command_output("xcrun --find clang");
+	resource_dir := "";
+	if clang_path.count > 0 {
+		resource_dir = command_output(tprint("'%' -print-resource-dir", clang_path));
+	}
+	if resource_dir.count == 0 {
+		resource_dir = command_output("clang -print-resource-dir");
+	}
+	toolchain_usr := dirname(dirname(clang_path));
+
+	add_include_path(*cpp.include_paths, "/usr/local/include");
+	if sdk_path.count > 0 {
+		add_include_path(*cpp.include_paths, tprint("%/usr/local/include", sdk_path));
+	}
+	if resource_dir.count > 0 {
+		add_include_path(*cpp.include_paths, tprint("%/include", resource_dir));
+	}
+	if sdk_path.count > 0 {
+		add_include_path(*cpp.include_paths, tprint("%/usr/include", sdk_path));
+	}
+	if toolchain_usr.count > 0 {
+		add_include_path(*cpp.include_paths, tprint("%/include", toolchain_usr));
+	}
+	if sdk_path.count > 0 {
+		add_include_path(*cpp.framework_paths, tprint("%/System/Library/Frameworks", sdk_path));
+		add_include_path(*cpp.framework_paths, tprint("%/System/Library/SubFrameworks", sdk_path));
+		add_include_path(*cpp.framework_paths, tprint("%/Library/Frameworks", sdk_path));
+	}
+}
+
+resolve_framework_include :: (cpp: *Preprocessor, include_path: string) -> string {
+	slash := -1;
+	for i: 0..include_path.count-1 {
+		if include_path[i] == #char "/" {
+			slash = i;
+			break;
+		}
+	}
+	if slash < 0 return "";
+
+	framework: string;
+	framework.data = include_path.data;
+	framework.count = slash;
+
+	header: string;
+	header.data = include_path.data + slash + 1;
+	header.count = include_path.count - slash - 1;
+
+	for cpp.framework_paths {
+		full_path := tprint("%/%.framework/Headers/%", it, framework, header);
+		if file_exists(full_path) return full_path;
+	}
+
+	return "";
+}
+
+resolve_system_include :: (cpp: *Preprocessor, include_path: string) -> string {
+	for cpp.include_paths {
+		full_path := tprint("%/%", it, include_path);
+		if file_exists(full_path) return full_path;
+	}
+
+	return resolve_framework_include(cpp, include_path);
 }
 
 in_hideset :: (hideset: [..]string, name: string) -> bool {
@@ -555,6 +671,7 @@ add_all_builtins :: (cpp: *Preprocessor) {
 
 	add_function_builtin(cpp, "#define __asm(x)\n");
 	add_function_builtin(cpp, "#define __attribute__(x)\n");
+	configure_system_include_paths(cpp);
 	// HACK(Oliver): Remove this dumbass shit
 	cpp.at = 0;
 }
@@ -670,14 +787,6 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							table_add(*cpp.objects, name.view, object);
 						}
 					case "include";
-						includes := string.[
-							"/usr/local/include",
-							"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include",
-							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
-							"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include",
-							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks",
-							"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks",
-						];
 						if current(cpp, src_tokens).type == .String {
 							include_path := skip(cpp, src_tokens).view;
 							file: string;
@@ -690,42 +799,29 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							//print("Loading include %\n", peek(cpp.path_stack));
 							found_include, pragma_onced := table_find(*cpp.includes, path);
 							if !table_find(*cpp.includes, path) {
-								file, found = read_entire_file(path);
-								if found {
-									if !table_contains(*cpp.includes, path) {
-										table_add(*cpp.includes, path, false);
-									}
-									array_add(*cpp.path_stack, path);
-									include_tokeniser := tokenise(file);
-									at := cpp.at;
-									cpp.at = 0;
-									include_tokens := preprocess(cpp, include_tokeniser.tokens);
-									for include_tokens {
-										array_add(*dst_tokens, it);
-									}
-									cpp.at = at;
-									cpp.path_stack.count -= 1;
-								} else {
-									for includes {
-										full_path := tprint("%/%", it, include_path);
-										if file_exists(full_path) {
-											file, found = read_entire_file(full_path);
-											array_add(*cpp.path_stack, full_path);
-											break;
-										}
-									}
-									assert(found);
-									//print("Loading include %\n", peek(cpp.path_stack));
-									include_tokeniser := tokenise(file);
-									at := cpp.at;
-									cpp.at = 0;
-									include_tokens := preprocess(cpp, include_tokeniser.tokens);
-									for include_tokens {
-										array_add(*dst_tokens, it);
-									}
-									cpp.at = at;
-									cpp.path_stack.count -= 1;
+								full_path := path;
+								if !file_exists(full_path) {
+									full_path = resolve_system_include(cpp, include_path);
 								}
+								if full_path.count == 0 {
+									print("Could not resolve include \"%\" from %\n", include_path, peek(cpp.path_stack));
+								}
+								if !table_contains(*cpp.includes, full_path) {
+									table_add(*cpp.includes, full_path, false);
+								}
+								file, found = read_entire_file(full_path);
+								assert(found);
+								array_add(*cpp.path_stack, full_path);
+								//print("Loading include %\n", peek(cpp.path_stack));
+								include_tokeniser := tokenise(file);
+								at := cpp.at;
+								cpp.at = 0;
+								include_tokens := preprocess(cpp, include_tokeniser.tokens);
+								for include_tokens {
+									array_add(*dst_tokens, it);
+								}
+								cpp.at = at;
+								cpp.path_stack.count -= 1;
 							}
 						} else if current(cpp, src_tokens).type == .Less {
 							skip(cpp, src_tokens);
@@ -733,18 +829,13 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							while current(cpp, src_tokens).type != .Greater {
 								path = join(path, skip(cpp, src_tokens).view);
 							}
-							if path == "stdio.h" {
-								a := 5;
-							}
 							skip(cpp, src_tokens);
-							full_path: string;
-							for includes {
-								full_path = tprint("%/%", it, path);
-								if file_exists(full_path) {
-									break;
+								full_path: string;
+								full_path = resolve_system_include(cpp, path);
+								if full_path.count == 0 {
+									print("Could not resolve system include <%> from %\n", path, peek(cpp.path_stack));
 								}
-							}
-							if !table_find(*cpp.includes, full_path) {
+								if !table_find(*cpp.includes, full_path) {
 								if !table_contains(*cpp.includes, full_path) {
 									table_add(*cpp.includes, full_path, false);
 								}
@@ -932,5 +1023,3 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 
 	return dst_tokens;
 }
-
-
