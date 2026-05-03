@@ -299,7 +299,6 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 			right := eval_constant_expr(expr.(*Node_Binary).right);
 
 			if op.type == {
-				case .Equals;
 				case .Plus;
 					return left + right;
 				case .Minus;
@@ -308,6 +307,18 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 					return left * right;
 				case .ForwardSlash;
 					return left / right;
+				case .Less;
+					return left < right;
+				case .Greater;
+					return left > right;
+				case .LessEqual;
+					return left <= right;
+				case .GreaterEqual;
+					return left >= right;
+				case .BangEqual;
+					return left != right;
+				case .Equals;
+					return left == right;
 			}
 		case Node_Number;
 			number := expr.(*Node_Number);

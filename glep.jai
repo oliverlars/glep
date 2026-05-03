@@ -2445,14 +2445,14 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 		case Node_Decl_Statement;
 			print_decl(builder, stmt.(*Node_Decl_Statement).decl);
 			append(builder, ";\n");
-			case Node_Expr_Statement;
-				print_expr(builder, stmt.(*Node_Expr_Statement).expr);
-				append(builder, ";\n");
-			case Node_Static_Assert;
-				print_static_assert(builder, stmt.(*Node_Static_Assert));
-				append(builder, ";\n");
-			case;
-				append(builder, ";\n");
+		case Node_Expr_Statement;
+			print_expr(builder, stmt.(*Node_Expr_Statement).expr);
+			append(builder, ";\n");
+		case Node_Static_Assert;
+			print_static_assert(builder, stmt.(*Node_Static_Assert));
+			append(builder, ";\n");
+		case;
+			append(builder, ";\n");
 	}
 }
 

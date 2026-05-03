@@ -744,6 +744,21 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			case Node_Static_Assert;
 				static_assert := stmt.(*Node_Static_Assert);
 				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
+				constant := eval_constant_expr(static_assert.expr);
+				if constant.kind == {
+					case .F64;
+						if !constant.as_f64 {
+							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+						}
+					case .S64;
+						if !constant.as_s64 {
+							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+						}
+					case .U64;
+						if !constant.as_u64 {
+							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+						}
+				}
 				// TODO: evaluate the integer constant expression and report
 				// an error using static_assert.message when it is false.
 			case Node_For;
