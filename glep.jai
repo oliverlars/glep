@@ -1976,22 +1976,24 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 	} else {
 		if current(p).type == .Identifier {
 			if next(p).type == .Colon || current(p).view == "case" || current(p).view == "default" {
-				if current(p).type == .Identifier {
+				if current(p).view == "case" {
+					_case := make_node(p, Node_Case);
+					skip(p);
+					_case.expr = parse_expr(p);
+					expect(p, .Colon);
+					_case.statement = parse_statement(p);
+					statement = _case;
+				} else if current(p).view == "default" {
+					skip(p);
+					_case := make_node(p, Node_Case);
+					_case.is_default = true;
+					expect(p, .Colon);
+				} else if current(p).type == .Identifier {
 					label := make_node(p, Node_Label);
 					label.token = current(p);
 					skip(p);
 					expect(p, .Colon);
 					statement = label;
-				} else {
-					_case := make_node(p, Node_Case);
-					skip(p);
-					if current(p).view == "default" {
-						_case.is_default = true;
-					}
-					_case.expr = parse_expr(p);
-					expect(p, .Colon);
-					_case.statement = parse_statement(p);
-					statement = _case;
 				}
 			} else if current(p).view == "continue" {
 				statement = make_node(p, Node_Continue);
@@ -2445,14 +2447,14 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 		case Node_Decl_Statement;
 			print_decl(builder, stmt.(*Node_Decl_Statement).decl);
 			append(builder, ";\n");
-		case Node_Expr_Statement;
-			print_expr(builder, stmt.(*Node_Expr_Statement).expr);
-			append(builder, ";\n");
-		case Node_Static_Assert;
-			print_static_assert(builder, stmt.(*Node_Static_Assert));
-			append(builder, ";\n");
-		case;
-			append(builder, ";\n");
+			case Node_Expr_Statement;
+				print_expr(builder, stmt.(*Node_Expr_Statement).expr);
+				append(builder, ";\n");
+			case Node_Static_Assert;
+				print_static_assert(builder, stmt.(*Node_Static_Assert));
+				append(builder, ";\n");
+			case;
+				append(builder, ";\n");
 	}
 }
 
