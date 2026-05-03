@@ -500,8 +500,18 @@ Node_Expr_Statement :: struct {
 	statement_type = #this;
 }
 
+Node_Static_Assert :: struct {
+	#as using node: Node_Statement;
+	type = #this;
+	statement_type = #this;
+	keyword: Token;
+	expr: *Node_Expr;
+	message: Token;
+}
+
 Node_Translation_Unit :: struct {
 	#as using node: Node;
+	items: [..]*Node;
 	declarations: [..]*Node_Decl;
 	type = #this;
 }
@@ -1945,7 +1955,10 @@ parse_initializer :: (p: *Parser) -> *Node_Initializer {
 
 parse_statement :: (p: *Parser) -> *Node_Statement {
 	statement: *Node_Statement;
-	if current(p).type == .LeftBrace {
+	if current(p).view == "_Static_assert" || current(p).view == "static_assert" {
+		statement = parse_static_assert(p);
+		expect(p, .Semicolon);
+	} else if current(p).type == .LeftBrace {
 		expect(p, .LeftBrace);
 		block := make_node(p, Node_Block);
 		while current(p).type != .RightBrace {
@@ -2080,12 +2093,34 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
 	result := make_node(p, Node_Translation_Unit);
 	while p.at < p.tokens.count {
-		decl := parse_decl(p);
-		if !decl.body {
+		if current(p).view == "_Static_assert" || current(p).view == "static_assert" {
+			static_assert := parse_static_assert(p);
 			expect(p, .Semicolon);
+			array_add(*result.items, static_assert);
+		} else {
+			decl := parse_decl(p);
+			array_add(*result.items, decl);
+			if !decl.body {
+				expect(p, .Semicolon);
+			}
+			array_add(*result.declarations, decl);
 		}
-		array_add(*result.declarations, decl);
 	}
+	return result;
+}
+
+parse_static_assert :: (p: *Parser) -> *Node_Static_Assert {
+	result := make_node(p, Node_Static_Assert);
+	result.keyword = current(p);
+	skip(p);
+	expect(p, .LeftParenthesis);
+	result.expr = parse_expr(p, precedence_of(.Comma) + 1);
+	if current(p).type == .Comma {
+		skip(p);
+		result.message = current(p);
+		expect(p, .String);
+	}
+	expect(p, .RightParenthesis);
 	return result;
 }
 
@@ -2305,6 +2340,33 @@ print_decl :: (builder: *String_Builder, decl: *Node_Decl) {
 	}
 }
 
+print_static_assert :: (builder: *String_Builder, node: *Node_Static_Assert) {
+	append(builder, node.keyword.view);
+	append(builder, "(");
+	print_expr(builder, node.expr);
+	if node.message.view.count > 0 {
+		append(builder, ", ");
+		append(builder, sprint("\"%\"", node.message.view));
+	}
+	append(builder, ")");
+}
+
+print_translation_unit_item :: (builder: *String_Builder, node: *Node) {
+	if !node return;
+	if node.type == {
+		case Node_Decl;
+			decl := node.(*Node_Decl);
+			print_decl(builder, decl);
+			if !decl.body {
+				append(builder, ";");
+			}
+			append(builder, "\n");
+		case Node_Static_Assert;
+			print_static_assert(builder, node.(*Node_Static_Assert));
+			append(builder, ";\n");
+	}
+}
+
 print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0) {
 	if !stmt return;
 	if stmt.statement_type == {
@@ -2383,11 +2445,14 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 		case Node_Decl_Statement;
 			print_decl(builder, stmt.(*Node_Decl_Statement).decl);
 			append(builder, ";\n");
-		case Node_Expr_Statement;
-			print_expr(builder, stmt.(*Node_Expr_Statement).expr);
-			append(builder, ";\n");
-		case;
-			append(builder, ";\n");
+			case Node_Expr_Statement;
+				print_expr(builder, stmt.(*Node_Expr_Statement).expr);
+				append(builder, ";\n");
+			case Node_Static_Assert;
+				print_static_assert(builder, stmt.(*Node_Static_Assert));
+				append(builder, ";\n");
+			case;
+				append(builder, ";\n");
 	}
 }
 
@@ -2459,12 +2524,8 @@ write_token_dump_artifact :: (tokens: [..]Token, path: string) {
 
 print_translation_unit_as_c :: (tu: *Node_Translation_Unit) -> string {
 	builder: String_Builder;
-	for tu.declarations {
-		print_decl(*builder, it);
-		if !it.body {
-			append(*builder, ";");
-		}
-		append(*builder, "\n");
+	for tu.items {
+		print_translation_unit_item(*builder, it);
 	}
 	return builder_to_string(*builder);
 }

@@ -733,16 +733,21 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 					report_error(tc, ret.line, ret.col, "Expression doesn't match return type");
 				}
 			}
-		case Node_Decl_Statement;
-			decl := stmt.(*Node_Decl_Statement).decl;
-			for decl.declarators {
-				lhs := resolve_decl(tc, decl, it);
-				it.resolved_type = lhs;
-				resolve_initializer(tc, lhs, it.init);
-				push_decl(tc, decl.base, it);
-			}
-		case Node_For;
-			_for := stmt.(*Node_For);
+			case Node_Decl_Statement;
+				decl := stmt.(*Node_Decl_Statement).decl;
+				for decl.declarators {
+					lhs := resolve_decl(tc, decl, it);
+					it.resolved_type = lhs;
+					resolve_initializer(tc, lhs, it.init);
+					push_decl(tc, decl.base, it);
+				}
+			case Node_Static_Assert;
+				static_assert := stmt.(*Node_Static_Assert);
+				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
+				// TODO: evaluate the integer constant expression and report
+				// an error using static_assert.message when it is false.
+			case Node_For;
+				_for := stmt.(*Node_For);
 			typecheck_statement(tc, _for.init);
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
@@ -895,8 +900,16 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 
 typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
 	push_scope(tc);
-	for decl: tu.declarations {
-		typecheck_decl(tc, decl);
+	for item: tu.items {
+		if item.type == {
+			case Node_Decl;
+				typecheck_decl(tc, item.(*Node_Decl));
+			case Node_Static_Assert;
+				static_assert := item.(*Node_Static_Assert);
+				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
+				// TODO: evaluate the integer constant expression and report
+				// an error using static_assert.message when it is false.
+		}
 	}
 	pop_scope(tc);
 
