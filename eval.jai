@@ -277,7 +277,7 @@ eval_char_literal :: (view: string) -> int {
 	return view[view.count - 1];
 }
 
-eval_constant_expr :: (expr: *Node_Expr) -> Constant {
+eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
 		case Node_Unary;
@@ -285,18 +285,18 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 			op := unary.op;
 			if op.type == {
 				case .Minus;
-					return -eval_constant_expr(unary.expr);
+					return -eval_constant_expr(_enums, unary.expr);
 				case .Plus;
-					return ~eval_constant_expr(unary.expr);
+					return +eval_constant_expr(_enums, unary.expr);
 				case .Bang;
-					return !eval_constant_expr(unary.expr);
+					return !eval_constant_expr(_enums, unary.expr);
 				case .Tilde;
-					return ~eval_constant_expr(unary.expr);
+					return ~eval_constant_expr(_enums, unary.expr);
 			}
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
-			left  := eval_constant_expr(expr.(*Node_Binary).left);
-			right := eval_constant_expr(expr.(*Node_Binary).right);
+			left  := eval_constant_expr(_enums, expr.(*Node_Binary).left);
+			right := eval_constant_expr(_enums, expr.(*Node_Binary).right);
 
 			if op.type == {
 				case .Plus;
@@ -317,7 +317,7 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 					return left >= right;
 				case .BangEqual;
 					return left != right;
-				case .Equals;
+				case .EqualEqual;
 					return left == right;
 			}
 		case Node_Number;
@@ -329,13 +329,14 @@ eval_constant_expr :: (expr: *Node_Expr) -> Constant {
 			}
 		case Node_Cast;
 			c := expr.(*Node_Cast);
-			return convert_constant(eval_constant_expr(c.expr), c.resolved_type);
+			return convert_constant(eval_constant_expr(_enums, c.expr), c.resolved_type);
 		case Node_Char;
 			value := eval_char_literal(expr.(*Node_Char).token.view);
 			return .{ kind = .U64, as_u64 = value.(u64) };
 		case Node_Identifier;
-			// TODO(Oliver): Enums
-			assert(false, "Enums in constant expr are not handled");
+			found, value := table_find(_enums, expr.(*Node_Identifier).id.view);
+			assert(found, "Unknown identifier in constant expression");
+			return .{ kind = .U64, as_u64 = value.(u64) };
 	}
 	return .{};
 }

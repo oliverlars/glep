@@ -5,7 +5,7 @@ Compiler :: struct {
 	strings: Table(string, int);
 	ordinary: Table(string, *Node);
 	structs: Table(string, *Node_Struct);
-	enums: Table(string, *Node_Enum);
+	enums: Table(string, int);
 	typedefs: Table(string, *Node_Decl);
 
 	register: int;
@@ -426,6 +426,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			result = dst;
 		case Node_Identifier;
 			id := expr.(*Node_Identifier);
+			found_enum, enum_value := table_find(*compiler.enums, id.id.view);
+			if found_enum {
+				type := ifx expr.resolved_type then operand_type(expr.resolved_type) else IR_S32;
+				result = ir_constant(enum_value.(u64), type);
+				return result;
+			}
 			binding := find_binding(compiler, id.id.view);
 			address := binding.slot;
 			if binding.slot.kind == .Label {
@@ -808,7 +814,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
-			value := convert_constant(eval_constant_expr(expr), target_type);
+			value := convert_constant(eval_constant_expr(*compiler.enums, expr), target_type);
 			if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {
 					f32_val := cast(float32) value.as_f64;

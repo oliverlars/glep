@@ -214,6 +214,7 @@ Node_Function_Declarator :: struct {
 Node_Array_Declarator :: struct {
 	#as using declarator: Node_Declarator;
 	declarator_type = #this;
+	count_expr: *Node_Expr;
 	count: int;
 }
 
@@ -1844,20 +1845,9 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 				skip(p);
 			}
 			if current(p).type == .Asterisk then skip(p);
-			expr := parse_expr(p);
-			constant := eval_constant_expr(expr);
-			count := 0;
-			// TODO(Oliver): If delcaring array has no count
-			// then we can derive it from the number of initialzers
-			// in certain cases
-			if constant.kind == .S64 {
-				count = constant.as_s64.(s64);
-			} else if constant.kind == .U64 {
-				count = constant.as_u64.(s64);
-			} else {
-				count = constant.as_f64.(s64);
+			if current(p).type != .RightBracket {
+				array.count_expr = parse_expr(p);
 			}
-			array.count = count;
 			array.inner = declarator;
 			declarator = array;
 			expect(p, .RightBracket);
@@ -2320,6 +2310,10 @@ print_declarator :: (builder: *String_Builder, declarator: *Node_Declarator, par
 		print_declarator(builder, declarator.inner, true);
 		if declarator.(*Node_Array_Declarator).count > 0 {
 			append(builder, sprint("[%]", declarator.(*Node_Array_Declarator).count));
+		} else if declarator.(*Node_Array_Declarator).count_expr {
+			append(builder, "[");
+			print_expr(builder, declarator.(*Node_Array_Declarator).count_expr);
+			append(builder, "]");
 		} else {
 			append(builder, "[]");
 		}
@@ -2613,7 +2607,7 @@ run_test :: (filename: string) -> passed: bool {
 	compiler.strings = parser.strings;
 	compiler.ordinary = parser.ordinary;
 	compiler.structs = parser.structs;
-	compiler.enums = parser.enums;
+	compiler.enums = typechecker._enums;
 	compiler.typedefs = parser.typedefs;
 	compile(*compiler, tu);
 
@@ -2732,7 +2726,7 @@ main :: () {
 	compiler.strings = parser.strings;
 	compiler.ordinary = parser.ordinary;
 	compiler.structs = parser.structs;
-	compiler.enums = parser.enums;
+	compiler.enums = typechecker._enums;
 	compiler.typedefs = parser.typedefs;
 	compile(*compiler, tu);
 
