@@ -523,6 +523,29 @@ coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 	return false;
 }
 
+normalise_function_call_type :: (type: *Resolved_Type) -> *Resolved_Type {
+	if !type || type == poison_type() return type;
+	if type.kind != .Array return type;
+
+	ptr := New(Resolved_Type);
+	ptr.kind = .Pointer;
+	ptr.size_in_bytes = 8;
+	ptr.alignment = 8;
+	ptr.unsigned = true;
+	ptr.inner = type.inner;
+	return ptr;
+}
+
+resolve_function_call_param_type :: (tc: *Type_Checker, param: *Node_Decl) -> *Resolved_Type {
+	param_type: *Resolved_Type;
+	if param.declarators.count > 0 {
+		param_type = resolve_decl(tc, *param.base, param.declarators[0]);
+	} else {
+		param_type = resolve_base(tc, param.base);
+	}
+	return normalise_function_call_type(param_type);
+}
+
 function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarator {
 	result := declarator;
 	while result && result.declarator_type != Node_Function_Declarator {
@@ -794,12 +817,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				
 				if it_index < function.params.count - 1 {
 					param := function.params[it_index];
-					param_type: *Resolved_Type;
-					if param.declarators.count > 0 {
-						param_type = resolve_decl(tc, *param.base, param.declarators[0]);
-					} else {
-						param_type = resolve_base(tc, param.base);
-					}
+					param_type := resolve_function_call_param_type(tc, param);
 					if !coerceable(param_type, arg_type) {
 						report_error_at(tc, it.source_path, it.line, it.col, "Argument '%' does not match parameter", 1 + it_index);
 					}
