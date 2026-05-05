@@ -38,8 +38,8 @@ Resolved_Type :: struct {
 // original Node_Decl to make this easier to process when
 // typechecking.
 Decl :: struct {
-	base: Node_Decl_Info;
-	declarator: *Node_Declarator;
+	resolved_type: *Resolved_Type;
+	name: string;
 }
 
 Scope :: struct {
@@ -55,6 +55,8 @@ Type_Checker :: struct {
 	// resolving a struct to avoid any further attempt at resolving it
 	// incase of recursive types.
 	_structs: Table(*Node_Struct, *Resolved_Type);
+
+	_enums: Table(string, int);
 
 	current_function_return_type: *Resolved_Type;
 
@@ -75,12 +77,60 @@ push_scope :: (tc: *Type_Checker) {
 	array_add(*tc.scopes, scope);
 }
 
-push_decl :: (tc: *Type_Checker, base: Node_Decl_Info, declarator: *Node_Declarator) {
+push_decl :: (tc: *Type_Checker,  declarator: *Node_Declarator) {
 	scope := current_scope(tc);
 	decl: Decl;
-	decl.base = base;
-	decl.declarator = declarator;
+	decl.resolved_type = declarator.resolved_type;
+	decl.name = identifier_from_declarator(declarator);
 	array_add(*scope.decls, decl);
+}
+
+push_decl :: (tc: *Type_Checker, name: string, resolved_type: *Resolved_Type) {
+	scope := current_scope(tc);
+	decl: Decl;
+	decl.resolved_type = resolved_type;
+	decl.name = name;
+	array_add(*scope.decls, decl);
+}
+
+enum_constant_type :: () -> *Resolved_Type {
+	info := New(Resolved_Type);
+	info.kind = .Integral;
+	info.size_in_bytes = 4;
+	info.alignment = 4;
+	info.memoryless = true;
+	return info;
+}
+
+constant_to_int :: (constant: Constant) -> int {
+	if constant.kind == .S64 return constant.as_s64.(int);
+	if constant.kind == .U64 return constant.as_s64.(int);
+	return constant.as_f64.(int);
+}
+
+resolve_enum_members :: (tc: *Type_Checker, _enum: *Node_Enum, type: *Resolved_Type) {
+	if !_enum return;
+	if _enum.members.count > 0 && table_contains(*tc._enums, _enum.members[0].name.view) return;
+
+	next_value := 0;
+	for _enum.members {
+		value := next_value;
+		if it.expr {
+			value = constant_to_int(eval_constant_expr(*tc._enums, it.expr));
+		}
+		table_set(*tc._enums, it.name.view, value);
+		push_decl(tc, it.name.view, type);
+		next_value = value + 1;
+	}
+}
+
+seed_builtin_enum_constants :: (tc: *Type_Checker) {
+	table_set(*tc._enums, "__ATOMIC_RELAXED", 0);
+	table_set(*tc._enums, "__ATOMIC_CONSUME", 1);
+	table_set(*tc._enums, "__ATOMIC_ACQUIRE", 2);
+	table_set(*tc._enums, "__ATOMIC_RELEASE", 3);
+	table_set(*tc._enums, "__ATOMIC_ACQ_REL", 4);
+	table_set(*tc._enums, "__ATOMIC_SEQ_CST", 5);
 }
 
 pop_scope :: (tc: *Type_Checker) {
@@ -92,8 +142,7 @@ find_decl_in_scope :: (tc: *Type_Checker, name: string) -> bool, Decl {
 	scope_index := tc.scopes.count - 1;
 	while scope_index >= 0 {
 		for tc.scopes[scope_index].decls {
-			id := identifier_from_declarator(it.declarator);
-			if id == name return true, it;
+			if it.name == name return true, it;
 		}
 		scope_index -= 1;
 	}
@@ -195,11 +244,6 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		if it == "_Atomic" info.atomic = true;
 	}
 
-	if decl_info._enum {
-		info.kind = .Composite;
-		info.composite = decl_info._enum;
-	}
-
 	if decl_info._struct {
 		info.kind = .Composite;
 		info.composite = decl_info._struct;
@@ -231,10 +275,17 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 		}
 	}
 
+	if decl_info._enum {
+		info.kind = .Integral;
+		info.size_in_bytes = 4;
+		info.alignment = 4;
+		resolve_enum_members(tc, decl_info._enum, info);
+	}
+
 	return info;
 }
 
-resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
+resolve_declarator :: (tc: *Type_Checker, base: *Resolved_Type, declarator: *Node_Declarator) -> *Resolved_Type {
 	if !declarator return base;
 
 	if declarator.declarator_type == {
@@ -244,14 +295,19 @@ resolve_declarator :: (base: *Resolved_Type, declarator: *Node_Declarator) -> *R
 			ptr.size_in_bytes = 8;
 			ptr.inner = base;
 			ptr.alignment = 8;
-			return resolve_declarator(ptr, declarator.inner);
+			return resolve_declarator(tc, ptr, declarator.inner);
 		case Node_Array_Declarator;
-			inner := resolve_declarator(base, declarator.inner);
+			array_declarator := declarator.(*Node_Array_Declarator);
+			inner := resolve_declarator(tc, base, declarator.inner);
+			if array_declarator.count_expr {
+				array_declarator.count_expr.resolved_type = resolve_expr(tc, array_declarator.count_expr);
+				array_declarator.count = constant_to_int(eval_constant_expr(*tc._enums, array_declarator.count_expr));
+			}
 			array := New(Resolved_Type);
 			array.kind = .Array;
-			array.size_in_bytes = inner.size_in_bytes * declarator.(*Node_Array_Declarator).count;
+			array.size_in_bytes = inner.size_in_bytes * array_declarator.count;
 			array.inner = inner;
-			array.array_count = declarator.(*Node_Array_Declarator).count;
+			array.array_count = array_declarator.count;
 			array.alignment = inner.alignment;
 			return array;
 		case Node_Identifier_Declarator;
@@ -267,8 +323,7 @@ resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarat
 	if !decl return poison_type();
 
 	base_info := resolve_base(tc, decl.base);
-	base_info = resolve_declarator(base_info, declarator);
-
+	base_info = resolve_declarator(tc, base_info, declarator);
 
 	return base_info;
 }
@@ -277,7 +332,7 @@ resolve_decl :: (tc: *Type_Checker, base: *Node_Decl_Info, declarator: *Node_Dec
 	if !base return poison_type();
 
 	base_info := resolve_base(tc, base);
-	base_info = resolve_declarator(base_info, declarator);
+	base_info = resolve_declarator(tc, base_info, declarator);
 
 
 	return base_info;
@@ -528,6 +583,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			return compound.resolved_type;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
+			if assign.op.line == 438 && assign.op.col == 22 {
+				a := 5;
+			}
 			left_info := resolve_expr(tc, assign.left);
 			right_info := resolve_expr(tc, assign.right);
 			
@@ -560,6 +618,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				case .LessEqual; #through;
 				case .GreaterEqual; #through;
 				case .EqualEqual; #through;
+				case .AmpersandAmpersand; #through;
 				case .BangEqual;
 					comparison_result := New(Resolved_Type);
 					comparison_result.kind = .Integral;
@@ -604,15 +663,21 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
 			found, decl := find_decl_in_scope(tc, id);
-			
+			if !found {
+				found_enum, _ := table_find(*tc._enums, id);
+				if found_enum {
+					expr.resolved_type = enum_constant_type();
+					return expr.resolved_type;
+				}
+			}
 			assert(found);
-			expr.resolved_type = decl.declarator.resolved_type;
+			expr.resolved_type = decl.resolved_type;
 			if !sizeof && expr.resolved_type.kind == .Array {
 				expr.resolved_type = New(Resolved_Type);
 				expr.resolved_type.kind = .Pointer;
 				expr.resolved_type.alignment = 8;
 				expr.resolved_type.size_in_bytes = 8;
-				expr.resolved_type.inner = decl.declarator.resolved_type.inner;
+				expr.resolved_type.inner = decl.resolved_type.inner;
 				expr.resolved_type.unsigned = true;
 			}
 			return expr.resolved_type;
@@ -659,10 +724,12 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			expr.resolved_type = info;
 			return info;
 		case Node_Cast;
-			source := resolve_expr(tc, expr.(*Node_Cast).expr);
-			target := resolve_base(tc, expr.(*Node_Cast).base);
-			expr.(*Node_Cast).resolved_type = target;
-			expr.(*Node_Cast).expr.resolved_type = source;
+			_cast := expr.(*Node_Cast);
+			source := resolve_expr(tc, _cast.expr);
+			declarator := ifx _cast.base.declarators.count > 0 then _cast.base.declarators[0] else null;
+			target := resolve_decl(tc, *_cast.base, declarator);
+			_cast.resolved_type = target;
+			_cast.expr.resolved_type = source;
 			return target;
 		case Node_String;
 			info := New(Resolved_Type);
@@ -739,12 +806,12 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 					lhs := resolve_decl(tc, decl, it);
 					it.resolved_type = lhs;
 					resolve_initializer(tc, lhs, it.init);
-					push_decl(tc, decl.base, it);
+					push_decl(tc, it);
 				}
 			case Node_Static_Assert;
 				static_assert := stmt.(*Node_Static_Assert);
 				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
-				constant := eval_constant_expr(static_assert.expr);
+				constant := eval_constant_expr(*tc._enums, static_assert.expr);
 				if constant.kind == {
 					case .F64;
 						if !constant.as_f64 {
@@ -843,7 +910,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 								type = type_from_struct_member(tc, type.composite.(*Node_Struct), field.name.view);
 							case Node_Index_Designator;
 								array := it.(*Node_Index_Designator);
-								constant_index := eval_constant_expr(array.index);
+								constant_index := eval_constant_expr(*tc._enums, array.index);
 								if constant_index.kind == .S64 {
 									index = constant_index.as_s64.(s64);
 								} else if constant_index.kind == .U64 {
@@ -882,11 +949,16 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 
 typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 	if !decl return;
+	if decl.declarators.count == 0 {
+		resolve_base(tc, decl.base);
+		return;
+	}
 	for declarator: decl.declarators {
-		push_decl(tc, decl.base, declarator);
+		decl_type := resolve_decl(tc, decl, declarator);
+		declarator.resolved_type = decl_type;
+		push_decl(tc, declarator);
 		if is_function_declaration(declarator) {
 			function := function_declarator(declarator);
-			declarator.resolved_type = resolve_decl(tc, decl, declarator);
 			prev_return_type := tc.current_function_return_type;
 			tc.current_function_return_type = declarator.resolved_type;
 			push_scope(tc);
@@ -899,7 +971,7 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 					// Unnamed parameters are type information only; named
 					// parameters become locals in the function body.
 					if identifier_from_declarator(it.declarators[0]) != "" {
-						push_decl(tc, it.base, it.declarators[0]);
+						push_decl(tc, it.declarators[0]);
 					}
 				}
 			}
@@ -907,13 +979,12 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 			pop_scope(tc);
 			tc.current_function_return_type = prev_return_type;
 		}
-		decl_type := resolve_decl(tc, decl, declarator);
-		declarator.resolved_type = decl_type;
 		resolve_initializer(tc, decl_type, declarator.init);
 	}
 }
 
 typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
+	seed_builtin_enum_constants(tc);
 	push_scope(tc);
 	for item: tu.items {
 		if item.type == {

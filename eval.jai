@@ -9,7 +9,7 @@ operator - :: (v: Constant) -> Constant {
 	result: Constant = ---;
 	if v.kind == {
 		case .S64; result = .{ kind = .S64, as_s64 = -v.as_s64 };
-		case .U64; result = .{ kind = .U64, as_u64 = 0 - v.as_u64 };
+		case .U64; result = .{ kind = .S64, as_s64 = -v.as_u64.(s64) };
 		case .F64; result = .{ kind = .F64, as_f64 = -v.as_f64 };
 	}
 	return result;
@@ -330,12 +330,19 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constan
 		case Node_Cast;
 			c := expr.(*Node_Cast);
 			return convert_constant(eval_constant_expr(_enums, c.expr), c.resolved_type);
+		case Node_Sizeof_Expr;
+			sizeof := expr.(*Node_Sizeof_Expr);
+			return .{ kind = .U64, as_u64 = sizeof.expr.resolved_type.size_in_bytes.(u64) };
+		case Node_Sizeof_Type;
+			sizeof := expr.(*Node_Sizeof_Type);
+			return .{ kind = .U64, as_u64 = sizeof.target_type.size_in_bytes.(u64) };
 		case Node_Char;
 			value := eval_char_literal(expr.(*Node_Char).token.view);
 			return .{ kind = .U64, as_u64 = value.(u64) };
 		case Node_Identifier;
-			found, value := table_find(_enums, expr.(*Node_Identifier).id.view);
-			assert(found, "Unknown identifier in constant expression");
+			id := expr.(*Node_Identifier).id.view;
+			found, value := table_find(_enums, id);
+			assert(found, tprint("Unknown identifier in constant expression: %", id));
 			return .{ kind = .U64, as_u64 = value.(u64) };
 	}
 	return .{};
