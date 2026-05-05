@@ -155,13 +155,39 @@ poison_type :: () -> *Resolved_Type {
 	return *__poison_type;
 }
 
+copy_type :: (type: *Resolved_Type) -> *Resolved_Type {
+	if !type || type == poison_type() return type;
+	result := New(Resolved_Type);
+	result.* = type.*;
+	return result;
+}
+
+find_typedef_declarator :: (decl: *Node_Decl, name: string) -> *Node_Declarator {
+	if !decl return null;
+	for declarator: decl.declarators {
+		if name == "" || identifier_from_declarator(declarator) == name {
+			return declarator;
+		}
+	}
+	return null;
+}
+
+resolve_typedef :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type {
+	declarator := find_typedef_declarator(decl_info.typedef, decl_info.typedef_name);
+	if !declarator return poison_type();
+
+	base := resolve_base(tc, decl_info.typedef.base);
+	type := resolve_declarator(tc, base, declarator);
+	type = copy_type(type);
+	if decl_info.typedef_name {
+		type.symbol_name = decl_info.typedef_name;
+	}
+	return type;
+}
+
 resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type {
 	if decl_info.typedef {
-		typedef := resolve_base(tc, decl_info.typedef.base);
-		if decl_info.typedef_name {
-			typedef.symbol_name = decl_info.typedef_name;
-		}
-		return typedef;
+		return resolve_typedef(tc, decl_info);
 	}
 	Type_Specifier :: enum {
 		Void;
@@ -478,6 +504,8 @@ coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 	if target == poison_type() || source == poison_type() return false;
 	if !target || !source return false;
 
+	if is_void_type(target) && source.kind == .Pointer return true;
+
 	if target.kind == .Integral && source.kind == .Integral return true;
 	if target.kind == .Floating && source.kind == .Floating return true;
 	if target.kind == .Integral && source.kind == .Floating return true;
@@ -505,8 +533,13 @@ function_declarator :: (declarator: *Node_Declarator) -> *Node_Function_Declarat
 }
 
 report_error :: (tc: *Type_Checker, line: int, col: int, fmt: string, args: ..Any) {
+	report_error_at(tc, tc.filename, line, col, fmt, ..args);
+}
+
+report_error_at :: (tc: *Type_Checker, source_path: string, line: int, col: int, fmt: string, args: ..Any) {
 	error := tprint(fmt, ..args);
-	array_add(*tc.errors, tprint("%: %:%:%: %", colour("ERROR", .RED), tc.filename, line, col, error));
+	filename := ifx source_path.count > 0 then source_path else tc.filename;
+	array_add(*tc.errors, tprint("%: %:%:%: %", colour("ERROR", .RED), filename, line, col, error));
 }
 
 report_error :: (tc: *Type_Checker, fmt: string, args: ..Any) {
@@ -542,12 +575,12 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 
 			resolved_type := common_type(on_true, on_false);
 			if resolved_type == poison_type() {
-				report_error(tc, expr.line, expr.col, "Unable to operate on types");
+				report_error_at(tc, expr.source_path, expr.line, expr.col, "Unable to operate on types");
 				return resolved_type;
 			}
 
 			if !coerceable(on_true, resolved_type) {
-				report_error(tc, expr.line, expr.col, "Couldnt convert % to %", on_true.*, resolved_type.*);
+				report_error_at(tc, expr.source_path, expr.line, expr.col, "Couldnt convert % to %", on_true.*, resolved_type.*);
 			}
 			if !coerceable(on_false, resolved_type) {
 				report_error(tc, "Couldnt convert ternary % to %", on_false.*, resolved_type.*);
@@ -608,7 +641,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 
 				resolved_type := common_type(left_info, right_info);
 				if resolved_type == poison_type() {
-					report_error(tc, expr.line, expr.col, "Unable to operate on types");
+					report_error_at(tc, expr.source_path, expr.line, expr.col, "Unable to operate on types");
 					return resolved_type;
 			}
 
@@ -656,7 +689,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			array_access.index.resolved_type = resolve_expr(tc, array_access.index);
 			array_access.resolved_type = array_access.left.resolved_type.inner;
 			if array_access.index.resolved_type.kind != .Integral {
-				report_error(tc, expr.line, expr.col, "Array subscript index must be integer");
+				report_error_at(tc, expr.source_path, expr.line, expr.col, "Array subscript index must be integer");
 				return poison_type();
 			}
 			return array_access.left.resolved_type.inner;
@@ -686,7 +719,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			if expr.(*Node_Unary).op.type == {
 				case .Ampersand;
 					if info.memoryless {
-						report_error(tc, expr.line, expr.col, "Unable to take address of type");
+						report_error_at(tc, expr.source_path, expr.line, expr.col, "Unable to take address of type");
 						return poison_type();
 					}
 					if info.kind == .Array {
@@ -708,7 +741,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 					}
 				case .Asterisk;
 					if info.memoryless {
-						report_error(tc, expr.line, expr.col, "Unable to deference non-addressable type");
+						report_error_at(tc, expr.source_path, expr.line, expr.col, "Unable to deference non-addressable type");
 						return poison_type();
 					}
 					info = info.inner;
@@ -718,7 +751,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				case .Tilde; #through;
 				case .Caret;
 					if info.composite && info.composite.type == Node_Struct {
-						report_error(tc, expr.line, expr.col, "Right hand side type cannot be a struct");
+						report_error_at(tc, expr.source_path, expr.line, expr.col, "Right hand side type cannot be a struct");
 					}
 			}
 			expr.resolved_type = info;
@@ -750,7 +783,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			name := call.id.(*Node_Identifier).id.view;
 			found, decl := table_find(*tc.ordinary, name);
 			if !found {
-				report_error(tc, expr.line, expr.col, "Could not find variable '%'", name);
+				report_error_at(tc, call.id.source_path, call.id.line, call.id.col, "Could not find variable '%'", name);
 				return poison_type();
 			}
 			function := function_declarator(decl.(*Node_Decl).declarators[0]);
@@ -768,7 +801,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 						param_type = resolve_base(tc, param.base);
 					}
 					if !coerceable(param_type, arg_type) {
-						report_error(tc, it.line, it.col, "Argument '%' does not match parameter", 1 + it_index);
+						report_error_at(tc, it.source_path, it.line, it.col, "Argument '%' does not match parameter", 1 + it_index);
 					}
 				}
 			}
@@ -797,7 +830,7 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			if ret.expr {
 				ret.expr.resolved_type = resolve_expr(tc, ret.expr);
 				if !coerceable(ret.expr.resolved_type, tc.current_function_return_type) {
-					report_error(tc, ret.line, ret.col, "Expression doesn't match return type");
+					report_error_at(tc, ret.source_path, ret.line, ret.col, "Expression doesn't match return type");
 				}
 			}
 			case Node_Decl_Statement;
@@ -815,15 +848,15 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 				if constant.kind == {
 					case .F64;
 						if !constant.as_f64 {
-							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
 						}
 					case .S64;
 						if !constant.as_s64 {
-							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
 						}
 					case .U64;
 						if !constant.as_u64 {
-							report_error(tc, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
 						}
 				}
 				// TODO: evaluate the integer constant expression and report
@@ -916,7 +949,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 								} else if constant_index.kind == .U64 {
 									index = constant_index.as_u64.(s64);
 								} else {
-									report_error(tc, it.line, it.col, "Designator index must be integer");
+									report_error_at(tc, it.source_path, it.line, it.col, "Designator index must be integer");
 								}
 								offset += index * type.inner.size_in_bytes;
 								type = type.inner;
@@ -941,7 +974,7 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 			expr_type := resolve_expr(tc, scalar);
 			if expr_type == poison_type() { return poison_type(); }
 			if !coerceable(target, expr_type) {
-				report_error(tc, init.line, init.col, "does not match type");
+				report_error_at(tc, init.source_path, init.line, init.col, "does not match type");
 			}
 	}
 	return target;

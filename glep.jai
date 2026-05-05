@@ -952,6 +952,14 @@ make_node :: (p: *Parser, $T: Type) -> *T {
 	return node;
 }
 
+make_node_at :: (p: *Parser, $T: Type, tok: Token) -> *T {
+	node := New(T);
+	node.source_path = tok.source_path;
+	node.line = tok.line;
+	node.col  = tok.col;
+	return node;
+}
+
 next :: (p: *Parser) -> Token {
 	at := p.at + 1;
 	assert(p.tokens[at].type != .Newline);
@@ -1399,6 +1407,7 @@ is_binary_op :: (token: Token) -> bool {
 parse_unary :: (p: *Parser) -> *Node_Expr {
 	result: *Node_Expr;
 	if current(p).view == "sizeof" {
+		sizeof_token := current(p);
 		skip(p);
 		if current(p).type == .LeftParenthesis {
 			if is_declaration_start(p, next(p)) {
@@ -1406,18 +1415,18 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 				base_info: Node_Decl_Info;
 				parse_declaration_specifiers(p, *base_info);
 				declarator := parse_declarator(p);
-				sizeof := make_node(p, Node_Sizeof_Type);
+				sizeof := make_node_at(p, Node_Sizeof_Type, sizeof_token);
 				array_add(*base_info.declarators, declarator);
 				sizeof.base = base_info;
 				expect(p, .RightParenthesis);
 				result = sizeof;
 			} else {
-				sizeof := make_node(p, Node_Sizeof_Expr);
+				sizeof := make_node_at(p, Node_Sizeof_Expr, sizeof_token);
 				sizeof.expr = parse_unary(p);
 				result = sizeof;
 			}
 		} else {
-			sizeof := make_node(p, Node_Sizeof_Expr);
+			sizeof := make_node_at(p, Node_Sizeof_Expr, sizeof_token);
 			sizeof.expr = parse_unary(p);
 			result = sizeof;
 		}
@@ -1425,24 +1434,25 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 		op := current(p);
 		skip(p);
 		rhs := parse_unary(p);
-		unary := make_node(p, Node_Unary);
+		unary := make_node_at(p, Node_Unary, op);
 		unary.op = op;
 		unary.expr = rhs;
 		result = unary;
 	} else if current(p).type == .LeftParenthesis && is_declaration_start(p, next(p)) {
+		cast_token := current(p);
 		expect(p, .LeftParenthesis);
 		base_info: Node_Decl_Info;
 		parse_declaration_specifiers(p, *base_info);
 		declarator := parse_declarator(p);
 		expect(p, .RightParenthesis);
 		if current(p).type == .LeftBrace {
-			compound := make_node(p, Node_Compound);
+			compound := make_node_at(p, Node_Compound, cast_token);
 			compound.base_info = base_info;
 			compound.declarator = declarator;
 			compound.init = parse_initializer(p);
 			result = compound;
 		} else {
-			_cast := make_node(p, Node_Cast);
+			_cast := make_node_at(p, Node_Cast, cast_token);
 			_cast.base = base_info;
 			array_add(*_cast.base.declarators, declarator);
 			_cast.expr = parse_unary(p);
@@ -1470,7 +1480,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		next_min := prec + is_left_associative(op).(int);
 		if op.type == .Question {
 			skip(p);
-			ternary := make_node(p, Node_Ternary);
+			ternary := make_node_at(p, Node_Ternary, op);
 			ternary.cond = lhs;
 			ternary.on_true = parse_expr(p);
 
@@ -1481,7 +1491,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 		} else if is_assign_op(op) {
 			skip(p);
 			rhs := parse_expr(p, next_min);
-			assign := make_node(p, Node_Assign);
+			assign := make_node_at(p, Node_Assign, op);
 			assign.op = op;
 			assign.left = lhs;
 			assign.right = rhs;
@@ -1491,7 +1501,7 @@ parse_expr :: (p: *Parser, min_prec := 0) -> *Node_Expr {
 			rhs := parse_expr(p, next_min);
 
 			
-			binary := make_node(p, Node_Binary);
+			binary := make_node_at(p, Node_Binary, op);
 			binary.op = op;
 			binary.left = lhs;
 			binary.right = rhs;
@@ -1523,16 +1533,17 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			result = access;
 			expect(p, .Identifier);
 		} else if current(p).type == .LeftBracket {
+			bracket := current(p);
 			skip(p);
-			access := make_node(p, Node_Array_Access);
+			access := make_node_at(p, Node_Array_Access, bracket);
 			access.index = parse_expr(p);
 			access.left = result;
 			result = access;
 			expect(p, .RightBracket);
 		} else if current(p).type == .LeftParenthesis {
-			name := current(p);
+			paren := current(p);
 			skip(p);
-			call := make_node(p, Node_Call);
+			call := make_node_at(p, Node_Call, paren);
 			call.id = result;
 			while current(p).type != .RightParenthesis {
 				array_add(*call.args, parse_expr(p, precedence_of(.Comma) + 1));
