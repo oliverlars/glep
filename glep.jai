@@ -702,7 +702,11 @@ tokenise :: (t: *Tokeniser) {
 				}
 			case "\n"; #through;
 			case "\r";
+				is_cr := t.source[t.at] == #char "\r";
 				t.at += 1;
+				if is_cr && t.at < t.source.count && t.source[t.at] == #char "\n" {
+					t.at += 1;
+				}
 				token.type = .Newline;
 				t.line += 1;
 				t.line_start = t.at;
@@ -2495,36 +2499,13 @@ append_token_as_c :: (builder: *String_Builder, token: Token) {
 
 write_tokenised_c_artifact :: (tokens: [..]Token, path: string) {
 	builder: String_Builder;
-	last_source_path := "";
-	last_line := -1;
-
 	for token: tokens {
 		if token.type == .Newline {
 			append(*builder, "\n");
 			continue;
 		}
-
-		if token.source_path.count > 0 && (token.source_path != last_source_path || token.line != last_line) {
-			append(*builder, sprint("\n#line % \"%\"\n", token.line, token.source_path));
-			last_source_path = token.source_path;
-			last_line = token.line;
-		}
-
 		append_token_as_c(*builder, token);
 		append(*builder, " ");
-	}
-
-	write_entire_file(path, builder_to_string(*builder));
-}
-
-write_token_dump_artifact :: (tokens: [..]Token, path: string) {
-	builder: String_Builder;
-	for token: tokens {
-		if token.type == .Newline {
-			append(*builder, sprint("%:%:%: %\n", token.source_path, token.line, token.col, token.type));
-		} else {
-			append(*builder, sprint("%:%:%: % `%`\n", token.source_path, token.line, token.col, token.type, token.view));
-		}
 	}
 	write_entire_file(path, builder_to_string(*builder));
 }
@@ -2592,7 +2573,6 @@ run_test :: (filename: string) -> passed: bool {
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 	write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
-	write_token_dump_artifact(tokens, sprint("%/tokens.txt", DEBUG_ARTIFACT_DIR));
 
 	tokens_no_newlines: [..]Token;
 	for tokens {
@@ -2708,7 +2688,6 @@ main :: () {
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
 	write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
-	write_token_dump_artifact(tokens, sprint("%/tokens.txt", DEBUG_ARTIFACT_DIR));
 
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;
