@@ -295,11 +295,24 @@ Node_Ternary :: struct {
 	expr_type = #this;
 }
 
+Builtin_Kind :: enum {
+	NONE;
+	ATOMIC_LOAD;
+	ATOMIC_FETCH_ADD;
+	ATOMIC_STORE;
+	ATOMIC_EXCHANGE;
+	VA_START;
+	VA_ARG;
+	VA_COPY;
+	VA_END;
+}
+
 Node_Call :: struct {
 	#as using node: Node_Expr;
 	expr_type = #this;
 	id: *Node_Expr;
 	args: [..]*Node_Expr;
+	builtin_kind: Builtin_Kind;
 }
 
 Node_Assign :: struct {
@@ -1549,6 +1562,16 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 			skip(p);
 			call := make_node_at(p, Node_Call, paren);
 			call.id = result;
+			if result.expr_type == Node_Identifier {
+				if result.(*Node_Identifier).id.view == {
+					case "__c11_atomic_load";
+						call.builtin_kind = .ATOMIC_LOAD;
+					case "__c11_atomic_fetch_add";
+						call.builtin_kind = .ATOMIC_FETCH_ADD;
+					case "__c11_atomic_store";
+						call.builtin_kind = .ATOMIC_STORE;
+				}
+			}
 			while current(p).type != .RightParenthesis {
 				array_add(*call.args, parse_expr(p, precedence_of(.Comma) + 1));
 				if current(p).type != .RightParenthesis {
