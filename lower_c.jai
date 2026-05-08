@@ -198,8 +198,27 @@ lower :: (emitter: *Emitter) {
 					emitln(emitter, "v% = (unsigned long long)alloca_v%;", it.dst.register, it.dst.register);
 				}
 			}
+			current_order := "5";
 			for function.instructions {
 				if it.op == {
+					case .MemoryOrderRelaxed; current_order = "0";
+					case .MemoryOrderConsume; current_order = "1";
+					case .MemoryOrderAcquire; current_order = "2";
+					case .MemoryOrderRelease; current_order = "3";
+					case .MemoryOrderAcqRel;  current_order = "4";
+					case .MemoryOrderSeqCst;  current_order = "5";
+					case .AtomicLoad;
+						pointee := ctype_from_ir_type(it.dst.type);
+						emitln(emitter, "v% = __c11_atomic_load((_Atomic %*)%, %);",
+							it.dst.register, pointee, materialise(it.a), current_order);
+					case .AtomicStore;
+						pointee := ctype_from_ir_type(it.b.type);
+						emitln(emitter, "__c11_atomic_store((_Atomic %*)%, %, %);",
+							pointee, materialise(it.a), materialise(it.b), current_order);
+					case .AtomicFetchAdd;
+						pointee := ctype_from_ir_type(it.dst.type);
+						emitln(emitter, "v% = __c11_atomic_fetch_add((_Atomic %*)%, %, %);",
+							it.dst.register, pointee, materialise(it.a), materialise(it.b), current_order);
 					case .Mod;
 						emitln(emitter, "v% = % % %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Add;

@@ -2606,6 +2606,7 @@ run_test :: (filename: string) -> passed: bool {
 
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
+	register_builtin_decls(*parser.ordinary);
 
 	tu := parse_translation_unit(*parser);
 
@@ -2724,6 +2725,7 @@ main :: () {
 
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
+	register_builtin_decls(*parser.ordinary);
 
 
 	tu := parse_translation_unit(*parser);

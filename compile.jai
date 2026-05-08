@@ -510,6 +510,33 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			call := expr.(*Node_Call);
 			name := call.id.(*Node_Identifier).id.view;
 
+			if call.builtin_kind != .NONE {
+				if call.builtin_kind == {
+					case .ATOMIC_LOAD;
+						ptr   := compile_expr(compiler, call.args[0]);
+						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[1]));
+						dst   := ir_register(next_register(compiler), operand_type(call.resolved_type));
+						ir_emit(function, ir_memory_order(order));
+						ir_emit(function, ir_atomic_load(dst, ptr));
+						result = dst;
+					case .ATOMIC_STORE;
+						ptr   := compile_expr(compiler, call.args[0]);
+						val   := compile_expr(compiler, call.args[1]);
+						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[2]));
+						ir_emit(function, ir_memory_order(order));
+						ir_emit(function, ir_atomic_store(ptr, val));
+					case .ATOMIC_FETCH_ADD;
+						ptr   := compile_expr(compiler, call.args[0]);
+						val   := compile_expr(compiler, call.args[1]);
+						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[2]));
+						dst   := ir_register(next_register(compiler), operand_type(call.resolved_type));
+						ir_emit(function, ir_memory_order(order));
+						ir_emit(function, ir_atomic_fetch_add(dst, ptr, val));
+						result = dst;
+				}
+				return result;
+			}
+
 			emit_struct_params :: (compiler: *Compiler, base: IR_Operand, _struct: *Node_Struct, layout: Struct_Layout, args: *[..]IR_Operand) -> int {
 				function := compiler.current_function;
 				param_count := 0;

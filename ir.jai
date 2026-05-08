@@ -32,6 +32,15 @@ IR_Operator :: enum {
 	Call;
 	Alloca;
 	Return;
+	MemoryOrderRelaxed;
+	MemoryOrderConsume;
+	MemoryOrderAcquire;
+	MemoryOrderRelease;
+	MemoryOrderAcqRel;
+	MemoryOrderSeqCst;
+	AtomicLoad;
+	AtomicStore;
+	AtomicFetchAdd;
 }
 
 IR_Instruction :: struct {
@@ -275,6 +284,32 @@ ir_call :: (dst: IR_Operand, func: string, arg_count: u64) -> IR_Instruction {
 
 ir_return :: (a: IR_Operand) -> IR_Instruction {
 	return .{ .Return, .{}, a, .{} };
+}
+
+ir_memory_order :: (order: int) -> IR_Instruction {
+	op: IR_Operator;
+	if order == {
+		case 0; op = .MemoryOrderRelaxed;
+		case 1; op = .MemoryOrderConsume;
+		case 2; op = .MemoryOrderAcquire;
+		case 3; op = .MemoryOrderRelease;
+		case 4; op = .MemoryOrderAcqRel;
+		case 5; op = .MemoryOrderSeqCst;
+		case;   op = .MemoryOrderSeqCst;
+	}
+	return .{ op, .{}, .{}, .{} };
+}
+
+ir_atomic_load :: (dst: IR_Operand, ptr: IR_Operand) -> IR_Instruction {
+	return .{ .AtomicLoad, dst, ptr, .{} };
+}
+
+ir_atomic_store :: (ptr: IR_Operand, val: IR_Operand) -> IR_Instruction {
+	return .{ .AtomicStore, .{}, ptr, val };
+}
+
+ir_atomic_fetch_add :: (dst: IR_Operand, ptr: IR_Operand, val: IR_Operand) -> IR_Instruction {
+	return .{ .AtomicFetchAdd, dst, ptr, val };
 }
 
 ir_constant :: (value: u64, type: IR_Operand_Type) -> IR_Operand {
