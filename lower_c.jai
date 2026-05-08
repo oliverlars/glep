@@ -181,6 +181,9 @@ lower :: (emitter: *Emitter) {
 					}
 				}
 			}
+			if function.variadic {
+				emit(emitter, ", ...");
+			}
 			emitln(emitter, ") {");
 			indent(emitter);
 			seen: [..] bool;
@@ -219,6 +222,15 @@ lower :: (emitter: *Emitter) {
 						pointee := ctype_from_ir_type(it.dst.type);
 						emitln(emitter, "v% = __c11_atomic_fetch_add((_Atomic %*)%, %, %);",
 							it.dst.register, pointee, materialise(it.a), materialise(it.b), current_order);
+					case .VAStart;
+						emitln(emitter, "__builtin_va_start(*(__builtin_va_list*)%, %);",
+							materialise(it.a), materialise(it.b));
+					case .VAEnd;
+						emitln(emitter, "__builtin_va_end(*(__builtin_va_list*)%);",
+							materialise(it.a));
+					case .VACopy;
+						emitln(emitter, "__builtin_va_copy(*(__builtin_va_list*)%, *(__builtin_va_list*)%);",
+							materialise(it.a), materialise(it.b));
 					case .Mod;
 						emitln(emitter, "v% = % % %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Add;

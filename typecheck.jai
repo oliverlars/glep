@@ -133,6 +133,113 @@ seed_builtin_enum_constants :: (tc: *Type_Checker) {
 	table_set(*tc._enums, "__ATOMIC_SEQ_CST", 5);
 }
 
+Builtin_Param :: struct {
+	name: string;
+	specifiers: []string;
+	pointer: bool;
+}
+
+make_builtin_decl :: (
+	name: string,
+	return_specifiers: []string,
+	return_pointer: bool,
+	params: []Builtin_Param
+) -> *Node_Decl {
+	decl := New(Node_Decl);
+	for return_specifiers array_add(*decl.specifiers, it);
+
+	ident := New(Node_Identifier_Declarator);
+	ident.name = name;
+
+	inner_decl: *Node_Declarator = ident;
+	if return_pointer {
+		ptr := New(Node_Pointer_Declarator);
+		ptr.inner = ident;
+		inner_decl = ptr;
+	}
+
+	fn := New(Node_Function_Declarator);
+	fn.inner = inner_decl;
+
+	for params {
+		p := New(Node_Decl);
+		for sp: it.specifiers array_add(*p.specifiers, sp);
+
+		pident := New(Node_Identifier_Declarator);
+		pident.name = it.name;
+
+		pdecl: *Node_Declarator = pident;
+		if it.pointer {
+			ptr := New(Node_Pointer_Declarator);
+			ptr.inner = pident;
+			pdecl = ptr;
+		}
+		array_add(*p.declarators, pdecl);
+		array_add(*fn.params, p);
+	}
+
+	array_add(*decl.declarators, fn);
+	return decl;
+}
+
+register_builtin_decls :: (ordinary: *Table(string, *Node)) {
+	INT  :: string.["int"];
+	VOID :: string.["void"];
+	CHAR :: string.["char"];
+
+	add :: (ordinary: *Table(string, *Node), name: string, ret: []string, ret_ptr: bool, params: []Builtin_Param) #expand {
+		decl := make_builtin_decl(name, ret, ret_ptr, params);
+		table_set(ordinary, name, decl);
+	}
+
+	add(ordinary, "__c11_atomic_load", INT, false, .[
+		.{ "ptr",   INT, true  },
+		.{ "order", INT, false },
+	]);
+
+	add(ordinary, "__c11_atomic_store", VOID, false, .[
+		.{ "ptr",   INT, true  },
+		.{ "val",   INT, false },
+		.{ "order", INT, false },
+	]);
+
+	add(ordinary, "__c11_atomic_fetch_add", INT, false, .[
+		.{ "ptr",   INT, true  },
+		.{ "val",   INT, false },
+		.{ "order", INT, false },
+	]);
+
+	add(ordinary, "__builtin_va_start", VOID, false, .[
+		.{ "ap",   CHAR, true  },
+		.{ "last", INT,  false },
+	]);
+
+	add(ordinary, "__builtin_va_end", VOID, false, .[
+		.{ "ap", CHAR, true },
+	]);
+
+	add(ordinary, "__builtin_va_copy", VOID, false, .[
+		.{ "dst", CHAR, true },
+		.{ "src", CHAR, true },
+	]);
+}
+
+register_builtin_typedefs :: (typedefs: *Table(string, *Node_Decl)) {
+	// __builtin_va_list = char *
+	decl := New(Node_Decl);
+	decl.storage_class = "typedef";
+	array_add(*decl.specifiers, "char");
+
+	ident := New(Node_Identifier_Declarator);
+	ident.name = "__builtin_va_list";
+
+	ptr := New(Node_Pointer_Declarator);
+	ptr.inner = ident;
+
+	array_add(*decl.declarators, ptr);
+	table_set(typedefs, "__builtin_va_list", decl);
+}
+
 pop_scope :: (tc: *Type_Checker) {
 	assert(tc.scopes.count > 0);
 	tc.scopes.count -= 1;

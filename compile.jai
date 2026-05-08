@@ -69,6 +69,19 @@ find_binding :: (compiler: *Compiler, name: string) -> Binding, bool {
 			if it.name == name return it, it_index == 0;
 		}
 	}
+	// Fallback: function names referenced as values (e.g. &foo) live in
+	// compiler.ordinary, not in scope bindings. Treat them as label-bound.
+	found, decl := table_find(*compiler.ordinary, name);
+	if found {
+		fn_decl := decl.(*Node_Decl);
+		if fn_decl.declarators.count > 0 {
+			binding: Binding;
+			binding.name = name;
+			binding.slot = ir_label_operand(name);
+			binding.resolved_type = fn_decl.declarators[0].resolved_type;
+			return binding, true;
+		}
+	}
 	assert(false, "undeclared variable");
 	return .{}, false;
 }
@@ -533,6 +546,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 						ir_emit(function, ir_memory_order(order));
 						ir_emit(function, ir_atomic_fetch_add(dst, ptr, val));
 						result = dst;
+					case .VA_START;
+						ap_addr := compile_lvalue(compiler, call.args[0]);
+						last    := compile_expr(compiler, call.args[1]);
+						ir_emit(function, ir_va_start(ap_addr, last));
+					case .VA_END;
+						ap_addr := compile_lvalue(compiler, call.args[0]);
+						ir_emit(function, ir_va_end(ap_addr));
+					case .VA_COPY;
+						dst_addr := compile_lvalue(compiler, call.args[0]);
+						src_addr := compile_lvalue(compiler, call.args[1]);
+						ir_emit(function, ir_va_copy(dst_addr, src_addr));
 				}
 				return result;
 			}
@@ -587,8 +611,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					if !variadic then non_variadic_expanded_param_count += 1;
 				}
 			}
-
-			function.variadic = variadic;
 
 			if call.resolved_type.kind == .Composite {
 				ret_slot := ir_register(next_register(compiler), IR_PTR);
@@ -900,6 +922,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				print("compiling function: %\n", name);
 
 				function := function_declarator(declarator);
+				ir_function.variadic = function.variadic;
 				compiler.register = 0;
 				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;

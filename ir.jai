@@ -41,6 +41,9 @@ IR_Operator :: enum {
 	AtomicLoad;
 	AtomicStore;
 	AtomicFetchAdd;
+	VAStart;
+	VAEnd;
+	VACopy;
 }
 
 IR_Instruction :: struct {
@@ -310,6 +313,18 @@ ir_atomic_store :: (ptr: IR_Operand, val: IR_Operand) -> IR_Instruction {
 
 ir_atomic_fetch_add :: (dst: IR_Operand, ptr: IR_Operand, val: IR_Operand) -> IR_Instruction {
 	return .{ .AtomicFetchAdd, dst, ptr, val };
+}
+
+ir_va_start :: (ap_addr: IR_Operand, last: IR_Operand) -> IR_Instruction {
+	return .{ .VAStart, .{}, ap_addr, last };
+}
+
+ir_va_end :: (ap_addr: IR_Operand) -> IR_Instruction {
+	return .{ .VAEnd, .{}, ap_addr, .{} };
+}
+
+ir_va_copy :: (dst_addr: IR_Operand, src_addr: IR_Operand) -> IR_Instruction {
+	return .{ .VACopy, .{}, dst_addr, src_addr };
 }
 
 ir_constant :: (value: u64, type: IR_Operand_Type) -> IR_Operand {

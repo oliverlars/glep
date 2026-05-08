@@ -1570,6 +1570,12 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 						call.builtin_kind = .ATOMIC_FETCH_ADD;
 					case "__c11_atomic_store";
 						call.builtin_kind = .ATOMIC_STORE;
+					case "__builtin_va_start";
+						call.builtin_kind = .VA_START;
+					case "__builtin_va_end";
+						call.builtin_kind = .VA_END;
+					case "__builtin_va_copy";
+						call.builtin_kind = .VA_COPY;
 				}
 			}
 			while current(p).type != .RightParenthesis {
@@ -2607,6 +2613,7 @@ run_test :: (filename: string) -> passed: bool {
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
 	register_builtin_decls(*parser.ordinary);
+	register_builtin_typedefs(*parser.typedefs);
 
 	tu := parse_translation_unit(*parser);
 
@@ -2726,6 +2733,7 @@ main :: () {
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
 	register_builtin_decls(*parser.ordinary);
+	register_builtin_typedefs(*parser.typedefs);
 
 
 	tu := parse_translation_unit(*parser);
