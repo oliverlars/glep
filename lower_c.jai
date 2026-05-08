@@ -117,6 +117,50 @@ lower :: (emitter: *Emitter) {
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
 	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");
 	emit(emitter, "int noop = 0;\n");
+	for emitter.ir.extern_vars {
+		emit(emitter, "extern char %[];\n", it);
+	}
+
+	// Dedupe multi-return typedefs by structural shape. Same shape across
+	// different functions shares one typedef.
+	return_type_names: Table(string, string);  // function/external name -> typedef name
+	shape_to_name:     Table(string, string);  // serialized shape -> typedef name
+	shape_counter := 0;
+
+	shape_key :: (results: []IR_Operand_Type) -> string {
+		b: String_Builder;
+		for results {
+			append(*b, ctype_from_ir_type(it));
+			append(*b, ";");
+		}
+		return builder_to_string(*b);
+	}
+
+	register_return_type :: (emitter: *Emitter, fn_name: string, results: []IR_Operand_Type, names: *Table(string, string), shapes: *Table(string, string), counter: *int) {
+		if results.count <= 1 return;
+		key := shape_key(results);
+		found, td := table_find(shapes, key);
+		if !found {
+			td = tprint("_ret_%", counter.*);
+			counter.* += 1;
+			table_set(shapes, key, td);
+			emitln(emitter, "typedef struct % {", td);
+			for r, i: results {
+				emitln(emitter, "    % r%;", ctype_from_ir_type(r), i);
+			}
+			emitln(emitter, "} %;", td);
+		}
+		table_set(names, fn_name, td);
+	}
+
+	for external: emitter.ir.externals {
+		register_return_type(emitter, external.name, external.results, *return_type_names, *shape_to_name, *shape_counter);
+	}
+	for function: emitter.ir.functions {
+		fn_key := ifx function.name == "main" then "entry" else function.name;
+		register_return_type(emitter, fn_key, function.results, *return_type_names, *shape_to_name, *shape_counter);
+	}
+
 	for external: emitter.ir.externals {
 		name := external.name;
 		if external.results.count == 0 {
@@ -125,13 +169,8 @@ lower :: (emitter: *Emitter) {
 			ctype := ctype_from_ir_type(external.results[0]);
 			emit(emitter, "% %(", ctype, name);
 		} else {
-			emitln(emitter, "typedef struct %_return {", name);
-			for result_member: external.results { 
-				ctype := ctype_from_ir_type(result_member);
-				emit(emitter, "% r%;", ctype, it_index);
-			}
-			emit(emitter, "} %_return;", name);
-			emit(emitter, "%_return %(", name, name);
+			_, td := table_find(*return_type_names, name);
+			emit(emitter, "% %(", td, name);
 		}
 		for external.params {
 			if it_index < external.params.count - 1 {
@@ -158,13 +197,8 @@ lower :: (emitter: *Emitter) {
 				emit(emitter, "% ", ctype);
 				emit(emitter, "%(", name);
 		} else {
-			emitln(emitter, "typedef struct %_return {", name);
-			for result_member: function.results { 
-				ctype := ctype_from_ir_type(result_member);
-				emit(emitter, "% r%;", ctype, it_index);
-			}
-			emit(emitter, "} %_return;", name);
-			emit(emitter, "%_return %(", name, name);
+			_, td := table_find(*return_type_names, name);
+			emit(emitter, "% %(", td, name);
 		}
 		if function.instructions.count > 0 {
 			param_index := 0;
@@ -232,7 +266,7 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, "__builtin_va_copy(*(__builtin_va_list*)%, *(__builtin_va_list*)%);",
 							materialise(it.a), materialise(it.b));
 					case .Mod;
-						emitln(emitter, "v% = % % %;", it.dst.register, materialise(it.a), materialise(it.b));
+						emitln(emitter, "v% = % \% %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Add;
 						emitln(emitter, "v% = % + %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Sub;
@@ -245,6 +279,8 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, "v% = -%;", it.dst.register, materialise(it.a));
 					case .Not;
 						emitln(emitter, "v% = !%;", it.dst.register, materialise(it.a));
+					case .BitNot;
+						emitln(emitter, "v% = ~%;", it.dst.register, materialise(it.a));
 					case .Eq;
 						emitln(emitter, "v% = % == %;", it.dst.register, materialise(it.a), materialise(it.b));
 					case .Ne;
@@ -276,7 +312,8 @@ lower :: (emitter: *Emitter) {
 					case .Return;
 						if it.a.kind != .None {
 							if function.results.count > 1 {
-								emitln(emitter, "return *((%_return*)%);", name, materialise(it.a));
+								_, td := table_find(*return_type_names, name);
+								emitln(emitter, "return *((%*)%);", td, materialise(it.a));
 							} else {
 								emitln(emitter, "return %;", materialise(it.a));
 							}
@@ -316,7 +353,8 @@ lower :: (emitter: *Emitter) {
 						}
 						if it.dst.kind == .Register {
 							if callee_is_struct_return {
-								emit(emitter, "*((%_return*)v%) = %(", callee_name, it.dst.register, callee_name);
+								_, td := table_find(*return_type_names, callee_name);
+								emit(emitter, "*((%*)v%) = %(", td, it.dst.register, callee_name);
 							} else {
 								emit(emitter, "v% = %(", it.dst.register, callee_name);
 							}

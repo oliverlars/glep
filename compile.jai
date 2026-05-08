@@ -263,6 +263,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					dst := ir_register(next_register(compiler), value.type);
 					ir_emit(function, ir_eq(dst, value, ir_constant(0, value.type)));
 					result = dst;
+				case .Tilde;
+					value := compile_expr(compiler, unary.expr);
+					dst := ir_register(next_register(compiler), value.type);
+					ir_emit(function, ir_bit_not(dst, value));
+					result = dst;
 				case .Ampersand;
 					address := compile_lvalue(compiler, unary.expr);
 					dst := ir_register(next_register(compiler), address.type);
@@ -993,8 +998,16 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				array_add(*compiler.ir.functions, ir_function);
 			} else if is_variable_declaration(decl, declarator) {
 				bind_decl(compiler, name, ir_label_operand(name), declarator.resolved_type);
-				bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
-				ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
+				if decl.storage_class == "extern" {
+					already := false;
+					for compiler.ir.extern_vars {
+						if it == name { already = true; break; }
+					}
+					if !already array_add(*compiler.ir.extern_vars, name);
+				} else {
+					bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
+					ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
+				}
 			} else if is_function_declaration(declarator) {
 				external: IR_External;
 					external.name = name;

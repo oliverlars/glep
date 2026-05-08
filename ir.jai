@@ -14,6 +14,7 @@ IR_Operator :: enum {
 	Shr;
 	Neg;
 	Not;
+	BitNot;
 	Lt;
 	Le;
 	Eq;
@@ -121,6 +122,7 @@ IR :: struct {
 	functions: [..]IR_Function;
 	externals: [..]IR_External;
 	globals: [..]IR_Global;
+	extern_vars: [..]string;
 }
 
 ir_emit :: (function: *IR_Function, comment: string) {
@@ -238,6 +240,10 @@ ir_neg :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
 
 ir_not :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
 	return .{ .Not, dst, a, .{} };
+}
+
+ir_bit_not :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
+	return .{ .BitNot, dst, a, .{} };
 }
 
 ir_copy :: (dst: IR_Operand, a: IR_Operand) -> IR_Instruction {
