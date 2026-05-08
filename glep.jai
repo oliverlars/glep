@@ -2553,7 +2553,7 @@ reset_debug_artifacts :: () {
 }
 
 compile_c_backend_output :: (source: string, output: string) -> bool {
-	command := sprint("clang '%' -O2 -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, C_BACKEND_STACK_SIZE);
+	command := sprint("clang '%' -g -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, C_BACKEND_STACK_SIZE);
 	result, stdout, stderr := run_command("sh", "-c", command);
 	if result.exit_code != 0 {
 		if stdout.count > 0 print("%", stdout);

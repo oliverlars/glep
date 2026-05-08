@@ -733,6 +733,11 @@ compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Bin
 	slot := ir_register(next_register(compiler), IR_PTR);
 	ir_emit(function, ir_alloca(slot, xx declarator.resolved_type.size_in_bytes));
 	binding := bind_decl(compiler, name, slot, declarator.resolved_type);
+	size := (declarator.resolved_type.size_in_bytes + 7) & ~7;
+	ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memset", 3));
+	ir_emit(function, ir_param(slot));
+	ir_emit(function, ir_param(ir_constant(0, IR_S64)));
+	ir_emit(function, ir_param(ir_constant(xx size, IR_S64)));
 	compile_initializer(compiler, declarator.init, operand_type(declarator.resolved_type), slot);
 	return binding;
 }
