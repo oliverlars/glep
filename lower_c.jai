@@ -117,6 +117,31 @@ lower :: (emitter: *Emitter) {
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
 	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");
 	emit(emitter, "int noop = 0;\n");
+	for emitter.ir.extern_vars {
+		emit(emitter, "extern char %[];\n", it);
+	}
+
+	// Pre-pass: emit each <name>_return typedef once, even if both an
+	// external (forward decl) and a function definition share the name.
+	emitted_returns: Table(string, bool);
+	emit_return_typedef :: (emitter: *Emitter, seen: *Table(string, bool), name: string, results: []IR_Operand_Type) {
+		if results.count <= 1 return;
+		if table_contains(seen, name) return;
+		table_set(seen, name, true);
+		emitln(emitter, "typedef struct %_return {", name);
+		for r, i: results {
+			emit(emitter, "% r%;", ctype_from_ir_type(r), i);
+		}
+		emit(emitter, "} %_return;\n", name);
+	}
+	for external: emitter.ir.externals {
+		emit_return_typedef(emitter, *emitted_returns, external.name, external.results);
+	}
+	for function: emitter.ir.functions {
+		fn_key := ifx function.name == "main" then "entry" else function.name;
+		emit_return_typedef(emitter, *emitted_returns, fn_key, function.results);
+	}
+
 	for external: emitter.ir.externals {
 		name := external.name;
 		if external.results.count == 0 {
@@ -125,12 +150,6 @@ lower :: (emitter: *Emitter) {
 			ctype := ctype_from_ir_type(external.results[0]);
 			emit(emitter, "% %(", ctype, name);
 		} else {
-			emitln(emitter, "typedef struct %_return {", name);
-			for result_member: external.results { 
-				ctype := ctype_from_ir_type(result_member);
-				emit(emitter, "% r%;", ctype, it_index);
-			}
-			emit(emitter, "} %_return;", name);
 			emit(emitter, "%_return %(", name, name);
 		}
 		for external.params {
@@ -158,12 +177,6 @@ lower :: (emitter: *Emitter) {
 				emit(emitter, "% ", ctype);
 				emit(emitter, "%(", name);
 		} else {
-			emitln(emitter, "typedef struct %_return {", name);
-			for result_member: function.results { 
-				ctype := ctype_from_ir_type(result_member);
-				emit(emitter, "% r%;", ctype, it_index);
-			}
-			emit(emitter, "} %_return;", name);
 			emit(emitter, "%_return %(", name, name);
 		}
 		if function.instructions.count > 0 {
@@ -293,7 +306,10 @@ lower :: (emitter: *Emitter) {
 						if it.a.kind == .Register {
 							emitln(emitter, "v% = v%;", it.dst.register, it.a.register);
 						} else {
-							emitln(emitter, "v% = (unsigned long long)&%;", it.dst.register, materialise(it.a));
+							// Labels bind char[] globals, extern char[] vars, or
+							// function names — all decay to pointers in C, so
+							// `name` already gives the address. No `&` needed.
+							emitln(emitter, "v% = (unsigned long long)%;", it.dst.register, materialise(it.a));
 						}
 					case .Alloca;
 					case .Call;

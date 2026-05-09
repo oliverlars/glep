@@ -25,6 +25,7 @@ Binding :: struct {
 	name: string;
 	slot: IR_Operand;
 	resolved_type: *Resolved_Type;
+	is_function: bool;
 }
 
 Scope_Frame :: struct {
@@ -79,6 +80,7 @@ find_binding :: (compiler: *Compiler, name: string) -> Binding, bool {
 			binding.name = name;
 			binding.slot = ir_label_operand(name);
 			binding.resolved_type = fn_decl.declarators[0].resolved_type;
+			binding.is_function = is_function_declaration(fn_decl.declarators[0]);
 			return binding, true;
 		}
 	}
@@ -455,6 +457,13 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			if binding.slot.kind == .Label {
 				address = ir_register(next_register(compiler), IR_PTR);
 				ir_emit(function, ir_address(address, binding.slot));
+			}
+			// Function names: the address IS the value (function pointer).
+			// Don't dereference — that would read the first 8 bytes of the
+			// function body as a "pointer".
+			if binding.is_function {
+				result = address;
+				return result;
 			}
 			dst: IR_Operand;
 			if binding.resolved_type.kind == .Composite || binding.resolved_type.kind == .Array {
