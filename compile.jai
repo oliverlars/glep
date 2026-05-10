@@ -540,23 +540,36 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			if call.builtin_kind != .NONE {
 				if call.builtin_kind == {
 					case .ATOMIC_LOAD;
-						ptr   := compile_expr(compiler, call.args[0]);
-						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[1]));
-						dst   := ir_register(next_register(compiler), operand_type(call.resolved_type));
+						value_type := operand_type(call.args[0].resolved_type.inner);
+						ptr        := compile_expr(compiler, call.args[0]);
+						order      := constant_to_int(eval_constant_expr(*compiler.enums, call.args[1]));
+						dst        := ir_register(next_register(compiler), value_type);
 						ir_emit(function, ir_memory_order(order));
 						ir_emit(function, ir_atomic_load(dst, ptr));
 						result = dst;
 					case .ATOMIC_STORE;
-						ptr   := compile_expr(compiler, call.args[0]);
-						val   := compile_expr(compiler, call.args[1]);
+						value_type := operand_type(call.args[0].resolved_type.inner);
+						ptr        := compile_expr(compiler, call.args[0]);
+						val        := compile_expr(compiler, call.args[1]);
+						if !types_equal(value_type, val.type) {
+							converted := ir_register(next_register(compiler), value_type);
+							ir_emit(function, ir_cast(converted, val));
+							val = converted;
+						}
 						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[2]));
 						ir_emit(function, ir_memory_order(order));
 						ir_emit(function, ir_atomic_store(ptr, val));
 					case .ATOMIC_FETCH_ADD;
-						ptr   := compile_expr(compiler, call.args[0]);
-						val   := compile_expr(compiler, call.args[1]);
+						value_type := operand_type(call.args[0].resolved_type.inner);
+						ptr        := compile_expr(compiler, call.args[0]);
+						val        := compile_expr(compiler, call.args[1]);
+						if !types_equal(value_type, val.type) {
+							converted := ir_register(next_register(compiler), value_type);
+							ir_emit(function, ir_cast(converted, val));
+							val = converted;
+						}
 						order := constant_to_int(eval_constant_expr(*compiler.enums, call.args[2]));
-						dst   := ir_register(next_register(compiler), operand_type(call.resolved_type));
+						dst   := ir_register(next_register(compiler), value_type);
 						ir_emit(function, ir_memory_order(order));
 						ir_emit(function, ir_atomic_fetch_add(dst, ptr, val));
 						result = dst;

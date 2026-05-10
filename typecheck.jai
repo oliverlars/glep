@@ -296,6 +296,16 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	if decl_info.typedef {
 		return resolve_typedef(tc, decl_info);
 	}
+	// _Atomic(T) wraps the inner type in decl_info.atomic. Resolve the inner
+	// type and stamp atomic = true so the real size/signedness flows through.
+	if decl_info.atomic {
+		inner := resolve_base(tc, decl_info.atomic.*);
+		if inner && inner != poison_type() {
+			result := copy_type(inner);
+			result.atomic = true;
+			return result;
+		}
+	}
 	Type_Specifier :: enum {
 		Void;
 		Char;
