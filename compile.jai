@@ -710,8 +710,11 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					rhs = op;
 				}
 				ir_emit(function, ir_store(lhs, rhs));
+				result = rhs;
 			}
-			result = lhs;
+			if assign.right.resolved_type.kind == .Composite {
+				result = lhs;
+			}
 		case Node_Number;
 			number := expr.(*Node_Number);
 			type := operand_type(number.resolved_type);
@@ -947,11 +950,9 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 	for decl: tu.declarations {
 		for declarator: decl.declarators {
 			name := identifier_from_declarator(declarator);
-			print("decl: % is_func_def=% is_var_decl=% is_func_decl=%\n", name, is_function_definition(decl, declarator), is_variable_declaration(decl, declarator), is_function_declaration(declarator));
 			if is_function_definition(decl, declarator) {
 				ir_function: IR_Function;
 				ir_function.name = name;
-				print("compiling function: %\n", name);
 
 				function := function_declarator(declarator);
 				ir_function.variadic = function.variadic;
