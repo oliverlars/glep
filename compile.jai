@@ -858,46 +858,69 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			ir_emit(function, ir_label(end));
 		case Node_Switch;
 			switch := statement.(*Node_Switch);
-			end := next_label(compiler);
-			compiler.switch_variable = compile_expr(compiler, switch.expr);
-			Case_Entry :: struct { node: *Node_Case; label: string; }
-			cases: [..]Case_Entry;
-			default_label := end;
-			if switch.body && switch.body.statement_type == Node_Block {
-				block := switch.body.(*Node_Block);
-				for block.statements {
-					if it.statement_type == Node_Case {
-						_case := it.(*Node_Case);
-						label := next_label(compiler);
-						array_add(*cases, .{_case, label});
-						if _case.is_default then default_label = label;
+			end_label := next_label(compiler);
+			switch_value := compile_expr(compiler, switch.expr);
+			compiler.switch_variable = switch_value;
+
+			Switch_Body_Entry :: struct {
+				is_case:   bool;
+				case_node: *Node_Case;
+				statement: *Node_Statement;
+				label:     string;
+			}
+			body_entries: [..]Switch_Body_Entry;
+
+			// Flatten the switch body: a Node_Case's body might be another
+			// Node_Case (stacked cases) or a real statement. We walk through
+			// blocks and case chains to produce a flat sequence so dispatch
+			// and emission can both index it linearly.
+			flatten_switch_body :: (statement: *Node_Statement, entries: *[..]Switch_Body_Entry) {
+				if !statement return;
+				if statement.statement_type == Node_Block {
+					for statement.(*Node_Block).statements {
+						flatten_switch_body(it, entries);
 					}
+				} else if statement.statement_type == Node_Case {
+					case_node := statement.(*Node_Case);
+					array_add(entries, Switch_Body_Entry.{ is_case = true, case_node = case_node });
+					flatten_switch_body(case_node.statement, entries);
+				} else {
+					array_add(entries, Switch_Body_Entry.{ is_case = false, statement = statement });
 				}
 			}
-			for cases {
-				if it.node.is_default continue;
-				cond := ir_register(next_register(compiler), compiler.switch_variable.type);
-				expr := compile_expr(compiler, it.node.expr);
-				ir_emit(function, ir_eq(cond, compiler.switch_variable, expr));
-				ir_emit(function, ir_if(cond, it.label));
+			flatten_switch_body(switch.body, *body_entries);
+
+			// Allocate a label per case. Default's label is what we jump to
+			// when no case matches; without a default, we fall through to end.
+			default_label := end_label;
+			for * body_entries {
+				if !it.is_case continue;
+				it.label = next_label(compiler);
+				if it.case_node.is_default then default_label = it.label;
+			}
+
+			// Dispatch: emit a comparison and conditional jump for each
+			// non-default case, in source order.
+			for body_entries {
+				if !it.is_case || it.case_node.is_default continue;
+				comparison := ir_register(next_register(compiler), switch_value.type);
+				case_expr  := compile_expr(compiler, it.case_node.expr);
+				ir_emit(function, ir_eq(comparison, switch_value, case_expr));
+				ir_emit(function, ir_if(comparison, it.label));
 			}
 			ir_emit(function, ir_goto(default_label));
-			push_label_frame(compiler, end, "");
-			if switch.body && switch.body.statement_type == Node_Block {
-				block := switch.body.(*Node_Block);
-				case_index := 0;
-				for block.statements {
-					if it.statement_type == Node_Case {
-						ir_emit(function, ir_label(cases[case_index].label));
-						compile_statement(compiler, cases[case_index].node.statement);
-						case_index += 1;
-					} else {
-						compile_statement(compiler, it);
-					}
+
+			// Bodies in source order, with natural fall-through between cases.
+			push_label_frame(compiler, end_label, "");
+			for body_entries {
+				if it.is_case {
+					ir_emit(function, ir_label(it.label));
+				} else {
+					compile_statement(compiler, it.statement);
 				}
 			}
 			pop_label_frame(compiler);
-			ir_emit(function, ir_label(end));
+			ir_emit(function, ir_label(end_label));
 		case Node_Case;
 		case Node_Continue;
 			ir_emit(function, ir_goto(current_continue_label(compiler)));
