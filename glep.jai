@@ -456,6 +456,7 @@ Node_Case :: struct {
 	statement: *Node_Statement;
 	expr: *Node_Expr;
 	is_default: bool;
+	statement_type = #this;
 }
 
 Node_Return :: struct {
@@ -2022,6 +2023,7 @@ parse_statement :: (p: *Parser) -> *Node_Statement {
 					_case := make_node(p, Node_Case);
 					_case.is_default = true;
 					expect(p, .Colon);
+					statement = _case;
 				} else if current(p).type == .Identifier {
 					label := make_node(p, Node_Label);
 					label.token = current(p);
@@ -2458,7 +2460,7 @@ print_statement :: (builder: *String_Builder, stmt: *Node_Statement, depth := 0)
 			append(builder, "(");
 			print_expr(builder, stmt.(*Node_Switch).expr);
 			append(builder, ")");
-			print_statement(builder, stmt.(*Node_Do).body, depth);
+			print_statement(builder, stmt.(*Node_Switch).body, depth);
 			append(builder, "\n");
 		case Node_Case;
 			_case := stmt.(*Node_Case);

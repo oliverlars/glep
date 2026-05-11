@@ -1002,6 +1002,14 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
 			typecheck_statement(tc, _for.body);
+		case Node_Switch;
+			switch := stmt.(*Node_Switch);
+			resolve_expr(tc, switch.expr);
+			typecheck_statement(tc, switch.body);
+		case Node_Case;
+			_case := stmt.(*Node_Case);
+			resolve_expr(tc, _case.expr);
+			typecheck_statement(tc, _case.statement);
 		case Node_While;
 			_while := stmt.(*Node_While);
 			resolve_expr(tc, _while.cond);

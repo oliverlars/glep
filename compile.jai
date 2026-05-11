@@ -15,8 +15,12 @@ Compiler :: struct {
 
 	current_function: *IR_Function;
 
-	label_continue: string;
-	label_break: string;
+
+	switch_variable: IR_Operand;
+
+	// Stack of break/continue targets for nested loops & switches.
+	// continue_label is "" for frames that don't carry one (switch).
+	label_stack: [..]Label_Frame;
 
 	label_counter: int;
 }
@@ -26,6 +30,35 @@ Binding :: struct {
 	slot: IR_Operand;
 	resolved_type: *Resolved_Type;
 	is_function: bool;
+}
+
+Label_Frame :: struct {
+	break_label:    string;
+	continue_label: string;
+}
+
+push_label_frame :: (compiler: *Compiler, break_label: string, continue_label: string) {
+	array_add(*compiler.label_stack, Label_Frame.{ break_label, continue_label });
+}
+
+pop_label_frame :: (compiler: *Compiler) {
+	assert(compiler.label_stack.count > 0);
+	compiler.label_stack.count -= 1;
+}
+
+current_break_label :: (compiler: *Compiler) -> string {
+	assert(compiler.label_stack.count > 0, "break outside of loop or switch");
+	return compiler.label_stack[compiler.label_stack.count - 1].break_label;
+}
+
+current_continue_label :: (compiler: *Compiler) -> string {
+	// Walks down the stack so `continue` inside a switch jumps to the
+	// enclosing loop's continue target, skipping the switch.
+	for < compiler.label_stack {
+		if it.continue_label return it.continue_label;
+	}
+	assert(false, "continue outside of loop");
+	return "";
 }
 
 Scope_Frame :: struct {
@@ -792,9 +825,6 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			end := next_label(compiler);
 			cont := next_label(compiler);
 
-			compiler.label_break = end;
-			compiler.label_continue = cont;
-
 			ir_emit(function, "for init");
 			compile_statement(compiler, _for.init);
 			ir_emit(function, ir_label(start));
@@ -804,7 +834,9 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 				ir_emit(function, ir_ifz(cond, end));
 			}
 			ir_emit(function, "for body");
+			push_label_frame(compiler, end, cont);
 			compile_statement(compiler, _for.body);
+			pop_label_frame(compiler);
 			ir_emit(function, ir_label(cont));
 			compile_expr(compiler, _for.expr);
 			ir_emit(function, ir_goto(start));
@@ -816,19 +848,61 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			end := next_label(compiler);
 			cont := next_label(compiler);
 
-			compiler.label_break = end;
-			compiler.label_continue = end;
-
 			ir_emit(function, ir_label(start));
 			cond := compile_expr(compiler, _while.cond);
 			ir_emit(function, ir_ifz(cond, end));
+			push_label_frame(compiler, end, end);
 			compile_statement(compiler, _while.body);
+			pop_label_frame(compiler);
 			ir_emit(function, ir_goto(start));
 			ir_emit(function, ir_label(end));
+		case Node_Switch;
+			switch := statement.(*Node_Switch);
+			end := next_label(compiler);
+			compiler.switch_variable = compile_expr(compiler, switch.expr);
+			Case_Entry :: struct { node: *Node_Case; label: string; }
+			cases: [..]Case_Entry;
+			default_label := end;
+			if switch.body && switch.body.statement_type == Node_Block {
+				block := switch.body.(*Node_Block);
+				for block.statements {
+					if it.statement_type == Node_Case {
+						_case := it.(*Node_Case);
+						label := next_label(compiler);
+						array_add(*cases, .{_case, label});
+						if _case.is_default then default_label = label;
+					}
+				}
+			}
+			for cases {
+				if it.node.is_default continue;
+				cond := ir_register(next_register(compiler), compiler.switch_variable.type);
+				expr := compile_expr(compiler, it.node.expr);
+				ir_emit(function, ir_eq(cond, compiler.switch_variable, expr));
+				ir_emit(function, ir_if(cond, it.label));
+			}
+			ir_emit(function, ir_goto(default_label));
+			push_label_frame(compiler, end, "");
+			if switch.body && switch.body.statement_type == Node_Block {
+				block := switch.body.(*Node_Block);
+				case_index := 0;
+				for block.statements {
+					if it.statement_type == Node_Case {
+						ir_emit(function, ir_label(cases[case_index].label));
+						compile_statement(compiler, cases[case_index].node.statement);
+						case_index += 1;
+					} else {
+						compile_statement(compiler, it);
+					}
+				}
+			}
+			pop_label_frame(compiler);
+			ir_emit(function, ir_label(end));
+		case Node_Case;
 		case Node_Continue;
-			ir_emit(function, ir_goto(compiler.label_continue));
+			ir_emit(function, ir_goto(current_continue_label(compiler)));
 		case Node_Break;
-			ir_emit(function, ir_goto(compiler.label_break));
+			ir_emit(function, ir_goto(current_break_label(compiler)));
 		case Node_If;
 			_if := statement.(*Node_If);
 			on_false := next_label(compiler);
