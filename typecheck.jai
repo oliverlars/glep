@@ -1021,6 +1021,10 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 			_while := stmt.(*Node_While);
 			resolve_expr(tc, _while.cond);
 			typecheck_statement(tc, _while.body);
+		case Node_Do;
+			_do := stmt.(*Node_Do);
+			typecheck_statement(tc, _do.body);
+			resolve_expr(tc, _do.cond);
 		case Node_If;
 			_if := stmt.(*Node_If);
 			resolve_expr(tc, _if.cond);

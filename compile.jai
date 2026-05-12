@@ -856,6 +856,20 @@ compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 			pop_label_frame(compiler);
 			ir_emit(function, ir_goto(start));
 			ir_emit(function, ir_label(end));
+		case Node_Do;
+			_do := statement.(*Node_Do);
+			start := next_label(compiler);
+			end   := next_label(compiler);
+			cont  := next_label(compiler);
+
+			ir_emit(function, ir_label(start));
+			push_label_frame(compiler, end, cont);
+			compile_statement(compiler, _do.body);
+			pop_label_frame(compiler);
+			ir_emit(function, ir_label(cont));
+			cond := compile_expr(compiler, _do.cond);
+			ir_emit(function, ir_if(cond, start));
+			ir_emit(function, ir_label(end));
 		case Node_Switch;
 			switch := statement.(*Node_Switch);
 			end_label := next_label(compiler);
