@@ -336,6 +336,7 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	info := New(Resolved_Type);
 
 	info.size_in_bytes = 4;
+	info.alignment     = 4;
 
 	if counts[Type_Specifier.Void] {
 		info.size_in_bytes = 0;
@@ -364,6 +365,12 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 	if counts[Type_Specifier.Short] > 0 {
 		info.size_in_bytes = 2;
 		info.alignment = 2;
+	}
+
+	if counts[Type_Specifier.Long] == 1 {
+		// On Darwin / Linux arm64 LP64, `long` is 8 bytes.
+		info.size_in_bytes = 8;
+		info.alignment = 8;
 	}
 
 	if counts[Type_Specifier.Long] == 2 {
@@ -399,7 +406,7 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 			for member_decl, member_it: _struct.members {
 				for member_declarator: member_decl.declarators {
 					member_type := resolve_decl(tc, member_decl, member_declarator);
-					if offset % member_type.alignment != 0 {
+					if member_type.alignment > 0 && offset % member_type.alignment != 0 {
 						align := member_type.alignment;
 						bytes_to_pad := (align - (offset % align)) % align;
 						offset += bytes_to_pad;

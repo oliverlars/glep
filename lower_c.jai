@@ -144,6 +144,9 @@ lower :: (emitter: *Emitter) {
 
 	for external: emitter.ir.externals {
 		name := external.name;
+		// Skip names already declared in the prelude above; otherwise clang
+		// errors on conflicting types when system headers re-declare them.
+		if name == "memset" || name == "memcpy" continue;
 		if external.results.count == 0 {
 			emit(emitter, "void %(", name);
 		} else if external.results.count == 1 {
