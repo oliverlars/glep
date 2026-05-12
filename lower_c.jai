@@ -172,6 +172,11 @@ lower :: (emitter: *Emitter) {
 		if name == "main" {
 			name = "entry";
 		}
+		if function.linkage == .EXTERNAL {
+			emit(emitter, "extern ");
+		} else {
+			emit(emitter, "static ");
+		}
 		if function.results.count == 0 {
 			emit(emitter, "void ");
 			emit(emitter, "%(", name);

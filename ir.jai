@@ -108,6 +108,11 @@ IR_External :: struct {
 	variadic: bool;
 }
 
+IR_Linkage :: enum {
+	EXTERNAL;
+	INTERNAL;
+}
+
 IR_Function :: struct {
 	name: string;
 	params: [..]IR_Operand_Type;
@@ -116,6 +121,7 @@ IR_Function :: struct {
 	variadic: bool;
 	builder: String_Builder;
 	registers_needed: int;
+	linkage: IR_Linkage;
 }
 
 IR :: struct {

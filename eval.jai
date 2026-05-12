@@ -228,53 +228,77 @@ process_string_escapes :: (raw: string) -> []u8 {
 	i := 0;
 	while i < raw.count {
 		if raw[i] == #char "\\" && i + 1 < raw.count {
-			escape := raw[i + 1];
-			if escape == {
-				case #char "n";  array_add(*result, 10);
-				case #char "t";  array_add(*result, 9);
-				case #char "r";  array_add(*result, 13);
-				case #char "0";  array_add(*result, 0);
-				case #char "\\"; array_add(*result, 92);
-				case #char "'";  array_add(*result, 39);
-				case #char "\""; array_add(*result, 34);
-				case #char "a";  array_add(*result, 7);
-				case #char "b";  array_add(*result, 8);
-				case #char "f";  array_add(*result, 12);
-				case #char "v";  array_add(*result, 11);
-				case;
-					// Unknown escape: keep both chars
-					array_add(*result, raw[i]);
-					array_add(*result, escape);
-			}
-			i += 2;
+			i += 1;
+			val, len := parse_escape(raw, i);
+			array_add(*result, cast(u8) val);
+			i += len;
 		} else {
 			array_add(*result, raw[i]);
 			i += 1;
 		}
 	}
-	array_add(*result, 0); // null terminator
+	array_add(*result, 0);
 	return result;
 }
 
 eval_char_literal :: (view: string) -> int {
 	if view.count >= 2 && view[0] == #char "\\" {
-		if view[1] == {
-			case #char "n";  return 10;
-			case #char "t";  return 9;
-			case #char "r";  return 13;
-			case #char "0";  return 0;
-			case #char "\\"; return 92;
-			case #char "'";  return 39;
-			case #char "\""; return 34;
-			case #char "a";  return 7;
-			case #char "b";  return 8;
-			case #char "f";  return 12;
-			case #char "v";  return 11;
-		}
+		val, len := parse_escape(view, 1);
+		return val;
 	}
 	if view.count == 1 return view[0];
-	// Multi-char constant: just use the last byte
 	return view[view.count - 1];
+}
+
+parse_escape :: (s: string, start: int) -> (val: int, len: int) {
+	c := s[start];
+
+	hex_value :: (c: u8) -> int {
+		if c >= #char "0" && c <= #char "9" return cast(int) (c - #char "0");
+		if c >= #char "a" && c <= #char "f" return cast(int) (c - #char "a") + 10;
+		if c >= #char "A" && c <= #char "F" return cast(int) (c - #char "A") + 10;
+		return 0;
+	}
+
+	if c == #char "x" {
+		// hex: \xNN...
+		val := 0;
+		i := start + 1;
+		while i < s.count && (s[i] >= #char "0" && (s[i] <= #char "9") ||
+			  (s[i] >= #char "a" && s[i] <= #char "f") ||
+			  (s[i] >= #char "A" && s[i] <= #char "F")) {
+			val = val * 16 + hex_value(s[i]);
+			i += 1;
+		}
+		return val, i - start;
+	}
+
+	if c >= #char "0" && c <= #char "7" {
+		// octal: up to 3 digits
+		val := cast(int) (c - #char "0");
+		i := start + 1;
+		while i < s.count && i - start < 3 && s[i] >= #char "0" && s[i] <= #char "7" {
+			val = val * 8 + cast(int) (s[i] - #char "0");
+			i += 1;
+		}
+		return val, i - start;
+	}
+
+	if c == {
+		case #char "n";  return 10, 1;
+		case #char "t";  return  9, 1;
+		case #char "r";  return 13, 1;
+		case #char "\\"; return 92, 1;
+		case #char "'";  return 39, 1;
+		case #char "\""; return 34, 1;
+		case #char "a";  return  7, 1;
+		case #char "b";  return  8, 1;
+		case #char "f";  return 12, 1;
+		case #char "v";  return 11, 1;
+	}
+
+	// unknown escape: return the character itself
+	return cast(int) c, 1;
 }
 
 eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constant {

@@ -1067,6 +1067,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 				function := function_declarator(declarator);
 				ir_function.variadic = function.variadic;
+				linkage: IR_Linkage;
+				if decl.storage_class == "static" {
+					linkage = .INTERNAL;
+				}
+				ir_function.linkage = linkage;
 				compiler.register = 0;
 				compiler.registers_needed = 0;
 				compiler.current_function = *ir_function;
