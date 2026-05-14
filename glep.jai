@@ -2217,7 +2217,7 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 }
 
 is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bool {
-	return is_function_declaration(declarator) && decl.body != null;
+	return declarator.resolved_type.kind == .Function && decl.body != null;
 }
 
 is_function_declaration :: (declarator: *Node_Declarator) -> bool {

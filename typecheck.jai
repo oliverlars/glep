@@ -15,6 +15,7 @@ Resolved_Type :: struct {
 		Floating;
 		Pointer;
 		Array;
+		Function;
 	};
 
 	memoryless: bool;
@@ -23,11 +24,15 @@ Resolved_Type :: struct {
 	alignment: int;
 	unsigned: bool;
 	atomic: bool;
+	variadic: bool;
 
 	// Only needed for printing
 	symbol_name: string;
 	composite: *Node_Composite;
 	layout: Struct_Layout;
+
+	params: [..]*Resolved_Type;
+	ret: *Resolved_Type;
 
 	// For pointers and stuff
 	inner: *Resolved_Type;
@@ -462,6 +467,15 @@ resolve_declarator :: (tc: *Type_Checker, base: *Resolved_Type, declarator: *Nod
 			return array;
 		case Node_Identifier_Declarator;
 			return base;
+		case Node_Function_Declarator;
+			function := New(Resolved_Type);
+			function.kind = .Function;
+			function.ret = base;
+			function.variadic = declarator.(*Node_Function_Declarator).variadic;
+			for declarator.(*Node_Function_Declarator).params {
+				array_add(*function.params, resolve_function_call_param_type(tc, it));
+			}
+			return resolve_declarator(tc, function, declarator.inner);
 	}
 
 	return base;
@@ -949,6 +963,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			}
 			
 			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
+			if ret_type.kind == .Function ret_type = ret_type.ret;
 			call.resolved_type = ret_type;
 			return ret_type;
 	}
@@ -1144,14 +1159,11 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 		decl_type := resolve_decl(tc, decl, declarator);
 		declarator.resolved_type = decl_type;
 		push_decl(tc, declarator);
-		if is_function_declaration(declarator) {
+		if decl_type.kind == .Function {
 			function := function_declarator(declarator);
 			prev_return_type := tc.current_function_return_type;
-			tc.current_function_return_type = declarator.resolved_type;
+			tc.current_function_return_type = decl_type.ret;
 			push_scope(tc);
-			if identifier_from_declarator(declarator) == "memset" {
-				a := 5;
-			}
 			for function.params {
 				if it.declarators.count {
 					it.declarators[0].resolved_type = resolve_decl(tc, it, it.declarators[0]);

@@ -1123,7 +1123,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 					}
 
-					ret_type := declarator.resolved_type;
+					ret_type := declarator.resolved_type.ret;
 					if is_void_type(ret_type) {
 						// No result values for void functions.
 					} else if ret_type.kind == .Composite {
@@ -1152,7 +1152,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
 					ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
 				}
-			} else if is_function_declaration(declarator) {
+			} else if declarator.resolved_type.kind == .Function {
 				external: IR_External;
 					external.name = name;
 
@@ -1168,10 +1168,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						} else {
 							array_add(*external.params, operand_type(param_type));
 						}
-				}
+					}
 					external.variadic = function.variadic;
 
-					ret_type := declarator.resolved_type;
+					ret_type := declarator.resolved_type.ret;
 					if is_void_type(ret_type) {
 						// No result values for void externs.
 					} else if is_struct_composite(ret_type) {
