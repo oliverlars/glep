@@ -322,30 +322,40 @@ lower :: (emitter: *Emitter) {
 					case .Alloca;
 					case .Call;
 						for 0..emitter.indent-1 { append(*emitter.builder, "    "); }
+						is_indirect := it.a.kind == .Register;
 						callee_name := it.a.label;
-						callee_is_struct_return := false;
-						for f: emitter.ir.functions {
-							if f.name == callee_name {
-								callee_is_struct_return = f.results.count > 1;
-								break;
-							}
+						callee_expr: string;
+						if is_indirect {
+							ret_ctype := ifx it.dst.kind == .Register then ctype_from_ir_type(it.dst.type) else "void";
+							callee_expr = tprint("((% (*)())%)", ret_ctype, materialise(it.a));
+						} else {
+							callee_expr = callee_name;
 						}
-						if !callee_is_struct_return {
-							for ext: emitter.ir.externals {
-								if ext.name == callee_name {
-									callee_is_struct_return = ext.results.count > 1;
+						callee_is_struct_return := false;
+						if !is_indirect {
+							for f: emitter.ir.functions {
+								if f.name == callee_name {
+									callee_is_struct_return = f.results.count > 1;
 									break;
+								}
+							}
+							if !callee_is_struct_return {
+								for ext: emitter.ir.externals {
+									if ext.name == callee_name {
+										callee_is_struct_return = ext.results.count > 1;
+										break;
+									}
 								}
 							}
 						}
 						if it.dst.kind == .Register {
 							if callee_is_struct_return {
-								emit(emitter, "*((%_return*)v%) = %(", callee_name, it.dst.register, callee_name);
+								emit(emitter, "*((%_return*)v%) = %(", callee_name, it.dst.register, callee_expr);
 							} else {
-								emit(emitter, "v% = %(", it.dst.register, callee_name);
+								emit(emitter, "v% = %(", it.dst.register, callee_expr);
 							}
 						} else {
-							emit(emitter, "%(", callee_name);
+							emit(emitter, "%(", callee_expr);
 						}
 						arg_index := 0;
 						arg_count := 0;

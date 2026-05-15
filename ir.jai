@@ -297,6 +297,10 @@ ir_call :: (dst: IR_Operand, func: string, arg_count: u64) -> IR_Instruction {
 	return .{ .Call, dst, .{ kind = .Label, label = func }, .{ kind = .Constant, type = IR_U64, constant = arg_count } };
 }
 
+ir_call :: (dst: IR_Operand, address: IR_Operand, arg_count: u64) -> IR_Instruction {
+	return .{ .Call, dst, address, .{ kind = .Constant, type = IR_U64, constant = arg_count } };
+}
+
 ir_return :: (a: IR_Operand) -> IR_Instruction {
 	return .{ .Return, .{}, a, .{} };
 }

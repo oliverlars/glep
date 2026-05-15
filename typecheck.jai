@@ -873,6 +873,14 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				expr.resolved_type.size_in_bytes = 8;
 				expr.resolved_type.inner = decl.resolved_type.inner;
 				expr.resolved_type.unsigned = true;
+			} else if !sizeof && expr.resolved_type.kind == .Function {
+				ptr := New(Resolved_Type);
+				ptr.kind = .Pointer;
+				ptr.alignment = 8;
+				ptr.size_in_bytes = 8;
+				ptr.inner = expr.resolved_type;
+				ptr.unsigned = true;
+				expr.resolved_type = ptr;
 			}
 			return expr.resolved_type;
 		case Node_Unary;
@@ -941,31 +949,32 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			return info;
 		case Node_Call;
 			call := expr.(*Node_Call);
-			name := call.id.(*Node_Identifier).id.view;
-			found, decl := table_find(*tc.ordinary, name);
-			if !found {
-				report_error_at(tc, call.id.source_path, call.id.line, call.id.col, "Could not find variable '%'", name);
+			callee_type := resolve_expr(tc, call.id);
+			call.id.resolved_type = callee_type;
+
+			function_type := callee_type;
+			if function_type.kind == .Pointer && function_type.inner.kind == .Function {
+				function_type = function_type.inner;
+			}
+			if function_type.kind != .Function {
+				report_error_at(tc, call.id.source_path, call.id.line, call.id.col, "Called expression is not a function");
 				return poison_type();
 			}
-			function := function_declarator(decl.(*Node_Decl).declarators[0]);
-			
+
 			for call.args {
 				arg_type := resolve_expr(tc, it);
 				it.resolved_type = arg_type;
-				
-				if it_index < function.params.count - 1 {
-					param := function.params[it_index];
-					param_type := resolve_function_call_param_type(tc, param);
+
+				if it_index < function_type.params.count - 1 {
+					param_type := function_type.params[it_index];
 					if !coerceable(param_type, arg_type) {
 						report_error_at(tc, it.source_path, it.line, it.col, "Argument '%' does not match parameter", 1 + it_index);
 					}
 				}
 			}
-			
-			ret_type := resolve_decl(tc, decl.(*Node_Decl), decl.(*Node_Decl).declarators[0]);
-			if ret_type.kind == .Function ret_type = ret_type.ret;
-			call.resolved_type = ret_type;
-			return ret_type;
+
+			call.resolved_type = function_type.ret;
+			return call.resolved_type;
 	}
 
 	return null;

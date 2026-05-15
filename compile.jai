@@ -568,7 +568,6 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				result = dst;
 		case Node_Call;
 			call := expr.(*Node_Call);
-			name := call.id.(*Node_Identifier).id.view;
 
 			if call.builtin_kind != .NONE {
 				if call.builtin_kind == {
@@ -649,25 +648,42 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 				}
 				return param_count;
 			}
+			
+			is_indirect := true;
+			name: string;
+			if call.id.expr_type == Node_Identifier {
+				name = call.id.(*Node_Identifier).id.view;
+				binding, _ := find_binding(compiler, name);
+				if binding.is_function then is_indirect = false;
+			}
 
-			_, decl := table_find(*compiler.ordinary, name);
-			source_function := function_declarator(decl.(*Node_Decl).declarators[0]);
-			source_param_count := source_function.params.count;
+			source_param_count: int;
+			lhs: IR_Operand;
+			if is_indirect {
+				function_type := call.id.resolved_type;
+				if function_type.kind == .Pointer then function_type = function_type.inner;
+				source_param_count = function_type.params.count;
+				lhs = compile_expr(compiler, call.id);
+			} else {
+				_, decl := table_find(*compiler.ordinary, name);
+				source_function := function_declarator(decl.(*Node_Decl).declarators[0]);
+				source_param_count = source_function.params.count;
+			}
 
-				args: [..] IR_Operand;
-				non_variadic_expanded_param_count := 0;
-				variadic: bool;
-				for call.args {
-					variadic = it_index >= source_param_count;
-					if is_void_type(it.resolved_type) {
-						compile_expr(compiler, it);
-					} else if it.resolved_type.kind == .Composite {
-						address := compile_lvalue(compiler, it);
-						param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
-						if !variadic then non_variadic_expanded_param_count += param_count;
-					} else {
-						arg := compile_expr(compiler, it);
-						array_add(*args, arg);
+			args: [..] IR_Operand;
+			non_variadic_expanded_param_count := 0;
+			variadic: bool;
+			for call.args {
+				variadic = it_index >= source_param_count;
+				if is_void_type(it.resolved_type) {
+					compile_expr(compiler, it);
+				} else if it.resolved_type.kind == .Composite {
+					address := compile_lvalue(compiler, it);
+					param_count := emit_struct_params(compiler, address, it.resolved_type.composite.(*Node_Struct), it.resolved_type.layout, *args);
+					if !variadic then non_variadic_expanded_param_count += param_count;
+				} else {
+					arg := compile_expr(compiler, it);
+					array_add(*args, arg);
 					if !variadic then non_variadic_expanded_param_count += 1;
 				}
 			}
@@ -675,25 +691,33 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			if call.resolved_type.kind == .Composite {
 				ret_slot := ir_register(next_register(compiler), IR_PTR);
 				ir_emit(function, ir_alloca(ret_slot, xx call.resolved_type.size_in_bytes));
-				ir_emit(function, ir_call(ret_slot, name, xx non_variadic_expanded_param_count));
+				if is_indirect {
+					ir_emit(function, ir_call(ret_slot, lhs, xx non_variadic_expanded_param_count));
+				} else {
+					ir_emit(function, ir_call(ret_slot, name, xx non_variadic_expanded_param_count));
+				}
 
 				for args {
 					ir_emit(function, ir_param(it));
-					}
+				}
 
-					addr := ir_register(next_register(compiler), IR_PTR);
-					ir_emit(function, ir_address(addr, ret_slot));
-					result = addr;
+				addr := ir_register(next_register(compiler), IR_PTR);
+				ir_emit(function, ir_address(addr, ret_slot));
+				result = addr;
+			} else {
+				dst: IR_Operand;
+				if !is_void_type(call.resolved_type) {
+					dst = ir_register(next_register(compiler), operand_type(call.resolved_type));
+				}
+				if is_indirect {
+					ir_emit(function, ir_call(dst, lhs, xx non_variadic_expanded_param_count));
 				} else {
-					dst: IR_Operand;
-					if !is_void_type(call.resolved_type) {
-						dst = ir_register(next_register(compiler), operand_type(call.resolved_type));
-					}
 					ir_emit(function, ir_call(dst, name, xx non_variadic_expanded_param_count));
+				}
 
-					for args {
-						ir_emit(function, ir_param(it));
-					}
+				for args {
+					ir_emit(function, ir_param(it));
+				}
 
 				result = dst;
 			}
