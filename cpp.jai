@@ -682,6 +682,7 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_builtin_object(cpp, "__UINTPTR_TYPE__", "unsigned long");
 	add_builtin_object(cpp, "va_list", "__builtin_va_list");
 	add_builtin_object(cpp, "va_copy", "__builtin_va_copy");
+	add_builtin_object(cpp, "va_start", "__builtin_va_start");
 	add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
 
 	add_builtin_object(cpp, "__FLT_MAX__", "3.402823466e+38");
@@ -689,6 +690,8 @@ add_all_builtins :: (cpp: *Preprocessor) {
 
 	add_function_builtin(cpp, "#define __asm(x)\n");
 	add_function_builtin(cpp, "#define __attribute__(x)\n");
+	add_function_builtin(cpp, "#define __max(x, y) (x < y ? y : x)\n");
+	add_function_builtin(cpp, "#define va_arg(ap, type) (*(type *)(ap += __max(8, _Alignof(type))) - __max(8, _Alignof(type)))\n");
 	configure_system_include_paths(cpp);
 	// HACK(Oliver): Remove this dumbass shit
 	cpp.at = 0;

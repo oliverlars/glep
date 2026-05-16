@@ -273,6 +273,13 @@ Node_Sizeof_Type :: struct {
 	expr_type = #this;
 }
 
+Node_Alignof_Type :: struct {
+	#as using node: Node_Expr;
+	base: Node_Decl_Info;
+	target_type: *Resolved_Type;
+	expr_type = #this;
+}
+
 Node_Sizeof_Expr :: struct {
 	#as using node: Node_Expr;
 	expr: *Node_Expr;
@@ -1448,6 +1455,22 @@ parse_unary :: (p: *Parser) -> *Node_Expr {
 			sizeof.expr = parse_unary(p);
 			result = sizeof;
 		}
+	} else if current(p).view == "_Alignof" {
+		typestart := current(p);
+		skip(p);
+		if current(p).type == .LeftParenthesis {
+			if is_declaration_start(p, next(p)) {
+				skip(p);
+				base_info: Node_Decl_Info;
+				parse_declaration_specifiers(p, *base_info);
+				declarator := parse_declarator(p);
+				alignof := make_node_at(p, Node_Alignof_Type, typestart);
+				array_add(*base_info.declarators, declarator);
+				alignof.base = base_info;
+				expect(p, .RightParenthesis);
+				result = alignof;
+			}
+		}
 	} else if is_prefix_op(current(p)) {
 		op := current(p);
 		skip(p);
@@ -1761,6 +1784,11 @@ print_expr :: (builder: *String_Builder, node: *Node_Expr, parent_precedence := 
 		append(builder, "sizeof");
 		append(builder, "(");
 		print_type(builder, node.(*Node_Sizeof_Type).base);
+		append(builder, ")");
+	case Node_Alignof_Type;
+		append(builder, "_Alignof");
+		append(builder, "(");
+		print_type(builder, node.(*Node_Alignof_Type).base);
 		append(builder, ")");
 	case Node_Sizeof_Expr;
 		append(builder, "sizeof ");

@@ -360,6 +360,9 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constan
 		case Node_Sizeof_Type;
 			sizeof := expr.(*Node_Sizeof_Type);
 			return .{ kind = .U64, as_u64 = sizeof.target_type.size_in_bytes.(u64) };
+		case Node_Alignof_Type;
+			alignof := expr.(*Node_Alignof_Type);
+			return .{ kind = .U64, as_u64 = alignof.target_type.alignment.(u64) };
 		case Node_Char;
 			value := eval_char_literal(expr.(*Node_Char).token.view);
 			return .{ kind = .U64, as_u64 = value.(u64) };

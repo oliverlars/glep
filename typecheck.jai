@@ -770,6 +770,17 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			decl := ifx sizeof.base.declarators.count > 0 then sizeof.base.declarators[0] else null;
 			sizeof.target_type = resolve_decl(tc, *sizeof.base, decl);
 			return resolved;
+		case Node_Alignof_Type;
+			alignof := expr.(*Node_Alignof_Type);
+			resolved := New(Resolved_Type);
+			resolved.kind = .Integral;
+			resolved.size_in_bytes = 8;
+			resolved.unsigned = true;
+			resolved.alignment = 8;
+			alignof.resolved_type = resolved;
+			decl := ifx alignof.base.declarators.count > 0 then alignof.base.declarators[0] else null;
+			alignof.target_type = resolve_decl(tc, *alignof.base, decl);
+			return resolved;
 		case Node_Compound;
 			compound := expr.(*Node_Compound);
 			compound.resolved_type = resolve_decl(tc, *compound.base_info, compound.declarator);
@@ -862,6 +873,14 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				if found_enum {
 					expr.resolved_type = enum_constant_type();
 					return expr.resolved_type;
+				}
+			}
+			if !found {
+				print("DEBUG: not found: '%' scopes.count=%\n", id, tc.scopes.count);
+				for tc.scopes {
+					print("  scope %: ", it_index);
+					for it.decls print("% ", it.name);
+					print("\n");
 				}
 			}
 			assert(found);
@@ -1194,6 +1213,9 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
 	seed_builtin_enum_constants(tc);
 	push_scope(tc);
+	for tc.ordinary {
+		typecheck_decl(tc, it.(*Node_Decl));
+	}
 	for item: tu.items {
 		if item.type == {
 			case Node_Decl;

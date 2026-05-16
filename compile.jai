@@ -366,6 +366,10 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			sizeof := expr.(*Node_Sizeof_Type);
 			dst := ir_constant(xx sizeof.target_type.size_in_bytes, IR_U64);
 			result = dst;
+		case Node_Alignof_Type;
+			alignof := expr.(*Node_Alignof_Type);
+			dst := ir_constant(xx alignof.target_type.alignment, IR_U64);
+			result = dst;
 		case Node_Sizeof_Expr;
 			sizeof := expr.(*Node_Sizeof_Expr);
 			dst := ir_constant(xx sizeof.expr.resolved_type.size_in_bytes, IR_U64);
