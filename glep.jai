@@ -2641,12 +2641,12 @@ run_test :: (filename: string) -> passed: bool {
 
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
-	register_builtin_decls(*parser.ordinary);
+	typechecker: Type_Checker;
+	register_builtin_decls(*parser.ordinary, *typechecker.builtins);
 	register_builtin_typedefs(*parser.typedefs);
 
 	tu := parse_translation_unit(*parser);
 
-	typechecker: Type_Checker;
 	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
 	if !typecheck(*typechecker, tu) then return false;
@@ -2761,7 +2761,8 @@ main :: () {
 
 	parser: Parser;
 	parser.tokens = tokens_no_newlines;
-	register_builtin_decls(*parser.ordinary);
+	typechecker: Type_Checker;
+	register_builtin_decls(*parser.ordinary, *typechecker.builtins);
 	register_builtin_typedefs(*parser.typedefs);
 
 
@@ -2769,7 +2770,6 @@ main :: () {
 	ast_c := print_translation_unit_as_c(tu);
 	write_entire_file(sprint("%/ast.c", DEBUG_ARTIFACT_DIR), ast_c);
 
-	typechecker: Type_Checker;
 	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
 	if !typecheck(*typechecker, tu) then return;

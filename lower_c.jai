@@ -225,6 +225,8 @@ lower :: (emitter: *Emitter) {
 			current_order := "5";
 			for function.instructions {
 				if it.op == {
+					case .DebugLabel;
+						emitln(emitter, "// %", it.a.label);
 					case .MemoryOrderRelaxed; current_order = "0";
 					case .MemoryOrderConsume; current_order = "1";
 					case .MemoryOrderAcquire; current_order = "2";

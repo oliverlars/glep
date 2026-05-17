@@ -293,6 +293,9 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					dst := ir_register(next_register(compiler), value.type);
 					ir_emit(function, ir_neg(dst, value));
 					result = dst;
+				case .Plus;
+					value := compile_expr(compiler, unary.expr);
+					result = value;
 				case .Bang;
 					value := compile_expr(compiler, unary.expr);
 					dst := ir_register(next_register(compiler), value.type);
@@ -831,6 +834,7 @@ compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Bin
 compile_statement :: (compiler: *Compiler, statement: *Node_Statement) {
 	if !statement return;
 	function := compiler.current_function;
+	ir_emit(function, ir_debug_label(tprint("LINE: %", statement.line)));
 	if statement.statement_type == {
 		case Node_Decl_Statement;
 			decl := statement.(*Node_Decl_Statement).decl;
@@ -1002,7 +1006,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: 
 	if init.initializer_type == Node_Scalar_Initializer {
 		expr := init.(*Node_Scalar_Initializer).expr;
 		rhs := compile_expr(compiler, expr);
-		if expr.resolved_type.kind == .Composite {
+		if expr.resolved_type.kind == .Composite || expr.resolved_type.kind == .Array {
 			size := expr.resolved_type.size_in_bytes;
 			ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "memcpy", 3));
 			ir_emit(function, ir_param(dst));
@@ -1037,6 +1041,13 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
 			expr := init.(*Node_Scalar_Initializer).expr;
+			if expr.expr_type == Node_String && target_type.kind == .Array {
+				str := expr.(*Node_String);
+				str_bytes := process_string_escapes(str.token.view);
+				copy_count := min(str_bytes.count, target_type.size_in_bytes);
+				memcpy(bytes.data + byte_offset, str_bytes.data, copy_count);
+				return byte_offset + target_type.size_in_bytes;
+			}
 			value := convert_constant(eval_constant_expr(*compiler.enums, expr), target_type);
 			if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {

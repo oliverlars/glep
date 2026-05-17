@@ -54,6 +54,7 @@ Type_Checker :: struct {
 	scopes: [..]Scope;
 
 	ordinary: Table(string, *Node);
+	builtins: [..]*Node_Decl;
 
 	// HACK(Oliver): Although I currently store the resolved_type
 	// on the struct itself, we need a cache to know if we are currently
@@ -187,7 +188,7 @@ make_builtin_decl :: (
 	return decl;
 }
 
-register_builtin_decls :: (ordinary: *Table(string, *Node)) {
+register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node_Decl) {
 	INT  :: string.["int"];
 	VOID :: string.["void"];
 	CHAR :: string.["char"];
@@ -195,6 +196,7 @@ register_builtin_decls :: (ordinary: *Table(string, *Node)) {
 	add :: (ordinary: *Table(string, *Node), name: string, ret: []string, ret_ptr: bool, params: []Builtin_Param) #expand {
 		decl := make_builtin_decl(name, ret, ret_ptr, params);
 		table_set(ordinary, name, decl);
+		array_add(builtins, decl);
 	}
 
 	add(ordinary, "__c11_atomic_load", INT, false, .[
@@ -653,6 +655,8 @@ coerceable :: (target: *Resolved_Type, source: *Resolved_Type) -> bool {
 	if target.kind == .Pointer && source.kind == .Integral return true;
 	if target.kind == .Integral && source.kind == .Pointer return true;
 	if target.kind == .Pointer && source.kind == .Array return true;
+	if target.kind == .Array && source.kind == .Pointer return true;
+	if target.kind == .Array && source.kind == .Array return true;
 
 	if target.kind == .Composite && source.kind == .Composite {
 		return target.composite == source.composite;
@@ -875,14 +879,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 					return expr.resolved_type;
 				}
 			}
-			if !found {
-				print("DEBUG: not found: '%' scopes.count=%\n", id, tc.scopes.count);
-				for tc.scopes {
-					print("  scope %: ", it_index);
-					for it.decls print("% ", it.name);
-					print("\n");
-				}
-			}
 			assert(found);
 			expr.resolved_type = decl.resolved_type;
 			if !sizeof && expr.resolved_type.kind == .Array {
@@ -953,10 +949,18 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			_cast.expr.resolved_type = source;
 			return target;
 		case Node_String;
+			str := expr.(*Node_String);
+			bytes := process_string_escapes(str.token.view);
+			char_type := New(Resolved_Type);
+			char_type.kind = .Integral;
+			char_type.size_in_bytes = 1;
+			char_type.alignment = 1;
 			info := New(Resolved_Type);
-			info.size_in_bytes = 8;
-			info.alignment = 8;
-			info.kind = .Pointer;
+			info.kind = .Array;
+			info.inner = char_type;
+			info.array_count = bytes.count;
+			info.size_in_bytes = bytes.count;
+			info.alignment = 1;
 			expr.resolved_type = info;
 			return info;
 		case Node_Char;
@@ -1122,6 +1126,22 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer) -> *Resolved_Type {
 	if !init return null;
 
+	if target && target.kind == .Array && target.array_count == 0 && target.inner {
+		if init.initializer_type == Node_Scalar_Initializer {
+			scalar := init.(*Node_Scalar_Initializer).expr;
+			if scalar.expr_type == Node_String {
+				source := resolve_expr(tc, scalar);
+				if source && source.kind == .Array {
+					target.array_count = source.array_count;
+					target.size_in_bytes = target.array_count * target.inner.size_in_bytes;
+				}
+			}
+		} else if init.initializer_type == Node_Designated_Initializer {
+			target.array_count = init.(*Node_Designated_Initializer).designations.count;
+			target.size_in_bytes = target.array_count * target.inner.size_in_bytes;
+		}
+	}
+
 	if init.initializer_type == {
 		case Node_Designated_Initializer;
 			index := 0;
@@ -1213,8 +1233,11 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl) {
 typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
 	seed_builtin_enum_constants(tc);
 	push_scope(tc);
-	for tc.ordinary {
-		typecheck_decl(tc, it.(*Node_Decl));
+	for decl: tc.builtins {
+		for declarator: decl.declarators {
+			declarator.resolved_type = resolve_decl(tc, decl, declarator);
+			push_decl(tc, declarator);
+		}
 	}
 	for item: tu.items {
 		if item.type == {

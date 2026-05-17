@@ -692,6 +692,7 @@ add_all_builtins :: (cpp: *Preprocessor) {
 	add_function_builtin(cpp, "#define __attribute__(x)\n");
 	add_function_builtin(cpp, "#define __max(x, y) (x < y ? y : x)\n");
 	add_function_builtin(cpp, "#define va_arg(ap, type) (*(type *)(ap += __max(8, _Alignof(type))) - __max(8, _Alignof(type)))\n");
+	add_function_builtin(cpp, "#define va_end(x)\n");
 	configure_system_include_paths(cpp);
 	// HACK(Oliver): Remove this dumbass shit
 	cpp.at = 0;

@@ -45,6 +45,7 @@ IR_Operator :: enum {
 	VAStart;
 	VAEnd;
 	VACopy;
+	DebugLabel;
 }
 
 IR_Instruction :: struct {
@@ -177,6 +178,14 @@ ir_label :: (name: string) -> IR_Instruction {
 	operand := IR_Operand.{ kind = .Label, label = name };
 	instruction: IR_Instruction;
 	instruction.op = .Label;
+	instruction.a = operand;
+	return instruction;
+}
+
+ir_debug_label :: (name: string) -> IR_Instruction {
+	operand := IR_Operand.{ kind = .Label, label = name };
+	instruction: IR_Instruction;
+	instruction.op = .DebugLabel;
 	instruction.a = operand;
 	return instruction;
 }
