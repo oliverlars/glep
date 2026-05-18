@@ -455,18 +455,17 @@ resolve_declarator :: (tc: *Type_Checker, base: *Resolved_Type, declarator: *Nod
 			return resolve_declarator(tc, ptr, declarator.inner);
 		case Node_Array_Declarator;
 			array_declarator := declarator.(*Node_Array_Declarator);
-			inner := resolve_declarator(tc, base, declarator.inner);
 			if array_declarator.count_expr {
 				array_declarator.count_expr.resolved_type = resolve_expr(tc, array_declarator.count_expr);
 				array_declarator.count = constant_to_int(eval_constant_expr(*tc._enums, array_declarator.count_expr));
 			}
 			array := New(Resolved_Type);
 			array.kind = .Array;
-			array.size_in_bytes = inner.size_in_bytes * array_declarator.count;
-			array.inner = inner;
+			array.size_in_bytes = base.size_in_bytes * array_declarator.count;
+			array.inner = base;
 			array.array_count = array_declarator.count;
-			array.alignment = inner.alignment;
-			return array;
+			array.alignment = base.alignment;
+			return resolve_declarator(tc, array, declarator.inner);
 		case Node_Identifier_Declarator;
 			return base;
 		case Node_Function_Declarator;
