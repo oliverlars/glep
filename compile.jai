@@ -452,6 +452,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 						}
 						ir_emit(function, ir_add(dst, left, right));
 					case .Minus;
+						if (left_type.kind == .Pointer || left_type.kind == .Array) && (right_type.kind != .Pointer && right_type.kind != .Array) {
+							scaled := ir_register(next_register(compiler), IR_PTR);
+							size_of_pointee := left_type.inner.size_in_bytes;
+							ir_emit(function, ir_mul(scaled, right, ir_constant(xx size_of_pointee, IR_PTR)));
+							right = scaled;
+						}
 						ir_emit(function, ir_sub(dst, left, right));
 					case .Asterisk;
 						ir_emit(function, ir_mul(dst, left, right));

@@ -2725,16 +2725,30 @@ run_tests :: () {
 main :: () {
 	reset_debug_artifacts();
 
-	//minimal := read_entire_file("/Users/olivercruickshank/Carnage/friday.c");
-	// minimal := read_entire_file("friday.c");
-	filename := "/users/olivercruickshank/glep/tests/test_smallpt.c";
-	//filename = "test.c";
-	//filename = "tests/lights.c";
+	filename := "";
+	output_name := "out";
 	args := get_command_line_arguments();
 	defer array_free(args);
-	if args.count > 1 {
-		filename = args[1];
+
+	for 1..args.count-1 {
+		if args[it] == "-file" {
+			if it + 1 < args.count {
+				filename = args[it + 1];
+			}
+		} else if args[it] == "-output" {
+			if it + 1 < args.count {
+				output_name = args[it + 1];
+			}
+		} else if filename == "" {
+			filename = args[it];
+		}
 	}
+
+	if filename == "" {
+		print("Usage: glep [-file <source>] [-output <name>]\n");
+		return;
+	}
+
 	minimal := read_entire_file(filename);
 
 	t0 := current_time_monotonic();
@@ -2803,7 +2817,7 @@ main :: () {
 	for compiler.ir.functions {
 		append(*ir_builder, builder_to_string(*it.builder));
 	}
-	write_entire_file("out.ir", builder_to_string(*ir_builder));
+	write_entire_file(sprint("%.ir", output_name), builder_to_string(*ir_builder));
 
 
 
@@ -2813,8 +2827,9 @@ main :: () {
 	write_entire_file(sprint("%/ir.c", DEBUG_ARTIFACT_DIR), ir_c);
 	print("Wrote compile artifacts to %/\n", DEBUG_ARTIFACT_DIR);
 
-	write_entire_file("out.c", ir_c);
-	compile_c_backend_output("out.c", "out");
+	out_c := sprint("%.c", output_name);
+	write_entire_file(out_c, ir_c);
+	compile_c_backend_output(out_c, output_name);
 
 	// print("\nCompiling assembly...\n\n");
 	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
