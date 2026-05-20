@@ -2727,25 +2727,26 @@ main :: () {
 
 	filename := "";
 	output_name := "out";
+	trace_functions: [..]string;
 	args := get_command_line_arguments();
 	defer array_free(args);
 
-	for 1..args.count-1 {
+	it := 1;
+	while it < args.count {
+		defer it += 1;
 		if args[it] == "-file" {
-			if it + 1 < args.count {
-				filename = args[it + 1];
-			}
+			if it + 1 < args.count { filename = args[it + 1]; it += 1; }
 		} else if args[it] == "-output" {
-			if it + 1 < args.count {
-				output_name = args[it + 1];
-			}
+			if it + 1 < args.count { output_name = args[it + 1]; it += 1; }
+		} else if args[it] == "-trace" {
+			if it + 1 < args.count { array_add(*trace_functions, args[it + 1]); it += 1; }
 		} else if filename == "" {
 			filename = args[it];
 		}
 	}
 
 	if filename == "" {
-		print("Usage: glep [-file <source>] [-output <name>]\n");
+		print("Usage: glep [-file <source>] [-output <name>] [-trace <fn>]...\n");
 		return;
 	}
 
@@ -2794,6 +2795,7 @@ main :: () {
 	compiler.structs = parser.structs;
 	compiler.enums = typechecker._enums;
 	compiler.typedefs = parser.typedefs;
+	compiler.trace_functions = trace_functions;
 	compile(*compiler, tu);
 
 	t1 := current_time_monotonic();

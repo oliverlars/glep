@@ -15,6 +15,7 @@ Compiler :: struct {
 
 	current_function: *IR_Function;
 
+	trace_functions: [..]string;
 
 	switch_variable: IR_Operand;
 
@@ -821,6 +822,40 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 	return result;
 }
 
+should_trace :: (compiler: *Compiler, name: string) -> bool {
+	for compiler.trace_functions if it == name return true;
+	return false;
+}
+
+trace_format_for :: (rt: *Resolved_Type) -> string {
+	if !rt return "";
+	if rt.kind == .Pointer return "%p";
+	if rt.kind == .Integral {
+		if rt.size_in_bytes == 8 return ifx rt.unsigned then "%llu" else "%lld";
+		return ifx rt.unsigned then "%u" else "%d";
+	}
+	return "";
+}
+
+emit_trace :: (compiler: *Compiler, binding: Binding) {
+	fmt := trace_format_for(binding.resolved_type);
+	if fmt == "" return;
+	function := compiler.current_function;
+	full_fmt := tprint("[%] % = %\\n", function.name, binding.name, fmt);
+	found, count := table_find(*compiler.strings, full_fmt);
+	if !found {
+		count = compiler.strings.count;
+		table_set(*compiler.strings, full_fmt, count);
+	}
+	str_addr := ir_register(next_register(compiler), IR_PTR);
+	ir_emit(function, ir_address(str_addr, ir_label_operand(tprint("str%", count))));
+	val := ir_register(next_register(compiler), operand_type(binding.resolved_type));
+	ir_emit(function, ir_load(val, binding.slot));
+	ir_emit(function, ir_call(ir_register(next_register(compiler), IR_S32), "printf", 2));
+	ir_emit(function, ir_param(str_addr));
+	ir_emit(function, ir_param(val));
+}
+
 compile_declarator :: (compiler: *Compiler, declarator: *Node_Declarator) -> Binding {
 	function := compiler.current_function;
 	name := identifier_from_declarator(declarator);
@@ -1149,12 +1184,14 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 				}
 
 					param_index := 0;
+					param_bindings: [..]Binding;
 					for function.params {
 						if it.declarators.count == 0 then continue;
 						param_type := it.declarators[0].resolved_type;
 						if !param_type then continue;
 						if is_void_type(param_type) then continue;
 						binding := compile_declarator(compiler, it.declarators[0]);
+						array_add(*param_bindings, binding);
 						if is_struct_composite(param_type) {
 							_struct := cast(*Node_Struct) param_type.composite;
 							param_index = emit_struct_load_params(compiler, *ir_function, _struct, param_type.layout, binding.slot, param_index);
@@ -1166,6 +1203,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						ir_emit(*ir_function, ir_store(binding.slot, dst));
 						param_index += 1;
 					}
+					}
+
+					if should_trace(compiler, ir_function.name) {
+						for param_bindings emit_trace(compiler, it);
 					}
 
 					ret_type := declarator.resolved_type.ret;
