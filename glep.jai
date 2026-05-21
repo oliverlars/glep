@@ -2541,8 +2541,87 @@ test_base_name :: (filename: string) -> string {
 	return result;
 }
 
-C_BACKEND_STACK_SIZE :: "0x1000000"; // 16 MiB.
+DEFAULT_STACK_SIZE :: "0x1000000"; // 16 MiB.
 DEBUG_ARTIFACT_DIR :: "debug";
+
+Options :: struct {
+	filename:              string;
+	output_name:           string;
+	stack_size:            string;
+	trace_functions:       [..]string;
+	write_debug_artifacts: bool;
+	run_tests:             bool;
+}
+
+print_usage :: () {
+	print("Usage: glep [options] <source>\n");
+	print("\n");
+	print("Options:\n");
+	print("  -o, -output <name>     Output binary name (default: out)\n");
+	print("  -trace <fn>            Trace calls to <fn> (repeatable)\n");
+	print("  -stack-size <hex>      Linker stack size (default: %)\n", DEFAULT_STACK_SIZE);
+	print("  -no-debug-artifacts    Don't write the %/ directory\n", DEBUG_ARTIFACT_DIR);
+	print("  -run-tests             Run the tests/ harness and exit\n");
+	print("  -h, -help              Show this help\n");
+}
+
+parse_options :: (args: []string) -> Options, ok: bool {
+	opts: Options;
+	opts.output_name           = "out";
+	opts.stack_size            = DEFAULT_STACK_SIZE;
+	opts.write_debug_artifacts = true;
+
+	it := 1;
+	while it < args.count {
+		defer it += 1;
+		arg := args[it];
+
+		if arg == "-h" || arg == "-help" || arg == "--help" {
+			print_usage();
+			return opts, false;
+		} else if arg == "-o" || arg == "-output" {
+			if it + 1 >= args.count {
+				print("Missing value for %\n\n", arg);
+				print_usage();
+				return opts, false;
+			}
+			opts.output_name = args[it + 1];
+			it += 1;
+		} else if arg == "-trace" {
+			if it + 1 >= args.count {
+				print("Missing value for %\n\n", arg);
+				print_usage();
+				return opts, false;
+			}
+			array_add(*opts.trace_functions, args[it + 1]);
+			it += 1;
+		} else if arg == "-stack-size" {
+			if it + 1 >= args.count {
+				print("Missing value for %\n\n", arg);
+				print_usage();
+				return opts, false;
+			}
+			opts.stack_size = args[it + 1];
+			it += 1;
+		} else if arg == "-no-debug-artifacts" {
+			opts.write_debug_artifacts = false;
+		} else if arg == "-run-tests" {
+			opts.run_tests = true;
+		} else if arg.count > 0 && arg[0] == #char "-" {
+			print("Unknown option: %\n\n", arg);
+			print_usage();
+			return opts, false;
+		} else if opts.filename == "" {
+			opts.filename = arg;
+		} else {
+			print("Unexpected argument: %\n\n", arg);
+			print_usage();
+			return opts, false;
+		}
+	}
+
+	return opts, true;
+}
 
 append_token_as_c :: (builder: *String_Builder, token: Token) {
 	if token.type == {
@@ -2581,8 +2660,8 @@ reset_debug_artifacts :: () {
 	make_directory_if_it_does_not_exist(DEBUG_ARTIFACT_DIR, recursive = true);
 }
 
-compile_c_backend_output :: (source: string, output: string) -> bool {
-	command := sprint("clang '%' -g -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, C_BACKEND_STACK_SIZE);
+compile_c_backend_output :: (source: string, output: string, stack_size: string) -> bool {
+	command := sprint("clang '%' -g -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, stack_size);
 	result, stdout, stderr := run_command("sh", "-c", command);
 	if result.exit_code != 0 {
 		if stdout.count > 0 print("%", stdout);
@@ -2590,7 +2669,7 @@ compile_c_backend_output :: (source: string, output: string) -> bool {
 		print("C backend compile failed: %\n", command);
 		return false;
 	}
-	print("Wrote % from % with a 16 MiB stack\n", output, source);
+	print("Wrote % from % (stack %)\n", output, source, stack_size);
 	return true;
 }
 
@@ -2723,32 +2802,27 @@ run_tests :: () {
 }
 
 main :: () {
-	reset_debug_artifacts();
-
-	filename := "";
-	output_name := "out";
-	trace_functions: [..]string;
 	args := get_command_line_arguments();
 	defer array_free(args);
 
-	it := 1;
-	while it < args.count {
-		defer it += 1;
-		if args[it] == "-file" {
-			if it + 1 < args.count { filename = args[it + 1]; it += 1; }
-		} else if args[it] == "-output" {
-			if it + 1 < args.count { output_name = args[it + 1]; it += 1; }
-		} else if args[it] == "-trace" {
-			if it + 1 < args.count { array_add(*trace_functions, args[it + 1]); it += 1; }
-		} else if filename == "" {
-			filename = args[it];
-		}
-	}
+	opts, ok := parse_options(args);
+	if !ok return;
 
-	if filename == "" {
-		print("Usage: glep [-file <source>] [-output <name>] [-trace <fn>]...\n");
+	if opts.run_tests {
+		reset_debug_artifacts();
+		run_tests();
 		return;
 	}
+
+	if opts.filename == "" {
+		print_usage();
+		return;
+	}
+
+	if opts.write_debug_artifacts then reset_debug_artifacts();
+
+	filename    := opts.filename;
+	output_name := opts.output_name;
 
 	minimal := read_entire_file(filename);
 
@@ -2762,7 +2836,9 @@ main :: () {
 	array_add(*cpp.path_stack, get_absolute_path(filename));
 	add_all_builtins(*cpp);
 	tokens := preprocess(*cpp, tokeniser.tokens);
-	write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
+	if opts.write_debug_artifacts {
+		write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
+	}
 
 	tokens_no_newlines: [..]Token;
 	total_newlines := 0;
@@ -2782,8 +2858,10 @@ main :: () {
 
 
 	tu := parse_translation_unit(*parser);
-	ast_c := print_translation_unit_as_c(tu);
-	write_entire_file(sprint("%/ast.c", DEBUG_ARTIFACT_DIR), ast_c);
+	if opts.write_debug_artifacts {
+		ast_c := print_translation_unit_as_c(tu);
+		write_entire_file(sprint("%/ast.c", DEBUG_ARTIFACT_DIR), ast_c);
+	}
 
 	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
@@ -2795,7 +2873,7 @@ main :: () {
 	compiler.structs = parser.structs;
 	compiler.enums = typechecker._enums;
 	compiler.typedefs = parser.typedefs;
-	compiler.trace_functions = trace_functions;
+	compiler.trace_functions = opts.trace_functions;
 	compile(*compiler, tu);
 
 	t1 := current_time_monotonic();
@@ -2805,13 +2883,6 @@ main :: () {
 
 
 	print("it took HOW long to compile % lines? %ms\n", total_newlines, ms);
-
-	// Run tests
-	// print("\n========================================\n");
-	// print("  Running tests/\n");
-	// print("========================================\n");
-	// run_tests();
-
 
 	print("\nDOING IR\n\n");
 
@@ -2826,17 +2897,12 @@ main :: () {
 	emitter := lower(*compiler.ir);
 
 	ir_c := builder_to_string(*emitter.builder);
-	write_entire_file(sprint("%/ir.c", DEBUG_ARTIFACT_DIR), ir_c);
-	print("Wrote compile artifacts to %/\n", DEBUG_ARTIFACT_DIR);
+	if opts.write_debug_artifacts {
+		write_entire_file(sprint("%/ir.c", DEBUG_ARTIFACT_DIR), ir_c);
+		print("Wrote compile artifacts to %/\n", DEBUG_ARTIFACT_DIR);
+	}
 
 	out_c := sprint("%.c", output_name);
 	write_entire_file(out_c, ir_c);
-	compile_c_backend_output(out_c, output_name);
-
-	// print("\nCompiling assembly...\n\n");
-	// run_command("clang", "out.s", "-oout", "-Wl,-stack_size,0x1000000");
-	// print("Compile same program with clang...\n");
-	// run_command("clang", "-S", filename, "-oclang_out.s");
-	// print("Running program...\n\n");
-	// run_command("./out");
+	compile_c_backend_output(out_c, output_name, opts.stack_size);
 }
