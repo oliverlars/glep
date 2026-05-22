@@ -1007,6 +1007,7 @@ is_type_qualifier :: (token: Token) -> bool {
 	case "_Atomic";    #through;
 	case "restrict";   #through;
 	case "__restrict"; #through;
+	case "__extension__"; #through;
 	case "__restrict__";
 		return true;
 	case;
@@ -1051,7 +1052,7 @@ is_type_specifier :: (token: Token) -> bool {
 }
 
 is_function_specifier :: (token: Token) -> bool {
-	return token.view == "inline";
+	return token.view == "inline" || token.view == "__inline";
 }
 
 
