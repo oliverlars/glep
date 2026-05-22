@@ -189,9 +189,12 @@ make_builtin_decl :: (
 }
 
 register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node_Decl) {
-	INT  :: string.["int"];
-	VOID :: string.["void"];
-	CHAR :: string.["char"];
+	INT       :: string.["int"];
+	VOID      :: string.["void"];
+	CHAR      :: string.["char"];
+	USHORT    :: string.["unsigned", "short"];
+	UINT      :: string.["unsigned", "int"];
+	ULONG     :: string.["unsigned", "long"];
 
 	add :: (ordinary: *Table(string, *Node), name: string, ret: []string, ret_ptr: bool, params: []Builtin_Param) #expand {
 		decl := make_builtin_decl(name, ret, ret_ptr, params);
@@ -228,6 +231,18 @@ register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node
 	add(ordinary, "__builtin_va_copy", VOID, false, .[
 		.{ "dst", CHAR, true },
 		.{ "src", CHAR, true },
+	]);
+
+	add(ordinary, "__builtin_bswap16", USHORT, false, .[
+		.{ "x", USHORT, false },
+	]);
+
+	add(ordinary, "__builtin_bswap32", UINT, false, .[
+		.{ "x", UINT, false },
+	]);
+
+	add(ordinary, "__builtin_bswap64", ULONG, false, .[
+		.{ "x", ULONG, false },
 	]);
 }
 
@@ -878,7 +893,10 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 					return expr.resolved_type;
 				}
 			}
-			assert(found);
+			if !found {
+				report_error_at(tc, expr.source_path, expr.line, expr.col, "Use of undeclared identifier '%'", id);
+				return poison_type();
+			}
 			expr.resolved_type = decl.resolved_type;
 			if !sizeof && expr.resolved_type.kind == .Array {
 				expr.resolved_type = New(Resolved_Type);

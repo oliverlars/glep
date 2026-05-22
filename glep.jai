@@ -2696,7 +2696,7 @@ compile_c_backend_output :: (source: string, output: string, stack_size: string)
 	} else {
 		stack_flag := sprint("-Wl,-z,stack-size=%", stack_size);
 	}
-	command := sprint("clang '%' -g -o'%' -lm % -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, stack_flag);
+	command := sprint("clang '%' -g -o'%' -lm % -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality -lglut -lGLU -lGL 2>&1", source, output, stack_flag);
 	result, stdout, stderr := run_command("sh", "-c", command);
 	if result.exit_code != 0 {
 		if stdout.count > 0 print("%", stdout);
