@@ -455,6 +455,11 @@ expand :: (cpp: *Preprocessor, tokens: [..]Token) -> [..]Token {
 						at += 1;
 					}
 				}
+				// M() with params.count >= 1 passes one empty argument.
+				if args.count == 0 && function.params.count > 0 {
+					empty: [..]Token;
+					array_add(*args, empty);
+				}
 
 				va_args: [..]Token;
 				if function.variadic {
@@ -673,46 +678,78 @@ eval :: (cpp: *Preprocessor, tokens: [..]Token, at: *int, min_prec := 0) -> int 
 }
 
 add_all_builtins :: (cpp: *Preprocessor) {
-	add_builtin_object(cpp, "TARGET_CPU_ARM64", "1");
 	add_builtin_object(cpp, "__STDC__", "1");
 	add_builtin_object(cpp, "__STDC_VERSION__", "201112L");
-	add_builtin_object(cpp, "__APPLE__", "1");
-	add_builtin_object(cpp, "__MACH__", "1");
-	add_builtin_object(cpp, "__aarch64__", "1");
-	add_builtin_object(cpp, "__arm64__", "1");
-	add_builtin_object(cpp, "__arm64", "1");
+	add_builtin_object(cpp, "__STDC_HOSTED__", "1");
 	add_builtin_object(cpp, "__LP64__", "1");
 	add_builtin_object(cpp, "_LP64", "1");
 	add_builtin_object(cpp, "__SIZEOF_DOUBLE__", "8");
+	add_builtin_object(cpp, "__SIZEOF_FLOAT__", "4");
 	add_builtin_object(cpp, "__SIZEOF_POINTER__", "8");
 	add_builtin_object(cpp, "__SIZEOF_INT__", "4");
 	add_builtin_object(cpp, "__SIZEOF_LONG__", "8");
-	add_builtin_object(cpp, "__SIZEOF_LONG_DOUBLE__", "8");
 	add_builtin_object(cpp, "__SIZEOF_LONG_LONG__", "8");
 	add_builtin_object(cpp, "__SIZEOF_PTRDIFF_T__", "8");
 	add_builtin_object(cpp, "__SIZEOF_SHORT__", "2");
 	add_builtin_object(cpp, "__SIZEOF_SIZE_T__", "8");
-
-	// HACK(Oliver): These are the wrong sizes...
-	add_builtin_object(cpp, "__INTMAX_TYPE__", "long long");
-	add_builtin_object(cpp, "__UINTMAX_TYPE__", "unsigned long long");
 	add_builtin_object(cpp, "__INT8_TYPE__", "signed char");
 	add_builtin_object(cpp, "__INT16_TYPE__", "short");
 	add_builtin_object(cpp, "__INT32_TYPE__", "int");
-	add_builtin_object(cpp, "__INT64_TYPE__", "long long");
 	add_builtin_object(cpp, "__UINT8_TYPE__", "unsigned char");
 	add_builtin_object(cpp, "__UINT16_TYPE__", "unsigned short");
 	add_builtin_object(cpp, "__UINT32_TYPE__", "unsigned int");
-	add_builtin_object(cpp, "__UINT64_TYPE__", "unsigned long long");
 	add_builtin_object(cpp, "__WCHAR_TYPE__", "int");
-	add_builtin_object(cpp, "__SIZE_TYPE__", "unsigned long");
-	add_builtin_object(cpp, "__PTRDIFF_TYPE__", "long");
-	add_builtin_object(cpp, "__INTPTR_TYPE__", "long");
-	add_builtin_object(cpp, "__UINTPTR_TYPE__", "unsigned long");
 	add_builtin_object(cpp, "va_list", "__builtin_va_list");
 	add_builtin_object(cpp, "va_copy", "__builtin_va_copy");
 	add_builtin_object(cpp, "va_start", "__builtin_va_start");
-	add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
+
+	#if OS == .MACOS {
+		add_builtin_object(cpp, "TARGET_CPU_ARM64", "1");
+		add_builtin_object(cpp, "__APPLE__", "1");
+		add_builtin_object(cpp, "__MACH__", "1");
+		add_builtin_object(cpp, "__aarch64__", "1");
+		add_builtin_object(cpp, "__arm64__", "1");
+		add_builtin_object(cpp, "__arm64", "1");
+		add_builtin_object(cpp, "__SIZEOF_LONG_DOUBLE__", "8");
+
+		// long long on Darwin ARM64
+		add_builtin_object(cpp, "__INTMAX_TYPE__", "long long");
+		add_builtin_object(cpp, "__UINTMAX_TYPE__", "unsigned long long");
+		add_builtin_object(cpp, "__INT64_TYPE__", "long long");
+		add_builtin_object(cpp, "__UINT64_TYPE__", "unsigned long long");
+		add_builtin_object(cpp, "__SIZE_TYPE__", "unsigned long");
+		add_builtin_object(cpp, "__PTRDIFF_TYPE__", "long");
+		add_builtin_object(cpp, "__INTPTR_TYPE__", "long");
+		add_builtin_object(cpp, "__UINTPTR_TYPE__", "unsigned long");
+
+		add_builtin_object(cpp, "__darwin_va_list", "__builtin_va_list");
+	} else #if OS == .LINUX {
+		add_builtin_object(cpp, "__x86_64__", "1");
+		add_builtin_object(cpp, "__x86_64", "1");
+		add_builtin_object(cpp, "__linux__", "1");
+		add_builtin_object(cpp, "__linux", "1");
+		add_builtin_object(cpp, "__gnu_linux__", "1");
+		add_builtin_object(cpp, "__unix__", "1");
+		add_builtin_object(cpp, "__unix", "1");
+		add_builtin_object(cpp, "__SIZEOF_LONG_DOUBLE__", "16");
+		add_builtin_object(cpp, "__USER_LABEL_PREFIX__", "");
+		add_builtin_object(cpp, "__REGISTER_PREFIX__", "");
+
+		// Needed by features.h __GNUC_PREREQ checks.
+		add_builtin_object(cpp, "__GNUC__", "16");
+		add_builtin_object(cpp, "__GNUC_MINOR__", "1");
+		add_builtin_object(cpp, "__GNUC_PATCHLEVEL__", "1");
+
+		// long int on Linux x86_64 (LP64)
+		add_builtin_object(cpp, "__INTMAX_TYPE__", "long int");
+		add_builtin_object(cpp, "__UINTMAX_TYPE__", "unsigned long int");
+		add_builtin_object(cpp, "__INT64_TYPE__", "long int");
+		add_builtin_object(cpp, "__UINT64_TYPE__", "long unsigned int");
+		add_builtin_object(cpp, "__SIZE_TYPE__", "long unsigned int");
+		add_builtin_object(cpp, "__PTRDIFF_TYPE__", "long int");
+		add_builtin_object(cpp, "__INTPTR_TYPE__", "long int");
+		add_builtin_object(cpp, "__UINTPTR_TYPE__", "long unsigned int");
+	}
 
 	add_builtin_object(cpp, "__FLT_MAX__", "3.402823466e+38");
 	add_builtin_object(cpp, "__DBL_MAX__", "1.7976931348623158e+308");
@@ -744,6 +781,40 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 		}
 		skip(cpp, src_tokens);
 		return result;
+	}
+
+	eval_conditional_line :: (cpp: *Preprocessor, line: [..]Token) -> int {
+		no_defineds: [..]Token;
+		at := 0;
+		while at < line.count {
+			if line[at].view == "defined" {
+				defined_token := line[at];
+				at += 1;
+				if line[at].type == .LeftParenthesis {
+					at += 1;
+				}
+				value := table_contains(*cpp.objects, line[at].view).(int);
+				value |= table_contains(*cpp.functions, line[at].view).(int);
+				at += 1;
+				if at < line.count && line[at].type == .RightParenthesis {
+					at += 1;
+				}
+				value_token: Token;
+				value_token.view = tprint("%", value);
+				value_token.type = .Number;
+				value_token.number_type = .Decimal;
+				value_token.source_path = defined_token.source_path;
+				value_token.line = defined_token.line;
+				value_token.col = defined_token.col;
+				array_add(*no_defineds, value_token);
+			} else {
+				array_add(*no_defineds, line[at]);
+				at += 1;
+			}
+		}
+		expanded := expand(cpp, no_defineds);
+		start := 0;
+		return eval(cpp, expanded, *start);
 	}
 
 	end :: (cpp: *Preprocessor, src_tokens: [..]Token) -> bool {
@@ -856,6 +927,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 								}
 								if full_path.count == 0 {
 									print("Could not resolve include \"%\" from %\n", include_path, peek(cpp.path_stack));
+									skip_line(cpp, src_tokens);
+									continue;
 								}
 								if !table_contains(*cpp.includes, full_path) {
 									table_add(*cpp.includes, full_path, false);
@@ -885,6 +958,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							full_path = resolve_system_include(cpp, path);
 							if full_path.count == 0 {
 								print("Could not resolve system include <%> from %\n", path, peek(cpp.path_stack));
+								skip_line(cpp, src_tokens);
+								continue;
 							}
 							if !table_find(*cpp.includes, full_path) {
 								if !table_contains(*cpp.includes, full_path) {
@@ -912,20 +987,10 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						table_remove(*cpp.objects, skip(cpp, src_tokens).view);
 					case "elif";
 						line := copy_line(cpp, src_tokens);
-						// if peek(cpp.cond_stack).branch_taken {
-						// 	print("NOT TAKING ");
-						// }
-						// print("#elif ");
-						// for line {
-						// 	print("% ", it.view);
-						// }
-						// print("\n");
 						if peek(cpp.cond_stack).branch_taken {
 							skip_until_el(cpp, src_tokens);
 						} else {
-							start := 0;
-							expr := eval(cpp, line, *start);
-							//print("EXPR: %", expr);
+							expr := eval_conditional_line(cpp, line);
 							if expr != 0 {
 								peek_pointer(cpp.cond_stack).branch_taken = true;
 							} else {
@@ -955,47 +1020,7 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							expr = (!table_contains(*cpp.objects, name.view)).(int);
 							expr &= (!table_contains(*cpp.functions, name.view)).(int);
 						} else {
-							to_expand := line;
-							// print("#if ");
-							// for to_expand {
-							// 	print("% ", it.view);
-							// }
-							// print("\n");
-							no_defineds: [..]Token;
-							at := 0;
-							//print("TO_EXPAND: %\n", to_expand);
-								while at < to_expand.count {
-									// Hack maybe?
-									if to_expand[at].view == "defined" {
-										defined_token := to_expand[at];
-										at += 1; // 'defined'
-										if to_expand[at].type == .LeftParenthesis {
-											at += 1;
-										}
-										value := table_contains(*cpp.objects, to_expand[at].view).(int);
-										value |= table_contains(*cpp.functions, to_expand[at].view).(int);
-										//print("ID TO CHECK: %\n", to_expand[at]);
-										at += 1;
-										if at < to_expand.count && to_expand[at].type == .RightParenthesis {
-											at += 1;
-										}
-										value_token: Token;
-										value_token.view = tprint("%", value);
-										value_token.type = .Number;
-										value_token.number_type = .Decimal;
-										value_token.source_path = defined_token.source_path;
-										value_token.line = defined_token.line;
-										value_token.col = defined_token.col;
-										array_add(*no_defineds, value_token);
-									} else {
-										array_add(*no_defineds, to_expand[at]);
-										at += 1;
-								}
-							}
-							expanded := expand(cpp, no_defineds);
-							start := 0;
-							expr = eval(cpp, expanded, *start);
-							//print("EVAL: %\n", expr);
+							expr = eval_conditional_line(cpp, line);
 						}
 						push_cond(cpp, expr != 0);
 						if expr == 0 {

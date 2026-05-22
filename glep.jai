@@ -565,7 +565,7 @@ is_suffix :: (char: int) -> bool {
 }
 
 tokenise :: (t: *Tokeniser) {
-	is_ws    :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char " " || t.source[t.at] == #char "\t"; }
+	is_ws    :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; c := t.source[t.at]; return c == #char " " || c == #char "\t" || c == 0x0B || c == 0x0C; }
 	is_newline :: (t: *Tokeniser) -> bool { if t.at >= t.source.count return false; return t.source[t.at] == #char "\n" || t.source[t.at] == #char "\r"; }
 	is_ident :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] == #char "_" || ((t.source[t.at] >= #char "a") && (t.source[t.at] <= #char "z")) || ((t.source[t.at] >= #char "A") && (t.source[t.at] <= #char "Z")); }
 	is_num   :: (t: *Tokeniser) -> bool   { if t.at >= t.source.count return false; return t.source[t.at] >= #char "0" && t.source[t.at] <= #char "9"; }
@@ -998,10 +998,16 @@ is_typedef :: (info: Node_Decl_Info) -> bool {
 
 is_type_qualifier :: (token: Token) -> bool {
 	if token.view == {
-	case "const";    #through;
-	case "volatile"; #through;
-	case "_Atomic"; #through;
-	case "restrict";
+	case "const";      #through;
+	case "__const";    #through;
+	case "__const__";  #through;
+	case "volatile";   #through;
+	case "__volatile"; #through;
+	case "__volatile__"; #through;
+	case "_Atomic";    #through;
+	case "restrict";   #through;
+	case "__restrict"; #through;
+	case "__restrict__";
 		return true;
 	case;
 		return false;
@@ -1876,6 +1882,26 @@ parse_param_decl :: (p: *Parser) -> *Node_Decl {
 }
 
 parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
+	skip_gcc_decl_suffixes :: (p: *Parser) {
+		while current(p).view == "__asm__" || current(p).view == "asm" ||
+			  current(p).view == "__attribute__" || current(p).view == "__attribute" {
+			skip(p);
+			depth := 0;
+			while p.at < p.tokens.count {
+				if current(p).type == .LeftParenthesis {
+					depth += 1;
+					skip(p);
+				} else if current(p).type == .RightParenthesis {
+					depth -= 1;
+					skip(p);
+					if depth == 0 break;
+				} else {
+					skip(p);
+				}
+			}
+		}
+	}
+
 	declarator: *Node_Declarator;
 	if current(p).type == .LeftParenthesis {
 		if !is_declaration_start(p, next(p)) {
@@ -1888,6 +1914,8 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 		declarator.(*Node_Identifier_Declarator).name = current(p).view;
 		skip(p);
 	}
+
+	skip_gcc_decl_suffixes(p);
 
 	while current(p).type == .LeftParenthesis || current(p).type == .LeftBracket {
 		if current(p).type == .LeftParenthesis {
@@ -1925,6 +1953,7 @@ parse_direct_declarator :: (p: *Parser) -> *Node_Declarator {
 			declarator = array;
 			expect(p, .RightBracket);
 		}
+		skip_gcc_decl_suffixes(p);
 	}
 	return declarator;
 }
@@ -2661,7 +2690,12 @@ reset_debug_artifacts :: () {
 }
 
 compile_c_backend_output :: (source: string, output: string, stack_size: string) -> bool {
-	command := sprint("clang '%' -g -o'%' -lm -Wl,-stack_size,% -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, stack_size);
+	#if OS == .MACOS {
+		stack_flag := sprint("-Wl,-stack_size,%", stack_size);
+	} else {
+		stack_flag := sprint("-Wl,-z,stack-size=%", stack_size);
+	}
+	command := sprint("clang '%' -g -o'%' -lm % -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality 2>&1", source, output, stack_flag);
 	result, stdout, stderr := run_command("sh", "-c", command);
 	if result.exit_code != 0 {
 		if stdout.count > 0 print("%", stdout);
@@ -2680,8 +2714,14 @@ run_test :: (filename: string) -> passed: bool {
 	glep_asm  := sprint("tests/build/%.s", base);
 	glep_c    := sprint("tests/build/%.c", base);
 
+	#if OS == .MACOS {
+		test_stack_flag :: "-Wl,-stack_size,0x1000000";
+	} else {
+		test_stack_flag :: "-Wl,-z,stack-size=0x1000000";
+	}
+
 	// Compile with clang
-	cc_result, clang_cc_out, clang_cc_err := run_command("sh", "-c", sprint("clang '%' -o'%' -lm -Wl,-stack_size,0x1000000 2>&1", filename, clang_exe));
+	cc_result, clang_cc_out, clang_cc_err := run_command("sh", "-c", sprint("clang '%' -o'%' -lm % 2>&1", filename, clang_exe, test_stack_flag));
 	if cc_result.exit_code != 0 {
 		print("  SKIP (clang compile failed): %\n", filename);
 		return false;
@@ -2746,7 +2786,7 @@ run_test :: (filename: string) -> passed: bool {
 	run_command("sh", "-c", sprint("cp out.c '%'", glep_c));
 
 	// Assemble with clang
-	asm_result, asm_out, asm_err := run_command("sh", "-c", sprint("clang out.s -o'%' -lm -Wl,-stack_size,0x1000000 2>&1", glep_exe));
+	asm_result, asm_out, asm_err := run_command("sh", "-c", sprint("clang out.s -o'%' -lm % 2>&1", glep_exe, test_stack_flag));
 	if asm_result.exit_code != 0 {
 		print("  FAIL (asm link): %\n", filename);
 		return false;
