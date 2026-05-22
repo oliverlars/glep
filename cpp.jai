@@ -129,34 +129,63 @@ add_include_path :: (paths: *[..]string, path: string) {
 }
 
 configure_system_include_paths :: (cpp: *Preprocessor) {
-	sdk_path := command_output("xcrun --sdk macosx --show-sdk-path");
-	clang_path := command_output("xcrun --find clang");
-	resource_dir := "";
-	if clang_path.count > 0 {
-		resource_dir = command_output(tprint("'%' -print-resource-dir", clang_path));
-	}
-	if resource_dir.count == 0 {
-		resource_dir = command_output("clang -print-resource-dir");
-	}
-	toolchain_usr := dirname(dirname(clang_path));
+	#if OS == .MACOS {
+		sdk_path := command_output("xcrun --sdk macosx --show-sdk-path");
+		clang_path := command_output("xcrun --find clang");
+		resource_dir := "";
+		if clang_path.count > 0 {
+			resource_dir = command_output(tprint("'%' -print-resource-dir", clang_path));
+		}
+		if resource_dir.count == 0 {
+			resource_dir = command_output("clang -print-resource-dir");
+		}
+		toolchain_usr := dirname(dirname(clang_path));
 
-	add_include_path(*cpp.include_paths, "/usr/local/include");
-	if sdk_path.count > 0 {
-		add_include_path(*cpp.include_paths, tprint("%/usr/local/include", sdk_path));
-	}
-	if resource_dir.count > 0 {
-		add_include_path(*cpp.include_paths, tprint("%/include", resource_dir));
-	}
-	if sdk_path.count > 0 {
-		add_include_path(*cpp.include_paths, tprint("%/usr/include", sdk_path));
-	}
-	if toolchain_usr.count > 0 {
-		add_include_path(*cpp.include_paths, tprint("%/include", toolchain_usr));
-	}
-	if sdk_path.count > 0 {
-		add_include_path(*cpp.framework_paths, tprint("%/System/Library/Frameworks", sdk_path));
-		add_include_path(*cpp.framework_paths, tprint("%/System/Library/SubFrameworks", sdk_path));
-		add_include_path(*cpp.framework_paths, tprint("%/Library/Frameworks", sdk_path));
+		add_include_path(*cpp.include_paths, "/usr/local/include");
+		if sdk_path.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("%/usr/local/include", sdk_path));
+		}
+		if resource_dir.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("%/include", resource_dir));
+		}
+		if sdk_path.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("%/usr/include", sdk_path));
+		}
+		if toolchain_usr.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("%/include", toolchain_usr));
+		}
+		if sdk_path.count > 0 {
+			add_include_path(*cpp.framework_paths, tprint("%/System/Library/Frameworks", sdk_path));
+			add_include_path(*cpp.framework_paths, tprint("%/System/Library/SubFrameworks", sdk_path));
+			add_include_path(*cpp.framework_paths, tprint("%/Library/Frameworks", sdk_path));
+		}
+	} else #if OS == .LINUX {
+		clang_resource_dir := command_output("clang -print-resource-dir 2>/dev/null");
+		gcc_include := command_output("gcc -print-file-name=include 2>/dev/null");
+		multiarch := command_output("gcc -print-multiarch 2>/dev/null");
+		if multiarch.count == 0 {
+			multiarch = command_output("clang -print-multiarch 2>/dev/null");
+		}
+
+		add_include_path(*cpp.include_paths, "/usr/local/include");
+
+		if clang_resource_dir.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("%/include", clang_resource_dir));
+		}
+
+		if gcc_include.count > 0 && gcc_include != "include" {
+			add_include_path(*cpp.include_paths, gcc_include);
+			gcc_include_fixed := tprint("%/include-fixed", dirname(gcc_include));
+			if file_exists(gcc_include_fixed) {
+				add_include_path(*cpp.include_paths, gcc_include_fixed);
+			}
+		}
+
+		if multiarch.count > 0 {
+			add_include_path(*cpp.include_paths, tprint("/usr/local/include/%", multiarch));
+			add_include_path(*cpp.include_paths, tprint("/usr/include/%", multiarch));
+		}
+		add_include_path(*cpp.include_paths, "/usr/include");
 	}
 }
 
