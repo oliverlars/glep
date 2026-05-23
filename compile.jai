@@ -1089,7 +1089,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 				memcpy(bytes.data + byte_offset, str_bytes.data, copy_count);
 				return byte_offset + target_type.size_in_bytes;
 			}
-			value := convert_constant(eval_constant_expr(*compiler.enums, expr), target_type);
+			value := convert_constant(eval_constant_expr(*compiler.enums, expr, *compiler.ordinary), target_type);
 			if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {
 					f32_val := cast(float32) value.as_f64;

@@ -301,7 +301,7 @@ parse_escape :: (s: string, start: int) -> (val: int, len: int) {
 	return cast(int) c, 1;
 }
 
-eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constant {
+eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: *Table(string, *Node) = null) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
 		case Node_Unary;
@@ -309,18 +309,18 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constan
 			op := unary.op;
 			if op.type == {
 				case .Minus;
-					return -eval_constant_expr(_enums, unary.expr);
+					return -eval_constant_expr(_enums, unary.expr, ordinary);
 				case .Plus;
-					return +eval_constant_expr(_enums, unary.expr);
+					return +eval_constant_expr(_enums, unary.expr, ordinary);
 				case .Bang;
-					return !eval_constant_expr(_enums, unary.expr);
+					return !eval_constant_expr(_enums, unary.expr, ordinary);
 				case .Tilde;
-					return ~eval_constant_expr(_enums, unary.expr);
+					return ~eval_constant_expr(_enums, unary.expr, ordinary);
 			}
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
-			left  := eval_constant_expr(_enums, expr.(*Node_Binary).left);
-			right := eval_constant_expr(_enums, expr.(*Node_Binary).right);
+			left  := eval_constant_expr(_enums, expr.(*Node_Binary).left,  ordinary);
+			right := eval_constant_expr(_enums, expr.(*Node_Binary).right, ordinary);
 
 			if op.type == {
 				case .Plus;
@@ -353,7 +353,7 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constan
 			}
 		case Node_Cast;
 			c := expr.(*Node_Cast);
-			return convert_constant(eval_constant_expr(_enums, c.expr), c.resolved_type);
+			return convert_constant(eval_constant_expr(_enums, c.expr, ordinary), c.resolved_type);
 		case Node_Sizeof_Expr;
 			sizeof := expr.(*Node_Sizeof_Expr);
 			return .{ kind = .U64, as_u64 = sizeof.expr.resolved_type.size_in_bytes.(u64) };
@@ -368,9 +368,28 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr) -> Constan
 			return .{ kind = .U64, as_u64 = value.(u64) };
 		case Node_Identifier;
 			id := expr.(*Node_Identifier).id.view;
+
+			// 1. Try enum constants.
 			found, value := table_find(_enums, id);
-			assert(found, tprint("Unknown identifier in constant expression: %", id));
-			return .{ kind = .U64, as_u64 = value.(u64) };
+			if found return .{ kind = .U64, as_u64 = value.(u64) };
+
+			// 2. Fall back to a global decl's scalar initializer (e.g. `const int FOO = 5;`).
+			if ordinary {
+				found_decl, decl_node := table_find(ordinary, id);
+				if found_decl && decl_node && decl_node.type == Node_Decl {
+					decl := decl_node.(*Node_Decl);
+					for declarator: decl.declarators {
+						if identifier_from_declarator(declarator) != id continue;
+						if !declarator.init continue;
+						if declarator.init.initializer_type != Node_Scalar_Initializer continue;
+						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
+						return eval_constant_expr(_enums, init_expr, ordinary);
+					}
+				}
+			}
+
+			assert(false, tprint("Unknown identifier in constant expression: %", id));
+			return .{};
 	}
 	return .{};
 }

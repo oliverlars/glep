@@ -1041,6 +1041,7 @@ is_type_specifier :: (token: Token) -> bool {
 	case "unsigned"; #through;
 	case "_Float16"; #through;
 	case "__uint128_t"; #through;
+	case "__thread"; #through;
 	case "_Atomic"; #through;
 	case "_Bool"; #through;
 	case "__builtin_va_list"; #through;
@@ -2579,6 +2580,12 @@ Options :: struct {
 	output_name:           string;
 	stack_size:            string;
 	trace_functions:       [..]string;
+	linker_args:           [..]string;
+	include_paths:         [..]string;
+	defines:               [..]string; // each entry is "NAME" or "NAME=VALUE"
+	debug:                 bool;
+	optimise:              bool;
+	make_executable:       bool; // false (default) -> .o; true (-exe) -> linked binary
 	write_debug_artifacts: bool;
 	run_tests:             bool;
 }
@@ -2587,19 +2594,38 @@ print_usage :: () {
 	print("Usage: glep [options] <source>\n");
 	print("\n");
 	print("Options:\n");
-	print("  -o, -output <name>     Output binary name (default: out)\n");
+	print("  -o, -output <name>     Output name (default: out)\n");
+	print("  -c                     Produce an object file [default]\n");
+	print("  -exe                   Produce a linked executable instead\n");
+	print("  -debug                 Pass -g to the C backend\n");
+	print("  -opt                   Pass -O2 to the C backend (default: -O0)\n");
+	print("  -include <dir>         Add <dir> to the include search path (repeatable)\n");
+	print("  -I<dir>                Same as -include <dir>\n");
+	print("  -D<name>[=<value>]     Define a preprocessor macro (repeatable)\n");
 	print("  -trace <fn>            Trace calls to <fn> (repeatable)\n");
-	print("  -stack-size <hex>      Linker stack size (default: %)\n", DEFAULT_STACK_SIZE);
+	print("  -stack-size <hex>      Linker stack size when -exe (default: %)\n", DEFAULT_STACK_SIZE);
 	print("  -no-debug-artifacts    Don't write the %/ directory\n", DEBUG_ARTIFACT_DIR);
 	print("  -run-tests             Run the tests/ harness and exit\n");
+	print("  -l<lib>                Link against library <lib> (-exe only)\n");
+	print("  -L<dir>                Add <dir> to the linker search path (-exe only)\n");
+	print("  -Xlinker <arg>         Pass <arg> through to the linker (-exe only)\n");
+	print("  -Wl,<arg>[,<arg>...]   Pass comma-separated args through to the linker (-exe only)\n");
 	print("  -h, -help              Show this help\n");
 }
 
-parse_options :: (args: []string) -> Options, ok: bool {
+parse_options :: (args: []string) -> Options {
 	opts: Options;
 	opts.output_name           = "out";
 	opts.stack_size            = DEFAULT_STACK_SIZE;
 	opts.write_debug_artifacts = true;
+
+	require_value :: (arg: string, it: int, args: []string) #expand {
+		if it + 1 >= args.count {
+			print("Missing value for %\n\n", arg);
+			print_usage();
+			exit(1);
+		}
+	}
 
 	it := 1;
 	while it < args.count {
@@ -2608,49 +2634,70 @@ parse_options :: (args: []string) -> Options, ok: bool {
 
 		if arg == "-h" || arg == "-help" || arg == "--help" {
 			print_usage();
-			return opts, false;
+			exit(0);
 		} else if arg == "-o" || arg == "-output" {
-			if it + 1 >= args.count {
-				print("Missing value for %\n\n", arg);
-				print_usage();
-				return opts, false;
-			}
+			require_value(arg, it, args);
 			opts.output_name = args[it + 1];
 			it += 1;
 		} else if arg == "-trace" {
-			if it + 1 >= args.count {
-				print("Missing value for %\n\n", arg);
-				print_usage();
-				return opts, false;
-			}
+			require_value(arg, it, args);
 			array_add(*opts.trace_functions, args[it + 1]);
 			it += 1;
 		} else if arg == "-stack-size" {
-			if it + 1 >= args.count {
-				print("Missing value for %\n\n", arg);
-				print_usage();
-				return opts, false;
-			}
+			require_value(arg, it, args);
 			opts.stack_size = args[it + 1];
 			it += 1;
 		} else if arg == "-no-debug-artifacts" {
 			opts.write_debug_artifacts = false;
 		} else if arg == "-run-tests" {
 			opts.run_tests = true;
+		} else if arg == "-debug" {
+			opts.debug = true;
+		} else if arg == "-opt" {
+			opts.optimise = true;
+		} else if arg == "-exe" {
+			opts.make_executable = true;
+		} else if arg == "-c" {
+			opts.make_executable = false;
+		} else if arg == "-include" {
+			require_value(arg, it, args);
+			array_add(*opts.include_paths, args[it + 1]);
+			it += 1;
+		} else if begins_with(arg, "-I") && arg.count > 2 {
+			array_add(*opts.include_paths, slice(arg, 2, arg.count - 2));
+		} else if arg == "-D" {
+			require_value(arg, it, args);
+			array_add(*opts.defines, args[it + 1]);
+			it += 1;
+		} else if begins_with(arg, "-D") && arg.count > 2 {
+			array_add(*opts.defines, slice(arg, 2, arg.count - 2));
+		} else if arg == "-Xlinker" {
+			require_value(arg, it, args);
+			array_add(*opts.linker_args, args[it + 1]);
+			it += 1;
+		} else if begins_with(arg, "-Wl,") {
+			rest := slice(arg, 4, arg.count - 4);
+			for split(rest, ",") {
+				if it.count > 0 array_add(*opts.linker_args, it);
+			}
+		} else if begins_with(arg, "-l") && arg.count > 2 {
+			array_add(*opts.linker_args, arg);
+		} else if begins_with(arg, "-L") && arg.count > 2 {
+			array_add(*opts.linker_args, arg);
 		} else if arg.count > 0 && arg[0] == #char "-" {
 			print("Unknown option: %\n\n", arg);
 			print_usage();
-			return opts, false;
+			exit(1);
 		} else if opts.filename == "" {
 			opts.filename = arg;
 		} else {
 			print("Unexpected argument: %\n\n", arg);
 			print_usage();
-			return opts, false;
+			exit(1);
 		}
 	}
 
-	return opts, true;
+	return opts;
 }
 
 append_token_as_c :: (builder: *String_Builder, token: Token) {
@@ -2690,22 +2737,52 @@ reset_debug_artifacts :: () {
 	make_directory_if_it_does_not_exist(DEBUG_ARTIFACT_DIR, recursive = true);
 }
 
-compile_c_backend_output :: (source: string, output: string, stack_size: string) -> bool {
-	#if OS == .MACOS {
-		stack_flag := sprint("-Wl,-stack_size,%", stack_size);
+compile_c_backend_output :: (source: string, output: string, opts: Options) -> bool {
+	WARNINGS :: "-Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality";
+
+	flags_builder: String_Builder;
+	if opts.debug    append(*flags_builder, " -g");
+	if opts.optimise append(*flags_builder, " -O2");
+	for opts.include_paths {
+		append(*flags_builder, sprint(" -I'%'", it));
+	}
+	for opts.defines {
+		append(*flags_builder, sprint(" '-D%'", it));
+	}
+
+	if opts.make_executable {
+		#if OS == .MACOS {
+			stack_flag := sprint("-Wl,-stack_size,%", opts.stack_size);
+		} else {
+			stack_flag := sprint("-Wl,-z,stack-size=%", opts.stack_size);
+		}
+		for opts.linker_args {
+			append(*flags_builder, sprint(" '%'", it));
+		}
+		flags := builder_to_string(*flags_builder);
+		command := sprint("clang '%' -o'%' -lm % % % 2>&1", source, output, stack_flag, WARNINGS, flags);
+		result, stdout, stderr := run_command("sh", "-c", command);
+		if result.exit_code != 0 {
+			if stdout.count > 0 print("%", stdout);
+			if stderr.count > 0 print("%", stderr);
+			print("C backend link failed: %\n", command);
+			return false;
+		}
+		print("Wrote % from % (stack %)\n", output, source, opts.stack_size);
+		return true;
 	} else {
-		stack_flag := sprint("-Wl,-z,stack-size=%", stack_size);
+		flags := builder_to_string(*flags_builder);
+		command := sprint("clang -c '%' -o'%' % % 2>&1", source, output, WARNINGS, flags);
+		result, stdout, stderr := run_command("sh", "-c", command);
+		if result.exit_code != 0 {
+			if stdout.count > 0 print("%", stdout);
+			if stderr.count > 0 print("%", stderr);
+			print("C backend compile failed: %\n", command);
+			return false;
+		}
+		print("Wrote % from %\n", output, source);
+		return true;
 	}
-	command := sprint("clang '%' -g -o'%' -lm % -Wno-incompatible-library-redeclaration -Wno-builtin-requires-header -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-parentheses-equality -lglut -lGLU -lGL 2>&1", source, output, stack_flag);
-	result, stdout, stderr := run_command("sh", "-c", command);
-	if result.exit_code != 0 {
-		if stdout.count > 0 print("%", stdout);
-		if stderr.count > 0 print("%", stderr);
-		print("C backend compile failed: %\n", command);
-		return false;
-	}
-	print("Wrote % from % (stack %)\n", output, source, stack_size);
-	return true;
 }
 
 run_test :: (filename: string) -> passed: bool {
@@ -2846,8 +2923,7 @@ main :: () {
 	args := get_command_line_arguments();
 	defer array_free(args);
 
-	opts, ok := parse_options(args);
-	if !ok return;
+	opts := parse_options(args);
 
 	if opts.run_tests {
 		reset_debug_artifacts();
@@ -2857,7 +2933,7 @@ main :: () {
 
 	if opts.filename == "" {
 		print_usage();
-		return;
+		exit(1);
 	}
 
 	if opts.write_debug_artifacts then reset_debug_artifacts();
@@ -2876,6 +2952,21 @@ main :: () {
 	cpp: Preprocessor;
 	array_add(*cpp.path_stack, get_absolute_path(filename));
 	add_all_builtins(*cpp);
+	for opts.include_paths {
+		add_include_path(*cpp.include_paths, it);
+	}
+	for opts.defines {
+		name  := it;
+		value := "1";
+		for i: 0..it.count - 1 {
+			if it[i] == #char "=" {
+				name  = slice(it, 0, i);
+				value = slice(it, i + 1, it.count - i - 1);
+				break;
+			}
+		}
+		add_builtin_object(*cpp, name, value);
+	}
 	tokens := preprocess(*cpp, tokeniser.tokens);
 	if opts.write_debug_artifacts {
 		write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
@@ -2906,7 +2997,7 @@ main :: () {
 
 	typechecker.filename = filename;
 	typechecker.ordinary = parser.ordinary;
-	if !typecheck(*typechecker, tu) then return;
+	if !typecheck(*typechecker, tu) then exit(1);
 
 	compiler: Compiler;
 	compiler.strings = parser.strings;
@@ -2945,5 +3036,5 @@ main :: () {
 
 	out_c := sprint("%.c", output_name);
 	write_entire_file(out_c, ir_c);
-	compile_c_backend_output(out_c, output_name, opts.stack_size);
+	if !compile_c_backend_output(out_c, output_name, opts) then exit(1);
 }

@@ -38,11 +38,22 @@ pop_cond :: (cpp: *Preprocessor) {
 	cpp.cond_stack.count -= 1;
 }
 
-current :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { 
-	token := src_tokens[cpp.at];
-	return token;
+current :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token {
+	if cpp.at >= src_tokens.count {
+		eof: Token;
+		eof.type = .Newline; // sentinel so newline-terminated loops exit cleanly at EOF
+		return eof;
+	}
+	return src_tokens[cpp.at];
 }
-next :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { return src_tokens[cpp.at + 1]; }
+next :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token {
+	if cpp.at + 1 >= src_tokens.count {
+		eof: Token;
+		eof.type = .Newline;
+		return eof;
+	}
+	return src_tokens[cpp.at + 1];
+}
 peek :: (cpp: *Preprocessor, src_tokens: [..]Token, amount := 0) -> Token { return src_tokens[min(src_tokens.count - 1, cpp.at + amount)]; }
 skip :: (cpp: *Preprocessor, src_tokens: [..]Token) -> Token { 
 	result := src_tokens[cpp.at];
