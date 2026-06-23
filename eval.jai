@@ -301,6 +301,61 @@ parse_escape :: (s: string, start: int) -> (val: int, len: int) {
 	return cast(int) c, 1;
 }
 
+is_expr_constant :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: *Table(string, *Node) = null) -> bool {
+	if !expr return true;
+	if expr.expr_type == {
+		case Node_Unary;
+			unary := expr.(*Node_Unary);
+			return is_expr_constant(_enums, unary.expr, ordinary);
+		case Node_Binary;
+			op := expr.(*Node_Binary).op;
+			left  := is_expr_constant(_enums, expr.(*Node_Binary).left,  ordinary);
+			right := is_expr_constant(_enums, expr.(*Node_Binary).right, ordinary);
+			return left && right;
+		case Node_Number;
+			number := expr.(*Node_Number);
+			return true;
+		case Node_Cast;
+			c := expr.(*Node_Cast);
+			return is_expr_constant(_enums, c.expr, ordinary);
+		case Node_Sizeof_Expr;
+			sizeof := expr.(*Node_Sizeof_Expr);
+			return true;
+		case Node_Sizeof_Type;
+			sizeof := expr.(*Node_Sizeof_Type);
+			return true;
+		case Node_Alignof_Type;
+			alignof := expr.(*Node_Alignof_Type);
+			return true;
+		case Node_Char;
+			value := eval_char_literal(expr.(*Node_Char).token.view);
+			return true;
+		case Node_Identifier;
+			id := expr.(*Node_Identifier).id.view;
+
+			found, value := table_find(_enums, id);
+			if found return true;
+
+			if ordinary {
+				found_decl, decl_node := table_find(ordinary, id);
+				if found_decl && decl_node && decl_node.type == Node_Decl {
+					decl := decl_node.(*Node_Decl);
+					for declarator: decl.declarators {
+						if identifier_from_declarator(declarator) != id continue;
+						if !declarator.init continue;
+						if declarator.init.initializer_type != Node_Scalar_Initializer continue;
+						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
+						return is_expr_constant(_enums, init_expr, ordinary);
+					}
+				}
+			}
+
+			assert(false, tprint("Unknown identifier in constant expression: %", id));
+			return false;
+	}
+	return false;
+}
+
 eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: *Table(string, *Node) = null) -> Constant {
 	if !expr return .{};
 	if expr.expr_type == {
