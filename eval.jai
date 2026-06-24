@@ -1,4 +1,5 @@
 Constant :: struct {
+	symbol: string;
 	kind: enum { F64; U64; S64; };
 	as_f64: float64;
 	#overlay(as_f64) as_u64: u64;
@@ -8,9 +9,9 @@ Constant :: struct {
 operator - :: (v: Constant) -> Constant {
 	result: Constant = ---;
 	if v.kind == {
-		case .S64; result = .{ kind = .S64, as_s64 = -v.as_s64 };
-		case .U64; result = .{ kind = .S64, as_s64 = -v.as_u64.(s64) };
-		case .F64; result = .{ kind = .F64, as_f64 = -v.as_f64 };
+		case .S64; result = .{ symbol = v.symbol, kind = .S64, as_s64 = -v.as_s64 };
+		case .U64; result = .{ symbol = v.symbol, kind = .S64, as_s64 = -v.as_u64.(s64) };
+		case .F64; result = .{ symbol = v.symbol, kind = .F64, as_f64 = -v.as_f64 };
 	}
 	return result;
 }
@@ -21,167 +22,263 @@ operator + :: (v: Constant) -> Constant {
 
 operator ~ :: (v: Constant) -> Constant {
 	if v.kind == {
-		case .S64; return .{ kind = .S64, as_s64 = ~v.as_s64 };
-		case .U64; return .{ kind = .U64, as_u64 = ~v.as_u64 };
+		case .S64; return .{ symbol = v.symbol, kind = .S64, as_s64 = ~v.as_s64 };
+		case .U64; return .{ symbol = v.symbol, kind = .U64, as_u64 = ~v.as_u64 };
 		case; assert(false); return .{};
 	}
 }
 
 operator ! :: (v: Constant) -> Constant {
 	if v.kind == {
-		case .S64; return .{ kind = .S64, as_s64 = (v.as_s64 == 0).(s64) };
-		case .U64; return .{ kind = .U64, as_u64 = (v.as_u64 == 0).(u64) };
-		case .F64; return .{ kind = .S64, as_s64 = (v.as_f64 == 0).(s64) };
+		case .S64; return .{ symbol = v.symbol, kind = .S64, as_s64 = (v.as_s64 == 0).(s64) };
+		case .U64; return .{ symbol = v.symbol, kind = .U64, as_u64 = (v.as_u64 == 0).(u64) };
+		case .F64; return .{ symbol = v.symbol, kind = .S64, as_s64 = (v.as_f64 == 0).(s64) };
 	}
 	assert(false);
 	return .{};
 }
 
 operator + :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .F64, as_f64 = to_f64(a) + to_f64(b) };
+		return .{ symbol = symbol, kind = .F64, as_f64 = to_f64(a) + to_f64(b) };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) + to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) + to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 + b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 + b.as_s64 };
 	}
 }
 
 operator - :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .F64, as_f64 = to_f64(a) - to_f64(b) };
+		return .{ symbol = symbol, kind = .F64, as_f64 = to_f64(a) - to_f64(b) };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) - to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) - to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 - b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 - b.as_s64 };
 	}
 }
 
 operator * :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .F64, as_f64 = to_f64(a) * to_f64(b) };
+		return .{ symbol = symbol, kind = .F64, as_f64 = to_f64(a) * to_f64(b) };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) * to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) * to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 * b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 * b.as_s64 };
 	}
 }
 
 operator / :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .F64, as_f64 = to_f64(a) / to_f64(b) };
+		return .{ symbol = symbol, kind = .F64, as_f64 = to_f64(a) / to_f64(b) };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) / to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) / to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 / b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 / b.as_s64 };
 	}
 }
 
 operator % :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) % to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) % to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 % b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 % b.as_s64 };
 	}
 }
 
 operator << :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 {
-		return .{ kind = .U64, as_u64 = a.as_u64 << to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = a.as_u64 << to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 << to_u64(b) };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 << to_u64(b) };
 	}
 }
 
 operator >> :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 {
-		return .{ kind = .U64, as_u64 = a.as_u64 >> to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = a.as_u64 >> to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 >> to_u64(b) };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 >> to_u64(b) };
 	}
 }
 
 operator & :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) & to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) & to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 & b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 & b.as_s64 };
 	}
 }
 
 operator | :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) | to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) | to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 | b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 | b.as_s64 };
 	}
 }
 
 operator ^ :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .U64, as_u64 = to_u64(a) ^ to_u64(b) };
+		return .{ symbol = symbol, kind = .U64, as_u64 = to_u64(a) ^ to_u64(b) };
 	} else {
-		return .{ kind = .S64, as_s64 = a.as_s64 ^ b.as_s64 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = a.as_s64 ^ b.as_s64 };
 	}
 }
 
 operator == :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) == to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) == to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) == to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) == to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 == b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx a.as_s64 == b.as_s64 then 1 else 0 };
 	}
 }
 
 operator != :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) != to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) != to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) != to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) != to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 != b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx a.as_s64 != b.as_s64 then 1 else 0 };
 	}
 }
 
 operator < :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) < to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) < to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) < to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) < to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 < b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol,  kind = .S64, as_s64 = ifx a.as_s64 < b.as_s64 then 1 else 0 };
 	}
 }
 
 operator > :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) > to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) > to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) > to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) > to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 > b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx a.as_s64 > b.as_s64 then 1 else 0 };
 	}
 }
 
 operator <= :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) <= to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) <= to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) <= to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) <= to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 <= b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx a.as_s64 <= b.as_s64 then 1 else 0 };
 	}
 }
 
 operator >= :: (a: Constant, b: Constant) -> Constant {
+	symbol: string;
+	if a.symbol {
+		symbol = a.symbol;
+	} else if b.symbol {
+		symbol = b.symbol;
+	}
 	if a.kind == .F64 || b.kind == .F64 {
-		return .{ kind = .S64, as_s64 = ifx to_f64(a) >= to_f64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_f64(a) >= to_f64(b) then 1 else 0 };
 	} else if a.kind == .U64 || b.kind == .U64 {
-		return .{ kind = .S64, as_s64 = ifx to_u64(a) >= to_u64(b) then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx to_u64(a) >= to_u64(b) then 1 else 0 };
 	} else {
-		return .{ kind = .S64, as_s64 = ifx a.as_s64 >= b.as_s64 then 1 else 0 };
+		return .{ symbol = symbol, kind = .S64, as_s64 = ifx a.as_s64 >= b.as_s64 then 1 else 0 };
 	}
 }
 
@@ -429,16 +526,16 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: 
 			if found return .{ kind = .U64, as_u64 = value.(u64) };
 
 			// 2. Fall back to a global decl's scalar initializer (e.g. `const int FOO = 5;`).
-			if ordinary {
-				found_decl, decl_node := table_find(ordinary, id);
-				if found_decl && decl_node && decl_node.type == Node_Decl {
-					decl := decl_node.(*Node_Decl);
-					for declarator: decl.declarators {
-						if identifier_from_declarator(declarator) != id continue;
-						if !declarator.init continue;
-						if declarator.init.initializer_type != Node_Scalar_Initializer continue;
+			found_decl, decl_node := table_find(ordinary, id);
+			if found_decl && decl_node && decl_node.type == Node_Decl {
+				decl := decl_node.(*Node_Decl);
+				for declarator: decl.declarators {
+					if identifier_from_declarator(declarator) != id continue;
+					if declarator.init {
 						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
 						return eval_constant_expr(_enums, init_expr, ordinary);
+					} else {
+						return .{symbol = id, kind = .U64, as_u64 = 0 };
 					}
 				}
 			}

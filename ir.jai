@@ -94,13 +94,17 @@ IR_Operand :: struct {
 	label: string;
 }
 
+IR_Relocation :: struct {
+	name: string;
+	offset: int;
+}
 
 IR_Global :: struct {
 	name: string;
 	bytes: []u8;
+	relocations: []IR_Relocation;
 	alignment: int;
 }
-
 
 IR_External :: struct {
 	name: string;
@@ -368,8 +372,8 @@ ir_none :: () -> IR_Operand {
 	return .{};
 }
 
-ir_emit_global :: (ir: *IR, name: string, bytes: []u8, alignment: int) { 
-	array_add(*ir.globals, IR_Global.{ name, bytes, alignment});
+ir_emit_global :: (ir: *IR, name: string, bytes: []u8, relocations: []IR_Relocation, alignment: int) { 
+	array_add(*ir.globals, IR_Global.{ name, bytes, relocations, alignment});
 }
 
 ir_test :: () -> IR {
@@ -403,7 +407,8 @@ ir_test :: () -> IR {
 	bytes: []u8;
 	bytes.data = "test_string\0";
 	bytes.count = 11;
-	ir_emit_global(*ir, "test_string", bytes, 8);
+	relocations: []IR_Relocation;
+	ir_emit_global(*ir, "test_string", bytes, relocations, 8);
 
 	array_add(*ir.functions, f);
 

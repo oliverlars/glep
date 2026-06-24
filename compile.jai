@@ -1075,9 +1075,10 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: 
 	}
 }
 
-compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type) -> []u8 {
-	if !init return {};
-	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type, bytes: []u8, byte_offset := 0) -> int {
+compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type) -> []u8, []IR_Relocation {
+	if !init return {}, {};
+	relocations: [..]IR_Relocation;
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type, bytes: []u8, relocations: [..]IR_Relocation, byte_offset := 0) -> int {
 		if !init return byte_offset;
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
@@ -1103,14 +1104,14 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 			return byte_offset + target_type.size_in_bytes;
 		} else {
 			for init.(*Node_Designated_Initializer).designations {
-				compile_global_initializer(compiler, it.expr, it.target_resolved_type, bytes, byte_offset + it.byte_offset);
+				compile_global_initializer(compiler, it.expr, it.target_resolved_type, bytes, relocations, byte_offset + it.byte_offset);
 			}
 		}
 		return byte_offset;
 	}
 	bytes := NewArray(target_type.size_in_bytes, u8);
-	compile_global_initializer(compiler, init, target_type, bytes);
-	return bytes;
+	compile_global_initializer(compiler, init, target_type, bytes, relocations);
+	return bytes, relocations;
 }
 
 
@@ -1235,11 +1236,11 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 					if !already array_add(*compiler.ir.extern_vars, name);
 				} else {
-					bytes := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
-					ir_emit_global(*compiler.ir, name, bytes, declarator.resolved_type.alignment);
+					bytes, relocations := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
+					ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment);
 				}
 			} else if declarator.resolved_type.kind == .Function {
-				external: IR_External;
+					external: IR_External;
 					external.name = name;
 
 					function := function_declarator(declarator);
@@ -1275,7 +1276,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 	for value, key: compiler.strings {
 		terminated_bytes := process_string_escapes(key);
-		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, 1);
+		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, .{}, 1);
 	}
 	
 }

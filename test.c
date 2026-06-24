@@ -5,6 +5,10 @@ static int test(int a) {
 	return a;
 }
 
+int Data[1024];
+
+int *G_Data = Data;
+
 int main(void) {
 	struct stat FileStat;
 	printf("sizeof stat: %zu\n", sizeof(FileStat));
