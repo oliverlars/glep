@@ -1,15 +1,11 @@
 #include <stdio.h>
-#include <sys/stat.h>
-
-static int test(int a) {
-	return a;
-}
 
 int Data[1024];
 
-int *G_Data = Data;
+int *AlsoSomeData = Data;
 
-int main(void) {
-	struct stat FileStat;
-	printf("sizeof stat: %zu\n", sizeof(FileStat));
+
+int main() {
+	printf("AlsoSomeData[0] = %d", AlsoSomeData[1]);
+	return 0;
 }

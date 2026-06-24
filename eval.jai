@@ -312,11 +312,11 @@ to_s64 :: (v: Constant) -> s64 {
 
 convert_constant :: (v: Constant, target: *Resolved_Type) -> Constant {
 	if target.kind == .Floating {
-		return .{ kind = .F64, as_f64 = to_f64(v) };
+		return .{ symbol = v.symbol, kind = .F64, as_f64 = to_f64(v) };
 	} else if target.unsigned {
-		return .{ kind = .U64, as_u64 = to_u64(v) };
+		return .{ symbol = v.symbol, kind = .U64, as_u64 = to_u64(v) };
 	} else {
-		return .{ kind = .S64, as_s64 = to_s64(v) };
+		return .{ symbol = v.symbol, kind = .S64, as_s64 = to_s64(v) };
 	}
 }
 

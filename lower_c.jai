@@ -104,15 +104,45 @@ materialise :: (operand: IR_Operand) -> string {
 lower :: (emitter: *Emitter) {
 	for global: emitter.ir.globals {
 		alignment := max(global.alignment, 1);
-		emit(emitter, "__attribute__((aligned(%))) char %[%] = {\n", alignment, global.name, global.bytes.count);
-		for global.bytes {
+		builder: String_Builder;
+		emitln(emitter, "__attribute__((aligned(%))) union { \n", alignment);
+		indent(emitter);
+		emitln(emitter, "char bytes[%];\n", global.bytes.count);
+		bytes_start := 0;
+		emitln(emitter, "struct { ");
+		indent(emitter);
+		for relocation: global.relocations {
+			emit(emitter, "char _pad%[%]; void *_r%;\n", it_index, bytes_start, it_index);
+			bytes_start = relocation.offset;
+		}
+		unindent(emitter);
+		emitln(emitter, "\n} relocations;\n");
+		unindent(emitter);
+		emitln(emitter, "\n} _g% = {\n", it_index);
+		emitln(emitter, ".bytes = {\n");
+		indent(emitter);
+		for byte: global.bytes {
 			if it_index < global.bytes.count - 1 {
-				emit(emitter, "%, ", it);
+				emit(emitter, "%, ", byte);
 			} else {
-				emit(emitter, "% ", it);
+				emit(emitter, "% ", byte);
 			}
 		}
-		emit(emitter, "\n};\n", global.name);
+		unindent(emitter);
+		emit(emitter, "},\n");
+		emit(emitter, ".relocations = {\n");
+		for relocation: global.relocations {
+			relocation_index: int;
+			for global: emitter.ir.globals {
+				if global.name == relocation.name {
+					relocation_index = it_index;
+				}
+			}
+			emit(emitter, "._r% = _g%.bytes + %,\n", it_index, relocation_index, relocation.offset);
+		}
+		emit(emitter, "\n}\n");
+		emit(emitter, "\n};\n");
+		emit(emitter, "void *% = _g%.bytes;\n", global.name, it_index);
 	}
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
 	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");

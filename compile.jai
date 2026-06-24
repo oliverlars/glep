@@ -1077,8 +1077,7 @@ compile_initializer :: (compiler: *Compiler, init: *Node_Initializer, lhs_type: 
 
 compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type) -> []u8, []IR_Relocation {
 	if !init return {}, {};
-	relocations: [..]IR_Relocation;
-	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type, bytes: []u8, relocations: [..]IR_Relocation, byte_offset := 0) -> int {
+	compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, target_type: *Resolved_Type, bytes: []u8, relocations: *[..]IR_Relocation, byte_offset := 0) -> int {
 		if !init return byte_offset;
 		function := compiler.current_function;
 		if init.initializer_type == Node_Scalar_Initializer {
@@ -1091,7 +1090,9 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 				return byte_offset + target_type.size_in_bytes;
 			}
 			value := convert_constant(eval_constant_expr(*compiler.enums, expr, *compiler.ordinary), target_type);
-			if target_type.kind == .Floating {
+			if value.symbol != "" {
+				array_add(relocations, .{value.symbol, byte_offset});
+			} else if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {
 					f32_val := cast(float32) value.as_f64;
 					memcpy(bytes.data + byte_offset, *f32_val, 4);
@@ -1110,7 +1111,8 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 		return byte_offset;
 	}
 	bytes := NewArray(target_type.size_in_bytes, u8);
-	compile_global_initializer(compiler, init, target_type, bytes, relocations);
+	relocations: [..]IR_Relocation;
+	compile_global_initializer(compiler, init, target_type, bytes, *relocations);
 	return bytes, relocations;
 }
 
