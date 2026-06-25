@@ -1239,7 +1239,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					if !already array_add(*compiler.ir.extern_vars, name);
 				} else {
 					bytes, relocations := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
-					ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment);
+					ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment, declarator.resolved_type.size_in_bytes);
 				}
 			} else if declarator.resolved_type.kind == .Function {
 					external: IR_External;
@@ -1278,7 +1278,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 	for value, key: compiler.strings {
 		terminated_bytes := process_string_escapes(key);
-		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, .{}, 1);
+		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, .{}, 1, 8);
 	}
 	
 }

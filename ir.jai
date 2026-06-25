@@ -104,6 +104,8 @@ IR_Global :: struct {
 	bytes: []u8;
 	relocations: []IR_Relocation;
 	alignment: int;
+	// bytes/relocations dont tell us size of the lhs
+	size_in_bytes: int;
 }
 
 IR_External :: struct {
@@ -372,8 +374,8 @@ ir_none :: () -> IR_Operand {
 	return .{};
 }
 
-ir_emit_global :: (ir: *IR, name: string, bytes: []u8, relocations: []IR_Relocation, alignment: int) { 
-	array_add(*ir.globals, IR_Global.{ name, bytes, relocations, alignment});
+ir_emit_global :: (ir: *IR, name: string, bytes: []u8, relocations: []IR_Relocation, alignment: int, size_in_bytes: int) { 
+	array_add(*ir.globals, IR_Global.{ name, bytes, relocations, alignment, size_in_bytes});
 }
 
 ir_test :: () -> IR {
@@ -408,7 +410,7 @@ ir_test :: () -> IR {
 	bytes.data = "test_string\0";
 	bytes.count = 11;
 	relocations: []IR_Relocation;
-	ir_emit_global(*ir, "test_string", bytes, relocations, 8);
+	ir_emit_global(*ir, "test_string", bytes, relocations, 8, 8);
 
 	array_add(*ir.functions, f);
 

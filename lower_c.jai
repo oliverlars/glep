@@ -105,43 +105,51 @@ lower :: (emitter: *Emitter) {
 	for global: emitter.ir.globals {
 		alignment := max(global.alignment, 1);
 		builder: String_Builder;
-		emitln(emitter, "__attribute__((aligned(%))) union { \n", alignment);
+		emitln(emitter, "__attribute__((aligned(%))) struct { \n", alignment);
 		indent(emitter);
-		emitln(emitter, "char bytes[%];\n", global.bytes.count);
 		bytes_start := 0;
-		emitln(emitter, "struct { ");
-		indent(emitter);
 		for relocation: global.relocations {
-			emit(emitter, "char _pad%[%]; void *_r%;\n", it_index, bytes_start, it_index);
+			if bytes_start == 0 {
+				emitln(emitter, "void *_r%;", it_index);
+			} else {
+				emitln(emitter, "char _bytes%[%]; void *_r%;", it_index, bytes_start, it_index);
+			}
 			bytes_start = relocation.offset;
 		}
-		unindent(emitter);
-		emitln(emitter, "\n} relocations;\n");
-		unindent(emitter);
-		emitln(emitter, "\n} _g% = {\n", it_index);
-		emitln(emitter, ".bytes = {\n");
-		indent(emitter);
-		for byte: global.bytes {
-			if it_index < global.bytes.count - 1 {
-				emit(emitter, "%, ", byte);
-			} else {
-				emit(emitter, "% ", byte);
-			}
+		if global.relocations.count == 0 {
+			emitln(emitter, "char bytes[%];", global.size_in_bytes);
 		}
 		unindent(emitter);
-		emit(emitter, "},\n");
-		emit(emitter, ".relocations = {\n");
-		for relocation: global.relocations {
-			relocation_index: int;
-			for global: emitter.ir.globals {
-				if global.name == relocation.name {
-					relocation_index = it_index;
+		unindent(emitter);
+		emit(emitter, "\n}");
+		if global.bytes.count > 0 {
+			emitln(emitter, " _g% = {", it_index);
+			// emitln(emitter, ".bytes = {");
+			// indent(emitter);
+			// for byte: global.bytes {
+			// 	if it_index < global.bytes.count - 1 {
+			// 		emit(emitter, "%, ", byte);
+			// 	} else {
+			// 		emit(emitter, "% ", byte);
+			// 	}
+			// }
+			// unindent(emitter);
+			// emit(emitter, "},\n");
+			for relocation: global.relocations {
+				relocation_index: int;
+				for global: emitter.ir.globals {
+					if global.name == relocation.name {
+						relocation_index = it_index;
+					}
 				}
+				emit(emitter, "._r% = _g%.bytes + %,\n", it_index, relocation_index, relocation.offset);
 			}
-			emit(emitter, "._r% = _g%.bytes + %,\n", it_index, relocation_index, relocation.offset);
+			bytes_start := 0;
+			emit(emitter, "\n}\n");
+		} else {
+			emitln(emitter, " _g%", it_index);
 		}
-		emit(emitter, "\n}\n");
-		emit(emitter, "\n};\n");
+		emit(emitter, ";\n");
 		emit(emitter, "void *% = _g%.bytes;\n", global.name, it_index);
 	}
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
