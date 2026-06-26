@@ -102,6 +102,15 @@ materialise :: (operand: IR_Operand) -> string {
 }
 
 lower :: (emitter: *Emitter) {
+
+	index_from_global_name :: (name: string, globals: []IR_Global) -> int {
+		for globals {
+			if name == it.name return it_index;
+		}
+		assert(false);
+		return 0;
+	}
+
 	for global: emitter.ir.globals {
 		alignment := max(global.alignment, 1);
 		builder: String_Builder;
@@ -109,50 +118,60 @@ lower :: (emitter: *Emitter) {
 		indent(emitter);
 		if global.relocations.count > 0 {
 			relocation_index := 0;
+			byte_array_index := 0;
+
 			bytes_start := 0;
 			for byte_index: 0..global.bytes.count-1 {
 				if relocation_index < global.relocations.count &&
-				   global.relocations[relocation_index].byte_start {
-					emitln(emitter, "char _bytes%[%]; void *_r%;", relocation_index, byte_index - bytes_start, relocation_index);
+				   byte_index == global.relocations[relocation_index].byte_start {
+					if byte_index - bytes_start == 0 {
+						emitln(emitter, "void *_r%;", relocation_index);
+					} else {
+						emitln(emitter, "char _b%[%]; void *_r%;", byte_array_index, byte_index - bytes_start, relocation_index);
+					}
 					bytes_start = byte_index;
 					relocation_index += 1;
+					byte_array_index += 1;
 				}
 			}
 		} else {
 			emitln(emitter, "char b0[%];", global.size_in_bytes);
 		}
 		unindent(emitter);
-		unindent(emitter);
 		emit(emitter, "\n}");
-		if global.bytes.count > 0 {
-			emitln(emitter, " _g% = {", it_index);
-			// emitln(emitter, ".bytes = {");
-			// indent(emitter);
-			// for byte: global.bytes {
-			// 	if it_index < global.bytes.count - 1 {
-			// 		emit(emitter, "%, ", byte);
-			// 	} else {
-			// 		emit(emitter, "% ", byte);
-			// 	}
-			// }
-			// unindent(emitter);
-			// emit(emitter, "},\n");
-			for relocation: global.relocations {
-				relocation_index: int;
-				for global: emitter.ir.globals {
-					if global.name == relocation.name {
-						relocation_index = it_index;
-					}
-				}
-				emit(emitter, "._r% = _g%.bytes + %,\n", it_index, relocation_index, relocation.offset);
-			}
+		emit(emitter, "_g% = {\n", it_index);
+		if global.relocations.count > 0 {
+			relocation_index := 0;
+			byte_array_index := 0;
+
 			bytes_start := 0;
-			emit(emitter, "\n}\n");
+			for byte_index: 0..global.bytes.count-1 {
+				if relocation_index < global.relocations.count &&
+				   byte_index == global.relocations[relocation_index].byte_start {
+					if byte_index - bytes_start == 0 {
+						relocation := global.relocations[relocation_index];
+						emitln(emitter, "._r% = &_g% + %,", relocation_index, index_from_global_name(relocation.name, emitter.ir.globals), relocation.offset);
+					} else {
+						emitln(emitter, "._b% = {", byte_array_index);
+						for bytes_start..byte_index { 
+							emit(emitter, "%, ", global.bytes[it]);
+						}
+						emitln(emitter, "},");
+					}
+					bytes_start = byte_index;
+					relocation_index += 1;
+					byte_array_index += 1;
+				}
+			}
 		} else {
-			emitln(emitter, " _g%", it_index);
+			emitln(emitter, ".b0 = {");
+			for global.bytes {
+				emit(emitter, "%, ", it);
+			}
+			emitln(emitter, "},");
 		}
-		emit(emitter, ";\n");
-		emit(emitter, "void *% = _g%.bytes;\n", global.name, it_index);
+		emit(emitter, "};\n");
+		emit(emitter, "void *% = &_g%;\n", global.name, it_index);
 	}
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
 	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");
