@@ -97,6 +97,7 @@ IR_Operand :: struct {
 IR_Relocation :: struct {
 	name: string;
 	offset: int;
+	byte_start: int;
 }
 
 IR_Global :: struct {

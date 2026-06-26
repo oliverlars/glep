@@ -1091,7 +1091,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 			}
 			value := convert_constant(eval_constant_expr(*compiler.enums, expr, *compiler.ordinary), target_type);
 			if value.symbol != "" {
-				array_add(relocations, .{value.symbol, byte_offset});
+				array_add(relocations, .{value.symbol, value.as_s64, byte_offset});
 			} else if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {
 					f32_val := cast(float32) value.as_f64;

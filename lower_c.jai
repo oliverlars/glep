@@ -107,17 +107,19 @@ lower :: (emitter: *Emitter) {
 		builder: String_Builder;
 		emitln(emitter, "__attribute__((aligned(%))) struct { \n", alignment);
 		indent(emitter);
-		bytes_start := 0;
-		for relocation: global.relocations {
-			if bytes_start == 0 {
-				emitln(emitter, "void *_r%;", it_index);
-			} else {
-				emitln(emitter, "char _bytes%[%]; void *_r%;", it_index, bytes_start, it_index);
+		if global.relocations.count > 0 {
+			relocation_index := 0;
+			bytes_start := 0;
+			for byte_index: 0..global.bytes.count-1 {
+				if relocation_index < global.relocations.count &&
+				   global.relocations[relocation_index].byte_start {
+					emitln(emitter, "char _bytes%[%]; void *_r%;", relocation_index, byte_index - bytes_start, relocation_index);
+					bytes_start = byte_index;
+					relocation_index += 1;
+				}
 			}
-			bytes_start = relocation.offset;
-		}
-		if global.relocations.count == 0 {
-			emitln(emitter, "char bytes[%];", global.size_in_bytes);
+		} else {
+			emitln(emitter, "char b0[%];", global.size_in_bytes);
 		}
 		unindent(emitter);
 		unindent(emitter);
