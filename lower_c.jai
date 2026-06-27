@@ -131,7 +131,7 @@ lower :: (emitter: *Emitter) {
 					}
 					bytes_start = byte_index;
 					relocation_index += 1;
-					byte_array_index += 1;
+					byte_array_index += 8;
 				}
 			}
 		} else {
@@ -159,8 +159,8 @@ lower :: (emitter: *Emitter) {
 						emitln(emitter, "},");
 					}
 					bytes_start = byte_index;
+					byte_array_index += 8;
 					relocation_index += 1;
-					byte_array_index += 1;
 				}
 			}
 		} else {

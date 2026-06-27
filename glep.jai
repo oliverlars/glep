@@ -2001,6 +2001,16 @@ identifier_from_declarator :: (declarator: *Node_Declarator) -> string {
 	return find_identifier(declarator);
 }
 
+declarator_is_address :: (declarator: *Node_Declarator) -> bool {
+	if !declarator return false;
+	if declarator.declarator_type == Node_Pointer_Declarator {
+		return true;
+	} else {
+		return declarator_is_address(declarator.inner);
+	}
+	return false;
+}
+
 parse_initializer :: (p: *Parser) -> *Node_Initializer {
 	initializer: *Node_Initializer;
 	if current(p).type == .LeftBrace {

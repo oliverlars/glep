@@ -531,7 +531,7 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: 
 				decl := decl_node.(*Node_Decl);
 				for declarator: decl.declarators {
 					if identifier_from_declarator(declarator) != id continue;
-					if declarator.init {
+					if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
 						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
 						return eval_constant_expr(_enums, init_expr, ordinary);
 					} else {
