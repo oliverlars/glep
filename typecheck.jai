@@ -1140,20 +1140,6 @@ member_type_from_index :: (tc: *Type_Checker, _struct: *Node_Struct, index: int)
 	return null;
 }
 
-
-initializer_is_constant :: (tc: *Type_Checker, init: *Node_Initializer) -> bool {
-	if !init return true;
-	if init.initializer_type == Node_Scalar_Initializer {
-		scalar := init.(*Node_Scalar_Initializer).expr;
-		return is_expr_constant(*tc._enums, scalar, *tc.ordinary);
-	} else if init.initializer_type == Node_Designated_Initializer {
-		result: bool;
-		for init.(*Node_Designated_Initializer).designations {
-			result &= initializer_is_constant(tc, it.expr);
-		}
-	}
-}
-
 resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_Initializer, initializer_needs_to_be_constant := false) -> *Resolved_Type {
 	if !init return null;
 
@@ -1257,7 +1243,17 @@ typecheck_decl :: (tc: *Type_Checker, decl: *Node_Decl, initializer_needs_to_be_
 			pop_scope(tc);
 			tc.current_function_return_type = prev_return_type;
 		}
-		resolve_initializer(tc, decl_type, declarator.init, initializer_needs_to_be_constant);
+		if initializer_needs_to_be_constant {
+			id := identifier_from_declarator(declarator);
+			if id == "Data" {
+				a := 5;
+			}
+			if !initializer_is_constant(*tc._enums, *tc.ordinary, declarator.init) {
+				report_error(tc, declarator.init.line, declarator.init.col, "asdfasdf");
+				return;
+			}
+		}
+		resolve_initializer(tc, decl_type, declarator.init);
 	}
 }
 
@@ -1274,6 +1270,7 @@ typecheck :: (tc: *Type_Checker, tu: *Node_Translation_Unit) -> bool {
 		if item.type == {
 			case Node_Decl;
 				typecheck_decl(tc, item.(*Node_Decl), true);
+
 			case Node_Static_Assert;
 				static_assert := item.(*Node_Static_Assert);
 				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);

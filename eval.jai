@@ -398,11 +398,31 @@ parse_escape :: (s: string, start: int) -> (val: int, len: int) {
 	return cast(int) c, 1;
 }
 
+initializer_is_constant :: (_enums: *Table(string, int), ordinary: *Table(string, *Node), init: *Node_Initializer) -> bool {
+	if !init return true;
+	if init.initializer_type == Node_Scalar_Initializer {
+		scalar := init.(*Node_Scalar_Initializer).expr;
+		return is_expr_constant(_enums, scalar, ordinary);
+	} else if init.initializer_type == Node_Designated_Initializer {
+		result := true;
+		for init.(*Node_Designated_Initializer).designations {
+			result &= initializer_is_constant(_enums, ordinary, it.expr);
+		}
+		return result;
+	}
+	return true;
+}
+
 is_expr_constant :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: *Table(string, *Node) = null) -> bool {
 	if !expr return true;
 	if expr.expr_type == {
 		case Node_Unary;
 			unary := expr.(*Node_Unary);
+			if unary.op.type == .Ampersand {
+				if unary.expr.expr_type == Node_Identifier {
+					return true;
+				}
+			}
 			return is_expr_constant(_enums, unary.expr, ordinary);
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;
@@ -439,10 +459,9 @@ is_expr_constant :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: *T
 					decl := decl_node.(*Node_Decl);
 					for declarator: decl.declarators {
 						if identifier_from_declarator(declarator) != id continue;
-						if !declarator.init continue;
-						if declarator.init.initializer_type != Node_Scalar_Initializer continue;
-						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
-						return is_expr_constant(_enums, init_expr, ordinary);
+						if declarator.resolved_type.kind == .Pointer return true;
+						if declarator.resolved_type.kind == .Array return true;
+						return initializer_is_constant(_enums, ordinary, declarator.init);
 					}
 				}
 			}
@@ -531,6 +550,7 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: 
 				decl := decl_node.(*Node_Decl);
 				for declarator: decl.declarators {
 					if identifier_from_declarator(declarator) != id continue;
+					if declarator
 					if declarator.init && declarator.init.initializer_type == Node_Scalar_Initializer {
 						init_expr := declarator.init.(*Node_Scalar_Initializer).expr;
 						return eval_constant_expr(_enums, init_expr, ordinary);
