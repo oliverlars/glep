@@ -1091,6 +1091,7 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 			}
 			value := convert_constant(eval_constant_expr(*compiler.enums, expr, *compiler.ordinary), target_type);
 			if value.symbol != "" {
+				print("FOUND RELOCATION: %\n", value.symbol);
 				array_add(relocations, .{value.symbol, value.as_s64, byte_offset});
 			} else if target_type.kind == .Floating {
 				if target_type.size_in_bytes == 4 {
@@ -1113,6 +1114,9 @@ compile_global_initializer :: (compiler: *Compiler, init: *Node_Initializer, tar
 	bytes := NewArray(target_type.size_in_bytes, u8);
 	relocations: [..]IR_Relocation;
 	compile_global_initializer(compiler, init, target_type, bytes, *relocations);
+	if relocations.count == 1 {
+		a := 5;
+	}
 	return bytes, relocations;
 }
 
@@ -1238,6 +1242,10 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 					}
 					if !already array_add(*compiler.ir.extern_vars, name);
 				} else {
+
+					if identifier_from_declarator(declarator) == "Data" {
+						a := 5;
+					}
 					bytes, relocations := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
 					ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment, declarator.resolved_type.size_in_bytes);
 				}
@@ -1278,7 +1286,7 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 
 	for value, key: compiler.strings {
 		terminated_bytes := process_string_escapes(key);
-		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, .{}, 1, 8);
+		ir_emit_global(*compiler.ir, tprint("str%", value), terminated_bytes, .{}, 1, terminated_bytes.count);
 	}
 	
 }
