@@ -2206,12 +2206,6 @@ parse_translation_unit :: (p: *Parser) -> *Node_Translation_Unit {
 			array_add(*result.items, static_assert);
 		} else {
 			decl := parse_decl(p);
-			for decl.declarators {
-				name := identifier_from_declarator(it);
-				if name != "" {
-					table_set(*p.ordinary, name, decl);
-				}
-			}
 			array_add(*result.items, decl);
 			if !decl.body {
 				expect(p, .Semicolon);
@@ -2252,6 +2246,10 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		declarator := parse_declarator(p);
 		if declarator {
 			array_add(*decl.declarators, declarator);
+			name := identifier_from_declarator(declarator);
+			if name != "" {
+				table_set(*p.ordinary, name, decl);
+			}
 			if current(p).type == .Equals {
 				skip(p);
 				declarator.init = parse_initializer(p);

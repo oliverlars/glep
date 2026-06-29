@@ -8,6 +8,7 @@ int *AlsoSomeData = Data;
 
 
 int main() {
+	int a = sizeof(a);
 	printf("AlsoSomeData[0] = %d\n", AlsoSomeData[1]);
 	return 0;
 }

@@ -1044,8 +1044,8 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 				for decl.declarators {
 					lhs := resolve_decl(tc, decl, it);
 					it.resolved_type = lhs;
-					resolve_initializer(tc, lhs, it.init);
 					push_decl(tc, it);
+					resolve_initializer(tc, lhs, it.init);
 				}
 			case Node_Static_Assert;
 				static_assert := stmt.(*Node_Static_Assert);
