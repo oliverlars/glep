@@ -995,7 +995,9 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 						}
 						skip_line(cpp, src_tokens);
 					case "undef";
-						table_remove(*cpp.objects, skip(cpp, src_tokens).view);
+						name := skip(cpp, src_tokens).view;
+						table_remove(*cpp.objects, name);
+						table_remove(*cpp.functions, name);
 					case "elif";
 						line := copy_line(cpp, src_tokens);
 						if peek(cpp.cond_stack).branch_taken {
