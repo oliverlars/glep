@@ -1112,6 +1112,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 					token.col = name.col;
 					insert(cpp, token, *dst_tokens);
 					paste(cpp, src_tokens, *dst_tokens);
+				} else if name.view == "__FUNC__" || name.view == "__func__" {
+					paste(cpp, src_tokens, *dst_tokens);
 				} else {
 					paste(cpp, src_tokens, *dst_tokens);
 				}

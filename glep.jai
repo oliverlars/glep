@@ -145,6 +145,8 @@ Parser :: struct {
 	enums: Table(string, *Node_Enum);
 	typedefs: Table(string, *Node_Decl);
 
+	current_function_name: string;
+
 	// Each string gets a unique index
 	strings: Table(string, int);
 	str_count: int;
@@ -1635,7 +1637,14 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 parse_primary_expr :: (p: *Parser) -> *Node_Expr {
 	// This needs to be done properly, currently it only does a single number...
 	result: *Node_Expr;
-	if current(p).type == .Number {
+	if current(p).view == "__func__" {
+		function_name := p.current_function_name;
+		result = make_node(p, Node_String);
+		token := current(p);
+		token.view = function_name;
+		result.(*Node_String).token = token;
+		skip(p);
+	} else if current(p).type == .Number {
 		result = make_node(p, Node_Number);
 		token := current(p);
 		result.(*Node_Number).token_with_suffix = token;
@@ -2256,6 +2265,8 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 			} else if current(p).type == .Colon {
 				skip(p);
 				declarator.bitfield = parse_expr(p, precedence_of(.Comma) + 1);
+			} else if current(p).type == .LeftBrace {
+				p.current_function_name = name;
 			}
 		}
 

@@ -1039,36 +1039,36 @@ typecheck_statement :: (tc: *Type_Checker, stmt: *Node_Statement) {
 					report_error_at(tc, ret.source_path, ret.line, ret.col, "Expression doesn't match return type");
 				}
 			}
-			case Node_Decl_Statement;
-				decl := stmt.(*Node_Decl_Statement).decl;
-				for decl.declarators {
-					lhs := resolve_decl(tc, decl, it);
-					it.resolved_type = lhs;
-					push_decl(tc, it);
-					resolve_initializer(tc, lhs, it.init);
-				}
-			case Node_Static_Assert;
-				static_assert := stmt.(*Node_Static_Assert);
-				static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
-				constant := eval_constant_expr(*tc._enums, static_assert.expr);
-				if constant.kind == {
-					case .F64;
-						if !constant.as_f64 {
-							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
-						}
-					case .S64;
-						if !constant.as_s64 {
-							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
-						}
-					case .U64;
-						if !constant.as_u64 {
-							report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
-						}
-				}
-				// TODO: evaluate the integer constant expression and report
-				// an error using static_assert.message when it is false.
-			case Node_For;
-				_for := stmt.(*Node_For);
+		case Node_Decl_Statement;
+			decl := stmt.(*Node_Decl_Statement).decl;
+			for decl.declarators {
+				lhs := resolve_decl(tc, decl, it);
+				it.resolved_type = lhs;
+				push_decl(tc, it);
+				resolve_initializer(tc, lhs, it.init);
+			}
+		case Node_Static_Assert;
+			static_assert := stmt.(*Node_Static_Assert);
+			static_assert.expr.resolved_type = resolve_expr(tc, static_assert.expr);
+			constant := eval_constant_expr(*tc._enums, static_assert.expr);
+			if constant.kind == {
+				case .F64;
+					if !constant.as_f64 {
+						report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+					}
+				case .S64;
+					if !constant.as_s64 {
+						report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+					}
+				case .U64;
+					if !constant.as_u64 {
+						report_error_at(tc, static_assert.source_path, static_assert.line, static_assert.col, "Static assert failed: %", static_assert.message.view);
+					}
+			}
+			// TODO: evaluate the integer constant expression and report
+			// an error using static_assert.message when it is false.
+		case Node_For;
+			_for := stmt.(*Node_For);
 			typecheck_statement(tc, _for.init);
 			resolve_expr(tc, _for.cond);
 			resolve_expr(tc, _for.expr);
