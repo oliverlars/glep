@@ -29,6 +29,7 @@ int main() {
 	another_function();
 	printf("Function name: %s\n", __func__);
 	printf("AlsoSomeData[0] = %d\n", AlsoSomeData[1]);
-	printf("CTZ: %d", __builtin_ctz(4));
+	int x = 8;
+	printf("CTZ: %d", __builtin_ctz(x));
 	return 0;
 }

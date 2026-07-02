@@ -585,20 +585,20 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 			if call.builtin_kind != .NONE {
 				if call.builtin_kind == {
-					case .COUNT_LEADING_ZEROS;
+					case .CLZ;
 						value_type := operand_type(call.args[0].resolved_type.inner);
 						value      := compile_expr(compiler, call.args[0]);
 						dst        := ir_register(next_register(compiler), value_type);
 						ir_emit(function, ir_clz(dst, value));
 						result = dst;
-					case .COUNT_TRAILING_ZEROS;
-						value_type := operand_type(call.args[0].resolved_type.inner);
+					case .CTZ;
+						value_type := operand_type(call.args[0].resolved_type);
 						value      := compile_expr(compiler, call.args[0]);
 						dst        := ir_register(next_register(compiler), value_type);
 						ir_emit(function, ir_ctz(dst, value));
 						result = dst;
 					case .ATOMIC_LOAD;
-						value_type := operand_type(call.args[0].resolved_type.inner);
+						value_type := operand_type(call.args[0].resolved_type);
 						ptr        := compile_expr(compiler, call.args[0]);
 						order      := constant_to_int(eval_constant_expr(*compiler.enums, call.args[1]));
 						dst        := ir_register(next_register(compiler), value_type);

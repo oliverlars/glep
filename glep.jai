@@ -306,8 +306,6 @@ Node_Ternary :: struct {
 
 Builtin_Kind :: enum {
 	NONE;
-	COUNT_LEADING_ZEROS;
-	COUNT_TRAILING_ZEROS;
 	ATOMIC_LOAD;
 	ATOMIC_FETCH_ADD;
 	ATOMIC_STORE;

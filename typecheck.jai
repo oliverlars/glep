@@ -219,12 +219,12 @@ register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node
 		.{ "order", INT, false },
 	]);
 
-	add(ordinary, "__builtin_ctz", INT, false, .[
-		.{ "value",   INT, false },
+	add(ordinary, "__builtin_ctz", UINT, false, .[
+		.{ "value",   UINT, false },
 	]);
 
-	add(ordinary, "__builtin_clz", INT, false, .[
-		.{ "value",   INT, false },
+	add(ordinary, "__builtin_clz", UINT, false, .[
+		.{ "value",   UINT, false },
 	]);
 
 	add(ordinary, "__builtin_va_start", VOID, false, .[
@@ -998,7 +998,9 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 		case Node_Call;
 			call := expr.(*Node_Call);
 			callee_type := resolve_expr(tc, call.id);
-			call.id.resolved_type = callee_type;
+			if call.id.(*Node_Identifier).id.view == "__builtin_ctz" {
+				a := 5;
+			}
 
 			function_type := callee_type;
 			if function_type.kind == .Pointer && function_type.inner.kind == .Function {
