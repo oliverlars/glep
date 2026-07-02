@@ -219,6 +219,14 @@ register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node
 		.{ "order", INT, false },
 	]);
 
+	add(ordinary, "__builtin_ctz", INT, false, .[
+		.{ "value",   INT, false },
+	]);
+
+	add(ordinary, "__builtin_clz", INT, false, .[
+		.{ "value",   INT, false },
+	]);
+
 	add(ordinary, "__builtin_va_start", VOID, false, .[
 		.{ "ap",   CHAR, true  },
 		.{ "last", INT,  false },

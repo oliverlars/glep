@@ -275,7 +275,7 @@ compile_lvalue :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			ir_emit(function, ir_store(dst, value));
 			return dst;
 		case;
-			assert(false, "Compile LValue case not implemented");
+			assert(false, "Compile LValue case not implemented: %", expr.expr_type);
 			return .{};
 	}
 	return .{};
@@ -585,6 +585,18 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 
 			if call.builtin_kind != .NONE {
 				if call.builtin_kind == {
+					case .COUNT_LEADING_ZEROS;
+						value_type := operand_type(call.args[0].resolved_type.inner);
+						value      := compile_expr(compiler, call.args[0]);
+						dst        := ir_register(next_register(compiler), value_type);
+						ir_emit(function, ir_clz(dst, value));
+						result = dst;
+					case .COUNT_TRAILING_ZEROS;
+						value_type := operand_type(call.args[0].resolved_type.inner);
+						value      := compile_expr(compiler, call.args[0]);
+						dst        := ir_register(next_register(compiler), value_type);
+						ir_emit(function, ir_ctz(dst, value));
+						result = dst;
 					case .ATOMIC_LOAD;
 						value_type := operand_type(call.args[0].resolved_type.inner);
 						ptr        := compile_expr(compiler, call.args[0]);

@@ -306,10 +306,14 @@ Node_Ternary :: struct {
 
 Builtin_Kind :: enum {
 	NONE;
+	COUNT_LEADING_ZEROS;
+	COUNT_TRAILING_ZEROS;
 	ATOMIC_LOAD;
 	ATOMIC_FETCH_ADD;
 	ATOMIC_STORE;
 	ATOMIC_EXCHANGE;
+	CTZ;
+	CLZ;
 	VA_START;
 	VA_ARG;
 	VA_COPY;
@@ -1604,6 +1608,10 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 						call.builtin_kind = .ATOMIC_FETCH_ADD;
 					case "__c11_atomic_store";
 						call.builtin_kind = .ATOMIC_STORE;
+					case "__builtin_ctz";
+						call.builtin_kind = .CTZ;
+					case "__builtin_clz";
+						call.builtin_kind = .CLZ;
 					case "__builtin_va_start";
 						call.builtin_kind = .VA_START;
 					case "__builtin_va_end";

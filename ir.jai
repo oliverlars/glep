@@ -42,6 +42,8 @@ IR_Operator :: enum {
 	AtomicLoad;
 	AtomicStore;
 	AtomicFetchAdd;
+	CTZ;
+	CLZ;
 	VAStart;
 	VAEnd;
 	VACopy;
@@ -333,6 +335,14 @@ ir_memory_order :: (order: int) -> IR_Instruction {
 		case;   op = .MemoryOrderSeqCst;
 	}
 	return .{ op, .{}, .{}, .{} };
+}
+
+ir_ctz :: (dst: IR_Operand, value: IR_Operand) -> IR_Instruction {
+	return .{ .CTZ, dst, value, .{} };
+}
+
+ir_clz :: (dst: IR_Operand, value: IR_Operand) -> IR_Instruction {
+	return .{ .CLZ, dst, value, .{} };
 }
 
 ir_atomic_load :: (dst: IR_Operand, ptr: IR_Operand) -> IR_Instruction {
