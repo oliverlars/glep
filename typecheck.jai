@@ -1208,6 +1208,21 @@ resolve_initializer :: (tc: *Type_Checker, target: *Resolved_Type, init: *Node_I
 						type = type.inner;
 					}
 				}
+				// A scalar initializer for an aggregate member (e.g. `{0}` where
+				// the first member is itself a struct/array) initializes the
+				// first primitive: keep descending into the first sub-member /
+				// element, accumulating the offset, until we reach a scalar.
+				if designation.expr && designation.expr.initializer_type == Node_Scalar_Initializer {
+					while type && (type.kind == .Composite || type.kind == .Array) {
+						if type.kind == .Composite {
+							offset += type.layout.members[0].offset;
+							type = member_type_from_index(tc, type.composite.(*Node_Struct), 0);
+						} else {
+							type = type.inner;
+						}
+					}
+				}
+
 				designation.byte_offset = offset;
 				designation.target_resolved_type = type;
 				designation.resolved_type = resolve_initializer(tc, type, designation.expr);

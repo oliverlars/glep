@@ -23,9 +23,13 @@ void another_function() {
 	printf("this function is called: %s\n", __func__);
 }
 
+typedef struct m44f { float E[4][4]; } m44f;
+
 int main() {
 	int a = sizeof(a);
 	test t = { .X = 1, .Y = 2, .Z = 3 };
+	test t2 = {0};
+	m44f m = {0};
 	another_function();
 	printf("Function name: %s\n", __func__);
 	printf("AlsoSomeData[0] = %d\n", AlsoSomeData[1]);
