@@ -1,5 +1,9 @@
 #include <stdio.h>
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <assert.h>
+
 int Data[8] = {
 	1, 2, 3, 4, 5, 6, 7, 8
 };
@@ -23,7 +27,16 @@ void another_function() {
 	printf("this function is called: %s\n", __func__);
 }
 
+#define per_thread_local __thread
+
+struct foo {
+} foo;
+
+per_thread_local struct foo a;
+
 typedef struct m44f { float E[4][4]; } m44f;
+
+#define ArenaPushArrayZero(Arena, Type, Count) (Type*)ArenaPushAlignZero(Arena, sizeof(Type)*Count, _Alignof(Type))
 
 int main() {
 	int a = sizeof(a);

@@ -955,12 +955,20 @@ skip :: (p: *Parser) {
 }
 
 expect :: (p: *Parser, type: Token_Type) {
-	if current(p).type != type {
-		print("Expected: %\n", type);
-		for max(0, p.at - 20)..p.at + 20 {
-			print("% ", p.tokens[it].view);
+	tok := current(p);
+	if tok.type != type {
+		print("%: %:%:%: expected % but got % '%'\n",
+			colour("ERROR", .RED), tok.source_path, tok.line, tok.col, type, tok.type, tok.view);
+		print("  near: ");
+		for max(0, p.at - 10)..min(p.tokens.count - 1, p.at + 10) {
+			if it == p.at {
+				print("% ", bold_colour(tprint("[%]", tok.view), .YELLOW));
+			} else {
+				print("% ", p.tokens[it].view);
+			}
 		}
-		assert(false);
+		print("\n");
+		exit(1);
 	} else {
 		skip(p);
 	}
@@ -1025,6 +1033,7 @@ is_storage_specifier :: (token: Token) -> bool {
 	case "auto";     #through;
 	case "extern";   #through;
 	case "register"; #through;
+	case "__thread"; #through;
 	case "typedef";
 		return true;
 	case;
@@ -1045,7 +1054,6 @@ is_type_specifier :: (token: Token) -> bool {
 	case "unsigned"; #through;
 	case "_Float16"; #through;
 	case "__uint128_t"; #through;
-	case "__thread"; #through;
 	case "_Atomic"; #through;
 	case "_Bool"; #through;
 	case "__builtin_va_list"; #through;
@@ -2256,6 +2264,9 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	decl.line = start.line;
 	decl.col = start.col;
 	decl.base = type;
+	if current(p).view == "__thread" {
+		a := 5;
+	}
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
@@ -2993,6 +3004,10 @@ main :: () {
 		add_builtin_object(*cpp, name, value);
 	}
 	tokens := preprocess(*cpp, tokeniser.tokens);
+	if cpp.error_count > 0 {
+		print("%: preprocessing failed with % error(s); aborting before parse\n", colour("ERROR", .RED), cpp.error_count);
+		exit(1);
+	}
 	if opts.write_debug_artifacts {
 		write_tokenised_c_artifact(tokens, sprint("%/tokens.c", DEBUG_ARTIFACT_DIR));
 	}

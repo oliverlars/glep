@@ -24,6 +24,7 @@ Preprocessor :: struct {
 	includes: Table(string, PRAGMA_ONCED);
 	include_paths: [..]string;
 	framework_paths: [..]string;
+	error_count: int;
 }
 
 Cond_State :: struct {
@@ -937,7 +938,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 									full_path = resolve_system_include(cpp, include_path);
 								}
 								if full_path.count == 0 {
-									print("Could not resolve include \"%\" from %\n", include_path, peek(cpp.path_stack));
+									print("%: %:%: could not resolve include \"%\"\n", colour("ERROR", .RED), peek(cpp.path_stack), directive.line, include_path);
+									cpp.error_count += 1;
 									skip_line(cpp, src_tokens);
 									continue;
 								}
@@ -968,7 +970,8 @@ preprocess :: (cpp: *Preprocessor, src_tokens: [..]Token) -> [..]Token {
 							full_path: string;
 							full_path = resolve_system_include(cpp, path);
 							if full_path.count == 0 {
-								print("Could not resolve system include <%> from %\n", path, peek(cpp.path_stack));
+								print("%: %:%: could not resolve system include <%>\n", colour("ERROR", .RED), peek(cpp.path_stack), directive.line, path);
+								cpp.error_count += 1;
 								skip_line(cpp, src_tokens);
 								continue;
 							}
