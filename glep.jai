@@ -7,6 +7,7 @@
 #import "Hash";
 
 #import "Command_Line";
+#import "Sort";
 
 #import "String";
 
@@ -2624,6 +2625,8 @@ Options :: struct {
 	make_executable:       bool; // false (default) -> .o; true (-exe) -> linked binary
 	write_debug_artifacts: bool;
 	run_tests:             bool;
+	run_ctests:            bool;
+	ctest_case:            string; // run a single c-testsuite case and keep its intermediates
 }
 
 print_usage :: () {
@@ -2642,6 +2645,9 @@ print_usage :: () {
 	print("  -stack-size <hex>      Linker stack size when -exe (default: %)\n", DEFAULT_STACK_SIZE);
 	print("  -no-debug-artifacts    Don't write the %/ directory\n", DEBUG_ARTIFACT_DIR);
 	print("  -run-tests             Run the tests/ harness and exit\n");
+	print("  -run-ctests            Run the c-testsuite (%/) and exit\n", CTEST_DIR);
+	print("  -ctest <id>            Run one c-testsuite case (e.g. 00174 or 174),\n");
+	print("                         keeping its intermediates in %/, and show the diff\n", DEBUG_ARTIFACT_DIR);
 	print("  -l<lib>                Link against library <lib> (-exe only)\n");
 	print("  -L<dir>                Add <dir> to the linker search path (-exe only)\n");
 	print("  -Xlinker <arg>         Pass <arg> through to the linker (-exe only)\n");
@@ -2687,6 +2693,12 @@ parse_options :: (args: []string) -> Options {
 			opts.write_debug_artifacts = false;
 		} else if arg == "-run-tests" {
 			opts.run_tests = true;
+		} else if arg == "-run-ctests" {
+			opts.run_ctests = true;
+		} else if arg == "-ctest" {
+			require_value(arg, it, args);
+			opts.ctest_case = args[it + 1];
+			it += 1;
 		} else if arg == "-debug" {
 			opts.debug = true;
 		} else if arg == "-opt" {
@@ -2955,6 +2967,153 @@ run_tests :: () {
 	if failed > 0 print("  Failed: %/%\n", failed, test_files.count);
 }
 
+// The c-testsuite (https://github.com/c-testsuite/c-testsuite) single-exec cases.
+// Each NNNNN.c compiles to a program whose 'main' is the entry point; it must
+// exit 0 and its combined stdout+stderr must match the NNNNN.c.expected file.
+CTEST_DIR       :: "ctest";
+CTEST_BUILD_DIR :: "ctest/build";
+
+// Compile, link and run one c-testsuite case by invoking the glep binary itself
+// as a subprocess. Running out-of-process gives crash isolation: a case that
+// makes the compiler assert or produces a program that segfaults is scored as a
+// failure instead of taking down the whole run.
+run_ctest :: (glep_path: string, source: string) -> passed: bool, reason: string {
+	base := test_base_name(source);
+	exe  := sprint("%/%", CTEST_BUILD_DIR, base);
+
+	// 1. Compile + link with glep (-exe produces a runnable binary via the C backend).
+	compile_cmd := sprint("'%' '%' -exe -o '%' -no-debug-artifacts", glep_path, source, exe);
+	cres := run_command("sh", "-c", compile_cmd, capture_and_return_output = true, timeout_ms = 60000);
+	if cres.type != .EXITED || cres.exit_code != 0 {
+		return false, "compile";
+	}
+
+	// 2. Run it, merging stderr into stdout to match the c-testsuite protocol.
+	rres, output := run_command("sh", "-c", sprint("'%' 2>&1", exe), capture_and_return_output = true, timeout_ms = 10000);
+	if rres.type != .EXITED || rres.exit_code != 0 {
+		return false, ifx rres.type == .SIGNALED then "crash" else "runtime";
+	}
+
+	// 3. Compare combined output against the expected file (absent => expect empty).
+	expected := read_entire_file(sprint("%.expected", source), log_errors = false);
+	if output != expected {
+		return false, "output";
+	}
+
+	return true, "";
+}
+
+// Run a single c-testsuite case, keeping every intermediate on disk so the case
+// can be debugged (tokens -> ast -> ir -> lowered C). Compiler output is shown
+// verbatim, followed by the expected/actual outputs and the verdict.
+run_single_ctest :: (glep_path: string, id: string, output_name: string) {
+	// Accept "174", "00174" or "00174.c".
+	name := id;
+	if ends_with(name, ".c") name = slice(name, 0, name.count - 2);
+	source := sprint("%/%.c", CTEST_DIR, name);
+	if !file_exists(source) {
+		padded := name;
+		while padded.count < 5 padded = sprint("0%", padded);
+		source = sprint("%/%.c", CTEST_DIR, padded);
+		if !file_exists(source) {
+			print("No c-testsuite case '%' (looked for %)\n", id, source);
+			return;
+		}
+		name = padded;
+	}
+
+	// By default group the per-case artifacts (<name>.c, <name>.ir) under debug/
+	// alongside the compiler's tokens.c/ast.c/ir.c; -o overrides the location.
+	out := output_name;
+	if out == "out" out = sprint("%/%", DEBUG_ARTIFACT_DIR, name);
+
+	print("=== compiling % ===\n", source);
+	compile_cmd := sprint("'%' '%' -exe -o '%' 2>&1", glep_path, source, out);
+	cres, clog := run_command("sh", "-c", compile_cmd, capture_and_return_output = true, timeout_ms = 60000);
+	if clog.count > 0 print("%\n", clog);
+
+	print("--- intermediate artifacts ---\n");
+	print("  tokens:  %/tokens.c\n", DEBUG_ARTIFACT_DIR);
+	print("  ast:     %/ast.c\n", DEBUG_ARTIFACT_DIR);
+	print("  ir:      %.ir\n", out);
+	print("  ir->c:   %.c\n", out);
+
+	if cres.type != .EXITED || cres.exit_code != 0 {
+		print("\nRESULT: FAIL (compile)\n");
+		return;
+	}
+
+	rres, got := run_command("sh", "-c", sprint("'%' 2>&1", out), capture_and_return_output = true, timeout_ms = 10000);
+	want := read_entire_file(sprint("%.expected", source), log_errors = false);
+
+	print("\n--- run (exit %:%) ---\n", rres.type, rres.exit_code);
+	print("--- expected ---\n%", want);
+	if want.count && want[want.count-1] != #char "\n" print("\n");
+	print("--- actual ---\n%", got);
+	if got.count && got[got.count-1] != #char "\n" print("\n");
+
+	if rres.type != .EXITED || rres.exit_code != 0 {
+		print("\nRESULT: FAIL (%)\n", ifx rres.type == .SIGNALED then "crash" else "runtime");
+	} else if got != want {
+		print("\nRESULT: FAIL (output mismatch)\n");
+	} else {
+		print("\nRESULT: PASS\n");
+	}
+}
+
+run_ctests :: (glep_path: string) {
+	test_files: [..]string;
+	defer array_free(test_files);
+
+	visitor :: (info: *File_Visit_Info, test_files: *[..]string) {
+		name := info.short_name;
+		// Only the NNNNN.c sources, not the .c.expected / .c.tags sidecars.
+		if name.count > 2 && name[name.count-2] == #char "." && name[name.count-1] == #char "c" {
+			array_add(test_files, copy_string(info.full_name));
+		}
+	}
+	visit_files(CTEST_DIR, false, *test_files, visitor, visit_files = true, visit_directories = false);
+
+	if test_files.count == 0 {
+		print("No c-testsuite cases found in %/\n", CTEST_DIR);
+		return;
+	}
+
+	// Filenames are zero-padded, so a lexicographic sort is numeric order.
+	quick_sort(test_files, (a: string, b: string) -> int { return compare(a, b); });
+
+	make_directory_if_it_does_not_exist(CTEST_BUILD_DIR, recursive = true);
+
+	passed := 0;
+	compile_fails := 0;
+	crash_fails   := 0;
+	runtime_fails := 0;
+	output_fails  := 0;
+
+	for test_files {
+		ok, reason := run_ctest(glep_path, it);
+		if ok {
+			passed += 1;
+		} else {
+			print("  FAIL %  (%)\n", test_base_name(it), reason);
+			if reason == {
+				case "compile"; compile_fails += 1;
+				case "crash";   crash_fails   += 1;
+				case "runtime"; runtime_fails += 1;
+				case "output";  output_fails  += 1;
+			}
+		}
+	}
+
+	total := test_files.count;
+	print("\n--- c-testsuite results ---\n");
+	print("  Compile failures:  %\n", compile_fails);
+	print("  Crashes:           %\n", crash_fails);
+	print("  Nonzero exits:     %\n", runtime_fails);
+	print("  Output mismatches: %\n", output_fails);
+	print("\n  PASSED %/% (% percent)\n", passed, total, 100 * passed / total);
+}
+
 main :: () {
 	args := get_command_line_arguments();
 	defer array_free(args);
@@ -2964,6 +3123,16 @@ main :: () {
 	if opts.run_tests {
 		reset_debug_artifacts();
 		run_tests();
+		return;
+	}
+
+	if opts.run_ctests {
+		run_ctests(args[0]);
+		return;
+	}
+
+	if opts.ctest_case != "" {
+		run_single_ctest(args[0], opts.ctest_case, opts.output_name);
 		return;
 	}
 
