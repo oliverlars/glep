@@ -1,0 +1,8 @@
+DebugLabel LINE: 6, 
+DebugLabel LINE: 6, 
+Address v0, x, 
+Store v0, #0, 
+DebugLabel LINE: 7, 
+Address v1, x, 
+Load v2, v1, 
+Return v2, 

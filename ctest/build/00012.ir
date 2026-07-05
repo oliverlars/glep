@@ -1,0 +1,6 @@
+DebugLabel LINE: 4, 
+DebugLabel LINE: 4, 
+Add v2, #2, #2, 
+Mul v1, v2, #2, 
+Sub v0, v1, #8, 
+Return v0, 

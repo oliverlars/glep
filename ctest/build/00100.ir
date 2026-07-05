@@ -1,0 +1,7 @@
+DebugLabel LINE: 4, 
+DebugLabel LINE: 4, 
+Return #0, 
+DebugLabel LINE: 10, 
+DebugLabel LINE: 10, 
+Call v0, foo, #0, 
+Return v0, 

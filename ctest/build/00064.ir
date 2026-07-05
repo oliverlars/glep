@@ -1,0 +1,5 @@
+DebugLabel LINE: 6, 
+DebugLabel LINE: 1, 
+Div v1, #6, #2, 
+Sub v0, v1, #3, 
+Return v0, 

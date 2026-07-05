@@ -1,0 +1,7 @@
+DebugLabel LINE: 4, 
+DebugLabel LINE: 4, 
+Address v1, str0, 
+Cast v2, #0, 
+Cast v3, v2, 
+Eq v0, v1, v3, 
+Return v0, 

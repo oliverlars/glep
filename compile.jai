@@ -460,6 +460,12 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 							right = scaled;
 						}
 						ir_emit(function, ir_sub(dst, left, right));
+						if left_type.kind == .Pointer && right_type.kind == .Pointer {
+							scaled_dst := ir_register(next_register(compiler), IR_PTR);
+							size_of_pointee := left_type.inner.size_in_bytes;
+							ir_emit(function, ir_div(scaled_dst, dst, ir_constant(xx size_of_pointee, IR_PTR)));
+							dst = scaled_dst;
+						}
 					case .Asterisk;
 						ir_emit(function, ir_mul(dst, left, right));
 					case .ForwardSlash;

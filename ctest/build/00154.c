@@ -1,0 +1,261 @@
+__attribute__((aligned(1))) struct { 
+
+    char b0[4];
+
+}_g0 = {
+.b0 = {
+37, 100, 10, 0, },
+};
+void *str0 = &_g0;
+unsigned long long memset(unsigned long long, int, unsigned int);
+unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
+int noop = 0;
+extern char __stdinp[];
+extern char __stdoutp[];
+extern char __stderrp[];
+extern char sys_nerr[];
+extern char sys_errlist[];
+int renameat(int,unsigned long long,int,unsigned long long);
+int renamex_np(unsigned long long,unsigned long long,unsigned int);
+int renameatx_np(int,unsigned long long,int,unsigned long long,unsigned int);
+int printf(unsigned long long, ...);
+void clearerr(unsigned long long);
+int fclose(unsigned long long);
+int feof(unsigned long long);
+int ferror(unsigned long long);
+int fflush(unsigned long long);
+int fgetc(unsigned long long);
+int fgetpos(unsigned long long,unsigned long long);
+unsigned long long fgets(unsigned long long,int,unsigned long long);
+unsigned long long fopen(unsigned long long,unsigned long long);
+int fprintf(unsigned long long,unsigned long long, ...);
+int fputc(int,unsigned long long);
+int fputs(unsigned long long,unsigned long long);
+unsigned long long fread(unsigned long long,unsigned long long,unsigned long long,unsigned long long);
+unsigned long long freopen(unsigned long long,unsigned long long,unsigned long long);
+int fscanf(unsigned long long,unsigned long long, ...);
+int fseek(unsigned long long,long long,int);
+int fsetpos(unsigned long long,unsigned long long);
+long long ftell(unsigned long long);
+unsigned long long fwrite(unsigned long long,unsigned long long,unsigned long long,unsigned long long);
+int getc(unsigned long long);
+int getchar();
+unsigned long long gets(unsigned long long);
+void perror(unsigned long long);
+int putc(int,unsigned long long);
+int putchar(int);
+int puts(unsigned long long);
+int remove(unsigned long long);
+int rename(unsigned long long,unsigned long long);
+void rewind(unsigned long long);
+int scanf(unsigned long long, ...);
+void setbuf(unsigned long long,unsigned long long);
+int setvbuf(unsigned long long,unsigned long long,int,unsigned long long);
+int sprintf(unsigned long long,unsigned long long, ...);
+int sscanf(unsigned long long,unsigned long long, ...);
+unsigned long long tmpfile();
+unsigned long long tmpnam(unsigned long long);
+int ungetc(int,unsigned long long);
+int vfprintf(unsigned long long,unsigned long long,unsigned long long);
+int vprintf(unsigned long long,unsigned long long);
+int vsprintf(unsigned long long,unsigned long long,unsigned long long);
+unsigned long long ctermid(unsigned long long);
+unsigned long long fdopen(int,unsigned long long);
+int fileno(unsigned long long);
+int pclose(unsigned long long);
+unsigned long long popen(unsigned long long,unsigned long long);
+int __srget(unsigned long long);
+int __svfscanf(unsigned long long,unsigned long long,unsigned long long);
+int __swbuf(int,unsigned long long);
+void flockfile(unsigned long long);
+int ftrylockfile(unsigned long long);
+void funlockfile(unsigned long long);
+int getc_unlocked(unsigned long long);
+int getchar_unlocked();
+int putc_unlocked(int,unsigned long long);
+int putchar_unlocked(int);
+int getw(unsigned long long);
+int putw(int,unsigned long long);
+unsigned long long tempnam(unsigned long long,unsigned long long);
+int fseeko(unsigned long long,long long,int);
+long long ftello(unsigned long long);
+int snprintf(unsigned long long,unsigned long long,unsigned long long, ...);
+int vfscanf(unsigned long long,unsigned long long,unsigned long long);
+int vscanf(unsigned long long,unsigned long long);
+int vsnprintf(unsigned long long,unsigned long long,unsigned long long,unsigned long long);
+int vsscanf(unsigned long long,unsigned long long,unsigned long long);
+int dprintf(int,unsigned long long, ...);
+int vdprintf(int,unsigned long long,unsigned long long);
+long long getdelim(unsigned long long,unsigned long long,int,unsigned long long);
+long long getline(unsigned long long,unsigned long long,unsigned long long);
+unsigned long long fmemopen(unsigned long long,unsigned long long,unsigned long long);
+unsigned long long open_memstream(unsigned long long,unsigned long long);
+int asprintf(unsigned long long,unsigned long long, ...);
+unsigned long long ctermid_r(unsigned long long);
+unsigned long long fgetln(unsigned long long,unsigned long long);
+unsigned long long fmtcheck(unsigned long long,unsigned long long);
+int fpurge(unsigned long long);
+void setbuffer(unsigned long long,unsigned long long,int);
+int setlinebuf(unsigned long long);
+int vasprintf(unsigned long long,unsigned long long,unsigned long long);
+unsigned long long funopen(unsigned long long,unsigned long long,unsigned long long,unsigned long long,unsigned long long);
+extern int entry() {
+    unsigned long long v0;
+    int v1;
+    unsigned long long v2;
+    unsigned long long v4;
+    unsigned long long v6;
+    unsigned long long v7;
+    int v9;
+    int v10;
+    unsigned long long v11;
+    unsigned long long v12;
+    int v14;
+    int v15;
+    unsigned long long v16;
+    int v17;
+    unsigned long long v20;
+    unsigned long long v21;
+    unsigned long long v22;
+    unsigned long long v19;
+    unsigned long long v18;
+    unsigned long long v25;
+    unsigned long long v26;
+    unsigned long long v27;
+    unsigned long long v24;
+    unsigned long long v23;
+    unsigned long long v30;
+    unsigned long long v31;
+    unsigned long long v32;
+    unsigned long long v29;
+    unsigned long long v28;
+    unsigned long long v35;
+    unsigned long long v36;
+    unsigned long long v37;
+    unsigned long long v34;
+    unsigned long long v33;
+    unsigned long long v38;
+    unsigned long long v41;
+    unsigned long long v42;
+    unsigned long long v43;
+    unsigned long long v40;
+    unsigned long long v39;
+    int v44;
+    int v45;
+    unsigned long long v46;
+    unsigned long long v49;
+    unsigned long long v50;
+    unsigned long long v51;
+    unsigned long long v48;
+    unsigned long long v47;
+    int v52;
+    int v53;
+    unsigned long long v54;
+    unsigned long long v57;
+    unsigned long long v58;
+    unsigned long long v59;
+    unsigned long long v56;
+    unsigned long long v55;
+    int v60;
+    int v61;
+    unsigned long long v62;
+    unsigned long long v65;
+    unsigned long long v66;
+    unsigned long long v67;
+    unsigned long long v64;
+    unsigned long long v63;
+    int v68;
+    int v69;
+    char alloca_v0[8] __attribute__((aligned(16)));
+    v0 = (unsigned long long)alloca_v0;
+    char alloca_v16[16] __attribute__((aligned(16)));
+    v16 = (unsigned long long)alloca_v16;
+    // LINE: 11
+    // LINE: 11
+    v1 = memset(v0, 0ll, 8ll    );
+    // LINE: 13
+    v2 = v0 + 0llu;
+    *((int*)v2) = 12ll;
+    // LINE: 14
+    v4 = v0 + 4llu;
+    *((int*)v4) = 34ll;
+    // LINE: 16
+    v6 = (unsigned long long)str0;
+    v7 = v0 + 0llu;
+    v9 = *((int*)v7);
+    v10 = printf(v6, v9    );
+    // LINE: 17
+    v11 = (unsigned long long)str0;
+    v12 = v0 + 4llu;
+    v14 = *((int*)v12);
+    v15 = printf(v11, v14    );
+    // LINE: 19
+    v17 = memset(v16, 0ll, 16ll    );
+    // LINE: 20
+    v20 = v16;
+    v21 = (unsigned long long)0ll;
+    v22 = v21 * 8llu;
+    v19 = v20 + v22;
+    v18 = v19 + 0llu;
+    *((int*)v18) = 12ll;
+    // LINE: 21
+    v25 = v16;
+    v26 = (unsigned long long)0ll;
+    v27 = v26 * 8llu;
+    v24 = v25 + v27;
+    v23 = v24 + 4llu;
+    *((int*)v23) = 34ll;
+    // LINE: 22
+    v30 = v16;
+    v31 = (unsigned long long)1ll;
+    v32 = v31 * 8llu;
+    v29 = v30 + v32;
+    v28 = v29 + 0llu;
+    *((int*)v28) = 56ll;
+    // LINE: 23
+    v35 = v16;
+    v36 = (unsigned long long)1ll;
+    v37 = v36 * 8llu;
+    v34 = v35 + v37;
+    v33 = v34 + 4llu;
+    *((int*)v33) = 78ll;
+    // LINE: 25
+    v38 = (unsigned long long)str0;
+    v41 = v16;
+    v42 = (unsigned long long)0ll;
+    v43 = v42 * 8llu;
+    v40 = v41 + v43;
+    v39 = v40 + 0llu;
+    v44 = *((int*)v39);
+    v45 = printf(v38, v44    );
+    // LINE: 26
+    v46 = (unsigned long long)str0;
+    v49 = v16;
+    v50 = (unsigned long long)0ll;
+    v51 = v50 * 8llu;
+    v48 = v49 + v51;
+    v47 = v48 + 4llu;
+    v52 = *((int*)v47);
+    v53 = printf(v46, v52    );
+    // LINE: 27
+    v54 = (unsigned long long)str0;
+    v57 = v16;
+    v58 = (unsigned long long)1ll;
+    v59 = v58 * 8llu;
+    v56 = v57 + v59;
+    v55 = v56 + 0llu;
+    v60 = *((int*)v55);
+    v61 = printf(v54, v60    );
+    // LINE: 28
+    v62 = (unsigned long long)str0;
+    v65 = v16;
+    v66 = (unsigned long long)1ll;
+    v67 = v66 * 8llu;
+    v64 = v65 + v67;
+    v63 = v64 + 4llu;
+    v68 = *((int*)v63);
+    v69 = printf(v62, v68    );
+    // LINE: 30
+    return 0ll;
+}
+int main(int argc, char **args) { return entry(); }

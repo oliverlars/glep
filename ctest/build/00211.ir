@@ -1,0 +1,7 @@
+DebugLabel LINE: 10, 
+DebugLabel LINE: 10, 
+Address v0, str0, 
+Add v1, #14, #1, 
+Call v2, printf, #1, 
+Param v0, 
+Param v1, 

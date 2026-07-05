@@ -1,0 +1,8 @@
+DebugLabel LINE: 4, 
+DebugLabel LINE: 4, 
+Return 
+DebugLabel LINE: 10, 
+DebugLabel LINE: 10, 
+Call voidfn, #0, 
+DebugLabel LINE: 11, 
+Return #0, 
