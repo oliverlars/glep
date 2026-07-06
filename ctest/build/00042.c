@@ -13,16 +13,16 @@ extern int entry() {
     unsigned long long v12;
     int v14;
     int v11;
-    char alloca_v0[8] __attribute__((aligned(16)));
+    char alloca_v0[0] __attribute__((aligned(16)));
     v0 = (unsigned long long)alloca_v0;
     // LINE: 4
     // LINE: 4
-    v1 = memset(v0, 0ll, 8ll    );
+    v1 = memset(v0, 0ll, 0ll    );
     // LINE: 5
     v2 = v0 + 0llu;
     *((int*)v2) = 1ll;
     // LINE: 6
-    v4 = v0 + 4llu;
+    v4 = v0 + 0llu;
     *((int*)v4) = 3ll;
     // LINE: 8
     v8 = v0 + 0llu;
@@ -30,7 +30,7 @@ extern int entry() {
     v7 = v10 != 3ll;
     v6 = v7 != 0ll;
     if(v7 != 0) goto l2;
-    v12 = v0 + 4llu;
+    v12 = v0 + 0llu;
     v14 = *((int*)v12);
     v11 = v14 != 3ll;
     v6 = v11 != 0ll;

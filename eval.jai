@@ -487,6 +487,13 @@ eval_constant_expr :: (_enums: *Table(string, int), expr: *Node_Expr, ordinary: 
 					return !eval_constant_expr(_enums, unary.expr, ordinary);
 				case .Tilde;
 					return ~eval_constant_expr(_enums, unary.expr, ordinary);
+				case .Ampersand;
+					if unary.expr.expr_type == {
+						case Node_Identifier;
+							id := unary.expr.(*Node_Identifier).id.view;
+							return .{ symbol = id, kind = .U64, as_u64 =0};
+						case Node_Array_Access;
+					}
 			}
 		case Node_Binary;
 			op := expr.(*Node_Binary).op;

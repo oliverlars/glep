@@ -443,7 +443,9 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 					}
 					max_alignment = max(max_alignment, member_type.alignment);
 					array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
-					offset += member_type.size_in_bytes;
+					if !_struct.is_union {
+						offset += member_type.size_in_bytes;
+					}
 					member_declarator.resolved_type = member_type;
 				}
 			}

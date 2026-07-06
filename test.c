@@ -38,7 +38,12 @@ typedef struct m44f { float E[4][4]; } m44f;
 
 #define ArenaPushArrayZero(Arena, Type, Count) (Type*)ArenaPushAlignZero(Arena, sizeof(Type)*Count, _Alignof(Type))
 
+
+int GlobalInt = 123;
+int *PointerToGlobalInt = &GlobalInt;
+
 int main() {
+	printf("PointerToGlobalInt = %d", PointerToGlobalInt[0]);
 	int a = sizeof(a);
 	test t = { .X = 1, .Y = 2, .Z = 3 };
 	test t2 = {0};
