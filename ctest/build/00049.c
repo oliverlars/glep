@@ -9,11 +9,11 @@ __attribute__((aligned(4))) struct {
 void *x = &_g0;
 __attribute__((aligned(8))) struct { 
 
-    char b0[16];
+    char _b0[8]; void *_r0;
 
 }_g1 = {
-.b0 = {
-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+._b0 = {
+1, 0, 0, 0, 0, 0, 0, 0, 0, },
 };
 void *s = &_g1;
 unsigned long long memset(unsigned long long, int, unsigned int);

@@ -816,9 +816,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			return compound.resolved_type;
 		case Node_Assign;
 			assign := expr.(*Node_Assign);
-			if assign.op.line == 438 && assign.op.col == 22 {
-				a := 5;
-			}
 			left_info := resolve_expr(tc, assign.left);
 			right_info := resolve_expr(tc, assign.right);
 			
@@ -874,15 +871,30 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 				left_type = left_type.inner;
 			}
 			assert(left_type.composite.type == Node_Struct);
-			for left_type.composite.(*Node_Struct).members {
-				for declarator: it.declarators {
-					if id == identifier_from_declarator(declarator) {
-						rt := resolve_decl(tc, it, declarator);
-						member_access.resolved_type = rt;
-						return member_access.resolved_type;
+			member_count := left_type.composite.(*Node_Struct).members.count;
+			find_matching_declarator :: (_struct: *Node_Struct, member: string) -> *Node_Declarator, *Node_Decl {
+				for _struct.members {
+					if _struct && it.declarators.count == 0 { 
+						declarator, decl := find_matching_declarator(it._struct, member);
+						if declarator {
+							return declarator, decl;
+						}
+					} else {
+						for declarator: it.declarators {
+							if member == identifier_from_declarator(declarator) {
+								// rt := resolve_decl(tc, , declarator);
+								// member_access.resolved_type = rt;
+								// return member_access.resolved_type;
+								return declarator, it;
+							}
+						}
 					}
 				}
+				return null, null;
 			}
+			declarator, decl := find_matching_declarator(left_type.composite.(*Node_Struct), id);
+			member_access.resolved_type = resolve_decl(tc, decl, declarator);
+			return member_access.resolved_type ;
 		case Node_Array_Access;
 		array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);

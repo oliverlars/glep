@@ -42,7 +42,39 @@ typedef struct m44f { float E[4][4]; } m44f;
 int GlobalInt = 123;
 int *PointerToGlobalInt = &GlobalInt;
 
+typedef struct {
+	int a;
+	union {
+		int b1;
+		int b2;
+	};
+	struct { union { struct { int c; }; }; };
+	struct {
+		int d;
+	};
+} s;
+
 int main() {
+
+	s v;
+
+	v.a = 1;
+	v.b1 = 2;
+	v.c = 3;
+	v.d = 4;
+
+	printf("v.a = %d\n", v.a);
+	printf("v.c = %d\n", v.c);
+
+	if (v.a != 1)
+		return 1;
+	if (v.b1 != 2 && v.b2 != 2)
+		return 2;
+	if (v.c != 3)
+		return 3;
+	if (v.d != 4)
+		return 4;
+
 	printf("PointerToGlobalInt = %d", PointerToGlobalInt[0]);
 	int a = sizeof(a);
 	test t = { .X = 1, .Y = 2, .Z = 3 };
