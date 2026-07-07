@@ -58,6 +58,7 @@ int main() {
 
 	s v;
 
+	printf("sizeof struct { union { struct { int c; }; }; }; = %lu\n", sizeof(struct { union { struct { int c; }; };}));
 	v.a = 1;
 	v.b1 = 2;
 	v.c = 3;

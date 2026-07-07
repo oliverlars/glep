@@ -430,27 +430,41 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 
 		_struct := decl_info._struct;
 		if !table_contains(*tc._structs, _struct) {
-			offset := 0;
-			table_add(*tc._structs, _struct, info);
-			max_alignment := 0;
-			for member_decl, member_it: _struct.members {
-				for member_declarator: member_decl.declarators {
-					member_type := resolve_decl(tc, member_decl, member_declarator);
-					if member_type.alignment > 0 && offset % member_type.alignment != 0 {
-						align := member_type.alignment;
-						bytes_to_pad := (align - (offset % align)) % align;
-						offset += bytes_to_pad;
+			if _struct.is_union {
+				max_alignment := 0;
+				max_member_size := 0;
+				for member_decl, member_it: _struct.members {
+					for member_declarator: member_decl.declarators {
+						member_type := resolve_decl(tc, member_decl, member_declarator);
+						max_alignment = max(max_alignment, member_type.alignment);
+						max_member_size = max(max_member_size, member_type.size_in_bytes);
+						array_add(*info.layout.members, Struct_Member.{ 0, member_type.alignment, member_type.size_in_bytes});
+						member_declarator.resolved_type = member_type;
 					}
-					max_alignment = max(max_alignment, member_type.alignment);
-					array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
-					if !_struct.is_union {
-						offset += member_type.size_in_bytes;
-					}
-					member_declarator.resolved_type = member_type;
 				}
+				info.size_in_bytes = max_member_size;
+				info.alignment = max_alignment;
+			} else {
+				offset := 0;
+				table_add(*tc._structs, _struct, info);
+				max_alignment := 0;
+				for member_decl, member_it: _struct.members {
+					for member_declarator: member_decl.declarators {
+						member_type := resolve_decl(tc, member_decl, member_declarator);
+						if member_type.alignment > 0 && offset % member_type.alignment != 0 {
+							align := member_type.alignment;
+							bytes_to_pad := (align - (offset % align)) % align;
+							offset += bytes_to_pad;
+						}
+						max_alignment = max(max_alignment, member_type.alignment);
+						array_add(*info.layout.members, Struct_Member.{ offset, member_type.alignment, member_type.size_in_bytes});
+						offset += member_type.size_in_bytes;
+						member_declarator.resolved_type = member_type;
+					}
+				}
+				info.size_in_bytes = (offset + max_alignment - 1) & ~(max_alignment - 1);
+				info.alignment = max_alignment;
 			}
-			info.size_in_bytes = (offset + max_alignment - 1) & ~(max_alignment - 1);
-			info.alignment = max_alignment;
 			table_add(*tc._structs, _struct, info);
 		} else {
 			_, info = table_find(*tc._structs, _struct);
@@ -882,9 +896,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 					} else {
 						for declarator: it.declarators {
 							if member == identifier_from_declarator(declarator) {
-								// rt := resolve_decl(tc, , declarator);
-								// member_access.resolved_type = rt;
-								// return member_access.resolved_type;
 								return declarator, it;
 							}
 						}
@@ -894,7 +905,7 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			}
 			declarator, decl := find_matching_declarator(left_type.composite.(*Node_Struct), id);
 			member_access.resolved_type = resolve_decl(tc, decl, declarator);
-			return member_access.resolved_type ;
+			return member_access.resolved_type;
 		case Node_Array_Access;
 		array_access := expr.(*Node_Array_Access);
 			array_access.left.resolved_type = resolve_expr(tc, array_access.left);
