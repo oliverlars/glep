@@ -176,11 +176,19 @@ next_register :: (compiler: *Compiler) -> int {
 }
 
 offset_from_member_name :: (_struct: *Node_Struct, layout: Struct_Layout, name: string) -> int {
-	offset := 0;
+	if !_struct then return -1;
+	offset := -1;
 	index := 0;
 	for _struct.members {
 		for declarator: it.declarators {
 			member_name := identifier_from_declarator(declarator);
+			if member_name == "" && declarator.resolved_type.composite {
+				inner_offset := offset_from_member_name(xx declarator.resolved_type.composite, declarator.resolved_type.layout, name);
+				if inner_offset >= 0 {
+					offset = layout.members[index].offset;
+					return offset + inner_offset;
+				}
+			}
 			if name == member_name {
 				offset = layout.members[index].offset;
 				break it;

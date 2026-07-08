@@ -2265,9 +2265,8 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 	decl.line = start.line;
 	decl.col = start.col;
 	decl.base = type;
-	if current(p).view == "__thread" {
-		a := 5;
-	}
+
+
 	while current(p).type != .Semicolon &&
 		  current(p).type != .LeftBrace {
 		declarator := parse_declarator(p);
@@ -2292,6 +2291,11 @@ parse_decl :: (p: *Parser) -> *Node_Decl {
 		   current(p).type != .LeftBrace {
 			expect(p, .Comma);
 		}
+	}
+
+	if decl.declarators.count == 0 {
+		anonymous_declarator := New(Node_Identifier_Declarator);
+		array_add(*decl.declarators, anonymous_declarator);
 	}
 
 	if is_typedef(decl.base) {

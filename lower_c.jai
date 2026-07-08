@@ -171,7 +171,9 @@ lower :: (emitter: *Emitter) {
 			emitln(emitter, "},");
 		}
 		emit(emitter, "};\n");
-		emit(emitter, "void *% = &_g%;\n", global.name, it_index);
+		if global.name {
+			emit(emitter, "void *% = &_g%;\n", global.name, it_index);
+		}
 	}
 	emit(emitter, "unsigned long long memset(unsigned long long, int, unsigned int);\n");
 	emit(emitter, "unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);\n");

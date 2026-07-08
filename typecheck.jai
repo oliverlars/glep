@@ -442,6 +442,7 @@ resolve_base :: (tc: *Type_Checker, decl_info: Node_Decl_Info) -> *Resolved_Type
 						member_declarator.resolved_type = member_type;
 					}
 				}
+
 				info.size_in_bytes = max_member_size;
 				info.alignment = max_alignment;
 			} else {
@@ -526,8 +527,18 @@ resolve_declarator :: (tc: *Type_Checker, base: *Resolved_Type, declarator: *Nod
 resolve_decl :: (tc: *Type_Checker, decl: *Node_Decl, declarator: *Node_Declarator) -> *Resolved_Type {
 	if !decl return poison_type();
 
+	id := identifier_from_declarator(declarator);
+	if id == "abc" {
+		a := 5;
+	}
+	
+
 	base_info := resolve_base(tc, decl.base);
 	base_info = resolve_declarator(tc, base_info, declarator);
+
+	if base_info.size_in_bytes == 0 {
+		a := 5;
+	}
 
 	return base_info;
 }
@@ -888,16 +899,15 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 			member_count := left_type.composite.(*Node_Struct).members.count;
 			find_matching_declarator :: (_struct: *Node_Struct, member: string) -> *Node_Declarator, *Node_Decl {
 				for _struct.members {
-					if _struct && it.declarators.count == 0 { 
-						declarator, decl := find_matching_declarator(it._struct, member);
-						if declarator {
-							return declarator, decl;
-						}
-					} else {
-						for declarator: it.declarators {
-							if member == identifier_from_declarator(declarator) {
-								return declarator, it;
+					for declarator: it.declarators {
+						id := identifier_from_declarator(declarator);
+						if id == "" {
+							declarator, decl := find_matching_declarator(it._struct, member);
+							if declarator {
+								return declarator, decl;
 							}
+						} else if member == id {
+							return declarator, it;
 						}
 					}
 				}
