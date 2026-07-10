@@ -1,48 +1,144 @@
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[7];
+    char b0[24];
 
 }_g0 = {
 .b0 = {
-37, 100, 32, 37, 100, 10, 0, },
+},
 };
-void *str3 = &_g0;
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g1 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[48];
+
+}_g2 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g3 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g4 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g5 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g6 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[200];
+
+}_g7 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g8 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8192];
+
+}_g9 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g10 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[0];
+
+}_g11 = {
+.b0 = {
+},
+};
 __attribute__((aligned(1))) struct { 
 
     char b0[7];
 
-}_g1 = {
+}_g12 = {
+.b0 = {
+37, 100, 32, 37, 100, 10, 0, },
+};
+void *str3 = &_g12;
+__attribute__((aligned(1))) struct { 
+
+    char b0[7];
+
+}_g13 = {
 .b0 = {
 37, 102, 32, 37, 102, 10, 0, },
 };
-void *str4 = &_g1;
+void *str4 = &_g13;
 __attribute__((aligned(1))) struct { 
 
     char b0[10];
 
-}_g2 = {
+}_g14 = {
 .b0 = {
 99, 104, 97, 114, 58, 32, 37, 99, 10, 0, },
 };
-void *str0 = &_g2;
+void *str0 = &_g14;
 __attribute__((aligned(1))) struct { 
 
     char b0[11];
 
-}_g3 = {
+}_g15 = {
 .b0 = {
 102, 108, 111, 97, 116, 58, 32, 37, 102, 10, 0, },
 };
-void *str2 = &_g3;
+void *str2 = &_g15;
 __attribute__((aligned(1))) struct { 
 
     char b0[9];
 
-}_g4 = {
+}_g16 = {
 .b0 = {
 105, 110, 116, 58, 32, 37, 100, 10, 0, },
 };
-void *str1 = &_g4;
+void *str1 = &_g16;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

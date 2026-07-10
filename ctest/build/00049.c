@@ -9,13 +9,21 @@ __attribute__((aligned(4))) struct {
 void *x = &_g0;
 __attribute__((aligned(8))) struct { 
 
-    char _b0[8]; void *_r0;
+    char b0[16];
 
 }_g1 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char _b0[8]; void *_r0;
+
+}_g2 = {
 ._b0 = {
 1, 0, 0, 0, 0, 0, 0, 0, 0, },
 };
-void *s = &_g1;
+void *s = &_g2;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

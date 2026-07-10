@@ -13,11 +13,11 @@ extern int entry() {
     unsigned long long v12;
     int v14;
     int v11;
-    char alloca_v0[0] __attribute__((aligned(16)));
+    char alloca_v0[4] __attribute__((aligned(16)));
     v0 = (unsigned long long)alloca_v0;
     // LINE: 4
     // LINE: 4
-    v1 = memset(v0, 0ll, 0ll    );
+    v1 = memset(v0, 0ll, 8ll    );
     // LINE: 5
     v2 = v0 + 0llu;
     *((int*)v2) = 1ll;

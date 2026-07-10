@@ -1,29 +1,125 @@
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g0 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g1 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[48];
+
+}_g2 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g3 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g4 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g5 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g6 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[200];
+
+}_g7 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g8 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8192];
+
+}_g9 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g10 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[0];
+
+}_g11 = {
+.b0 = {
+},
+};
 __attribute__((aligned(4))) struct { 
 
     char b0[4];
 
-}_g0 = {
+}_g12 = {
 .b0 = {
 5, 0, 0, 0, },
 };
-void *x = &_g0;
+void *x = &_g12;
 __attribute__((aligned(8))) struct { 
 
     char b0[8];
 
-}_g1 = {
+}_g13 = {
 .b0 = {
 6, 0, 0, 0, 0, 0, 0, 0, },
 };
-void *y = &_g1;
+void *y = &_g13;
 __attribute__((aligned(8))) struct { 
 
     void *_r0;
 
-}_g2 = {
-._r0 = &_g0 + 0,
+}_g14 = {
+._r0 = &_g12 + 0,
 };
-void *p = &_g2;
+void *p = &_g14;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

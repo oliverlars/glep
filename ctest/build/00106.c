@@ -1,3 +1,19 @@
+__attribute__((aligned(4))) struct { 
+
+    char b0[4];
+
+}_g0 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[4];
+
+}_g1 = {
+.b0 = {
+},
+};
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

@@ -1,12 +1,436 @@
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g0 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g1 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[48];
+
+}_g2 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g3 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[64];
+
+}_g4 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g5 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g6 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[200];
+
+}_g7 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g8 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8192];
+
+}_g9 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[12];
+
+}_g10 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g11 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g12 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[68];
+
+}_g13 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[272];
+
+}_g14 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[260];
+
+}_g15 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[136];
+
+}_g16 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[72];
+
+}_g17 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[4];
+
+}_g18 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g19 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[4096];
+
+}_g20 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[512];
+
+}_g21 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[4096];
+
+}_g22 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[64];
+
+}_g23 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[256];
+
+}_g24 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[264];
+
+}_g25 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[520];
+
+}_g26 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[128];
+
+}_g27 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[340];
+
+}_g28 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[424];
+
+}_g29 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g30 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[56];
+
+}_g31 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8];
+
+}_g32 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[32];
+
+}_g33 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8];
+
+}_g34 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g35 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g36 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g37 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g38 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g39 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[144];
+
+}_g40 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[96];
+
+}_g41 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[144];
+
+}_g42 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[160];
+
+}_g43 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[232];
+
+}_g44 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[296];
+
+}_g45 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[304];
+
+}_g46 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[464];
+
+}_g47 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g48 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[8];
+
+}_g49 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[16];
+
+}_g50 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g51 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[0];
+
+}_g52 = {
+.b0 = {
+},
+};
 __attribute__((aligned(1))) struct { 
 
     char b0[4];
 
-}_g0 = {
+}_g53 = {
 .b0 = {
 37, 115, 10, 0, },
 };
-void *str0 = &_g0;
+void *str0 = &_g53;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

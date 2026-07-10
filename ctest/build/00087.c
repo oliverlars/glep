@@ -1,3 +1,11 @@
+__attribute__((aligned(8))) struct { 
+
+    char b0[8];
+
+}_g0 = {
+.b0 = {
+},
+};
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

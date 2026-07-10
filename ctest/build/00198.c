@@ -1,84 +1,188 @@
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[24];
 
 }_g0 = {
 .b0 = {
-101, 61, 37, 100, 10, 0, },
+},
 };
-void *str3 = &_g0;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[64];
 
 }_g1 = {
 .b0 = {
-103, 61, 37, 100, 10, 0, },
+},
 };
-void *str5 = &_g1;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[48];
 
 }_g2 = {
 .b0 = {
-102, 61, 37, 100, 10, 0, },
+},
 };
-void *str4 = &_g2;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[16];
 
 }_g3 = {
 .b0 = {
-107, 61, 37, 100, 10, 0, },
+},
 };
-void *str8 = &_g3;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[64];
 
 }_g4 = {
 .b0 = {
-106, 61, 37, 100, 10, 0, },
+},
 };
-void *str7 = &_g4;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[16];
 
 }_g5 = {
 .b0 = {
-99, 61, 37, 100, 10, 0, },
+},
 };
-void *str2 = &_g5;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[16];
 
 }_g6 = {
 .b0 = {
-98, 61, 37, 100, 10, 0, },
+},
 };
-void *str1 = &_g6;
-__attribute__((aligned(1))) struct { 
+__attribute__((aligned(8))) struct { 
 
-    char b0[6];
+    char b0[200];
 
 }_g7 = {
 .b0 = {
-105, 61, 37, 100, 10, 0, },
+},
 };
-void *str6 = &_g7;
+__attribute__((aligned(8))) struct { 
+
+    char b0[24];
+
+}_g8 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[8192];
+
+}_g9 = {
+.b0 = {
+},
+};
+__attribute__((aligned(8))) struct { 
+
+    char b0[16];
+
+}_g10 = {
+.b0 = {
+},
+};
+__attribute__((aligned(1))) struct { 
+
+    char b0[0];
+
+}_g11 = {
+.b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[4];
+
+}_g12 = {
+.b0 = {
+},
+};
 __attribute__((aligned(1))) struct { 
 
     char b0[6];
 
-}_g8 = {
+}_g13 = {
+.b0 = {
+101, 61, 37, 100, 10, 0, },
+};
+void *str3 = &_g13;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g14 = {
+.b0 = {
+103, 61, 37, 100, 10, 0, },
+};
+void *str5 = &_g14;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g15 = {
+.b0 = {
+102, 61, 37, 100, 10, 0, },
+};
+void *str4 = &_g15;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g16 = {
+.b0 = {
+107, 61, 37, 100, 10, 0, },
+};
+void *str8 = &_g16;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g17 = {
+.b0 = {
+106, 61, 37, 100, 10, 0, },
+};
+void *str7 = &_g17;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g18 = {
+.b0 = {
+99, 61, 37, 100, 10, 0, },
+};
+void *str2 = &_g18;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g19 = {
+.b0 = {
+98, 61, 37, 100, 10, 0, },
+};
+void *str1 = &_g19;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g20 = {
+.b0 = {
+105, 61, 37, 100, 10, 0, },
+};
+void *str6 = &_g20;
+__attribute__((aligned(1))) struct { 
+
+    char b0[6];
+
+}_g21 = {
 .b0 = {
 97, 61, 37, 100, 10, 0, },
 };
-void *str0 = &_g8;
+void *str0 = &_g21;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

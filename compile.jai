@@ -780,10 +780,23 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 					rhs = converted;
 				}
 				if assign.op.type != .Equals {
+					left_type := assign.left.resolved_type;
+					right_type := assign.right.resolved_type;
 					op := ir_register(next_register(compiler), value_type);
 					value := compile_expr(compiler, assign.left);
 					if assign.op.type == {
 						case .PlusEqual;
+							if (left_type.kind == .Pointer || left_type.kind == .Array) && (right_type.kind != .Pointer && right_type.kind != .Array) {
+								pointer := ir_register(next_register(compiler), IR_PTR);
+								size_of_pointee := left_type.inner.size_in_bytes;
+								ir_emit(function, ir_mul(pointer, rhs, ir_constant(xx size_of_pointee, IR_PTR)));
+								rhs = pointer;
+							} else if (right_type.kind == .Pointer || right_type.kind == .Array) && (left_type.kind != .Pointer && left_type.kind != .Array) {
+								pointer := ir_register(next_register(compiler), IR_PTR);
+								size_of_pointee := right_type.inner.size_in_bytes;
+								ir_emit(function, ir_mul(pointer, lhs, ir_constant(xx size_of_pointee, IR_PTR)));
+								lhs = pointer;
+							}
 							ir_emit(function, ir_add(op, value, rhs));
 						case .MinusEqual;
 							ir_emit(function, ir_sub(op, value, rhs));

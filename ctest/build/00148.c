@@ -1,12 +1,20 @@
 __attribute__((aligned(4))) struct { 
 
-    char b0[16];
+    char b0[8];
 
 }_g0 = {
 .b0 = {
+},
+};
+__attribute__((aligned(4))) struct { 
+
+    char b0[16];
+
+}_g1 = {
+.b0 = {
 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, },
 };
-void *arr = &_g0;
+void *arr = &_g1;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

@@ -5,21 +5,26 @@ extern int entry() {
     unsigned long long v0;
     int v1;
     unsigned long long v2;
+    int v3;
     unsigned long long v4;
-    int v6;
+    unsigned long long v6;
+    int v8;
     char alloca_v0[4] __attribute__((aligned(16)));
     v0 = (unsigned long long)alloca_v0;
+    char alloca_v2[4] __attribute__((aligned(16)));
+    v2 = (unsigned long long)alloca_v2;
     // LINE: 4
     // LINE: 4
-    // LINE: 6
-    // LINE: 6
     v1 = memset(v0, 0ll, 8ll    );
+    // LINE: 6
+    // LINE: 6
+    v3 = memset(v2, 0ll, 8ll    );
     // LINE: 7
-    v2 = v0 + 0llu;
-    *((int*)v2) = 0ll;
+    v4 = v2 + 0llu;
+    *((int*)v4) = 0ll;
     // LINE: 8
-    v4 = v0 + 0llu;
-    v6 = *((int*)v4);
-    return v6;
+    v6 = v2 + 0llu;
+    v8 = *((int*)v6);
+    return v8;
 }
 int main(int argc, char **args) { return entry(); }
