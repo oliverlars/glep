@@ -2321,13 +2321,10 @@ is_function_definition :: (decl: *Node_Decl, declarator: *Node_Declarator) -> bo
 }
 
 is_function_declaration :: (declarator: *Node_Declarator) -> bool {
-	while declarator {
-		if declarator.declarator_type == Node_Function_Declarator {
-			return true;
-		}
-		declarator = declarator.inner;
-	}
-	return false;
+	// A declaration is a function only if its outermost type is a function.
+	// Walking the declarator chain would wrongly match function *pointers*
+	// (e.g. `int (*fptr)()`), whose resolved type is a pointer, not a function.
+	return declarator.resolved_type != null && declarator.resolved_type.kind == .Function;
 }
 
 first_declarator :: (decl: *Node_Decl) -> *Node_Declarator {
