@@ -799,6 +799,17 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 							}
 							ir_emit(function, ir_add(op, value, rhs));
 						case .MinusEqual;
+							if (left_type.kind == .Pointer || left_type.kind == .Array) && (right_type.kind != .Pointer && right_type.kind != .Array) {
+								pointer := ir_register(next_register(compiler), IR_PTR);
+								size_of_pointee := left_type.inner.size_in_bytes;
+								ir_emit(function, ir_mul(pointer, rhs, ir_constant(xx size_of_pointee, IR_PTR)));
+								rhs = pointer;
+							} else if (right_type.kind == .Pointer || right_type.kind == .Array) && (left_type.kind != .Pointer && left_type.kind != .Array) {
+								pointer := ir_register(next_register(compiler), IR_PTR);
+								size_of_pointee := right_type.inner.size_in_bytes;
+								ir_emit(function, ir_mul(pointer, lhs, ir_constant(xx size_of_pointee, IR_PTR)));
+								lhs = pointer;
+							}
 							ir_emit(function, ir_sub(op, value, rhs));
 						case .AsteriskEqual;
 							ir_emit(function, ir_mul(op, value, rhs));
