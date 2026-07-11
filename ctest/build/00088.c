@@ -1,12 +1,23 @@
+__attribute__((aligned(8))) struct { 
+
+    char b0[8];
+
+}_g0 = {
+.b0 = {
+0, 0, 0, 0, 0, 0, 0, 0, },
+};
+void *fptr = &_g0;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;
 extern int entry() {
     unsigned long long v0;
+    unsigned long long v1;
     // LINE: 7
     // LINE: 7
     v0 = (unsigned long long)fptr;
-    if(v0 == 0) goto l0;
+    v1 = *((unsigned long long*)v0);
+    if(v1 == 0) goto l0;
     // LINE: 8
     return 1ll;
     goto l1;
