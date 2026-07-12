@@ -6,47 +6,15 @@ __attribute__((aligned(4))) struct {
 .b0 = {
 },
 };
-__attribute__((aligned(8))) struct { 
-
-    char b0[24];
-
-}_g1 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g2 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g3 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g4 = {
-.b0 = {
-},
-};
 __attribute__((aligned(1))) struct { 
 
     char b0[33];
 
-}_g5 = {
+}_g1 = {
 .b0 = {
 117, 110, 115, 105, 103, 110, 101, 100, 32, 101, 110, 117, 109, 32, 98, 105, 116, 45, 102, 105, 101, 108, 100, 115, 32, 98, 114, 111, 107, 101, 110, 10, 0, },
 };
-void *str0 = &_g5;
+void *str0 = &_g1;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

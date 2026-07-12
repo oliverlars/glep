@@ -175,7 +175,7 @@ int fsetpos(FILE *, const fpos_t *);
 long ftell(FILE *);
 size_t fwrite(const void *restrict __ptr, size_t __size, size_t __nitems, FILE *restrict __stream);
 int getc(FILE *);
-int getchar(void );
+int getchar();
 char *gets(char *);
 void perror(const char *);
 int putc(int , FILE *);
@@ -189,7 +189,7 @@ void setbuf(FILE *restrict , char *restrict );
 int setvbuf(FILE *restrict , char *restrict , int , size_t __size);
 int sprintf(char *restrict , const char *restrict , ...);
 int sscanf(const char *restrict , const char *restrict , ...);
-FILE *tmpfile(void );
+FILE *tmpfile();
 char *tmpnam(char *);
 int ungetc(int , FILE *);
 int vfprintf(FILE *restrict , const char *restrict , __builtin_va_list );
@@ -207,7 +207,7 @@ void flockfile(FILE *);
 int ftrylockfile(FILE *);
 void funlockfile(FILE *);
 int getc_unlocked(FILE *);
-int getchar_unlocked(void );
+int getchar_unlocked();
 int putc_unlocked(int , FILE *);
 int putchar_unlocked(int );
 int getw(FILE *);
@@ -239,11 +239,11 @@ void setbuffer(FILE *, char *, int __size);
 int setlinebuf(FILE *);
 int vasprintf(char **restrict , const char *restrict , __builtin_va_list );
 FILE *funopen(const void *, int (*)(void *, char *, int __n), int (*)(void *, const char *, int __n), fpos_t (*)(void *, fpos_t , int ), int (*)(void *));
-void abort(void );
-int g_int = (int )(42);
-double g_double = (double )(3.140000);
-int g_arr[3] = {(int )(10), (int )(20), (int )(30)};
-int g_zero = (int )(0);
+void abort();
+int g_int = 42;
+double g_double = 3.140000;
+int g_arr[3] = {10, 20, 30};
+int g_zero = 0;
 void modify_global(int val){
     g_int = val;
 }
@@ -253,23 +253,23 @@ int read_global(){
 int main(int argc, char **args){
     printf("=== test_globals ===\n");
     {
-        (void )(g_int == (int )(42) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 22, "g_int==42")) , abort()));
+        (void )(g_int == 42 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 22, "g_int==42")) , abort()));
         printf("  global int read: PASS\n");
     }    {
-        (void )(g_double > (double )(3.130000) && g_double < (double )(3.150000) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 28, "g_double>3.13&&g_double<3.15")) , abort()));
+        (void )(g_double > 3.130000 && g_double < 3.150000 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 28, "g_double>3.13&&g_double<3.15")) , abort()));
         printf("  global double read: PASS\n");
     }    {
-        (void )(g_arr[0] == (int )(10) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 34, "g_arr[0]==10")) , abort()));
-        (void )(g_arr[1] == (int )(20) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 35, "g_arr[1]==20")) , abort()));
-        (void )(g_arr[2] == (int )(30) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 36, "g_arr[2]==30")) , abort()));
+        (void )(g_arr[0] == 10 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 34, "g_arr[0]==10")) , abort()));
+        (void )(g_arr[1] == 20 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 35, "g_arr[1]==20")) , abort()));
+        (void )(g_arr[2] == 30 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 36, "g_arr[2]==30")) , abort()));
         printf("  global array read: PASS\n");
     }    {
-        modify_global((int )(99));
-        (void )(g_int == (int )(99) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 43, "g_int==99")) , abort()));
-        (void )(read_global() == (int )(99) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 44, "read_global()==99")) , abort()));
+        modify_global(99);
+        (void )(g_int == 99 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 43, "g_int==99")) , abort()));
+        (void )(read_global() == 99 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 44, "read_global()==99")) , abort()));
         printf("  global modify via function: PASS\n");
     }    {
-        (void )(g_zero == (int )(0) ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 50, "g_zero==0")) , abort()));
+        (void )(g_zero == 0 ? (void )(0) : ((void )(printf("%s:%d: failed assertion `%s'\n", "/Users/olivercruickshank/glep/tests/test_globals.c", 50, "g_zero==0")) , abort()));
         printf("  zero-init global: PASS\n");
     }    printf("=== test_globals: ALL PASS ===\n");
     return 0;

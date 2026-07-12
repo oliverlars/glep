@@ -1297,7 +1297,20 @@ compile :: (compiler: *Compiler, tu: Node_Translation_Unit) {
 						a := 5;
 					}
 					bytes, relocations := compile_global_initializer(compiler, declarator.init, declarator.resolved_type);
-					ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment, declarator.resolved_type.size_in_bytes);
+
+					existing := -1;
+					for * compiler.ir.globals {
+						if it.name == name { existing = it_index; break; }
+					}
+					if existing >= 0 {
+						if declarator.init != null {
+							g := *compiler.ir.globals[existing];
+							g.bytes = bytes;
+							g.relocations = relocations;
+						}
+					} else {
+						ir_emit_global(*compiler.ir, name, bytes, relocations, declarator.resolved_type.alignment, declarator.resolved_type.size_in_bytes);
+					}
 				}
 			} else if declarator.resolved_type.kind == .Function {
 					external: IR_External;

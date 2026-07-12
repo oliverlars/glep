@@ -1,11 +1,11 @@
-int (*fptr)() = 0;
+int x, x = 3, x;
 
 int
 main()
 {
-	if(fptr) { return 0; }
+	if (x != 3)
+		return 0;
 
-	return 0;
+	x = 0;
+	return x;
 }
-
-

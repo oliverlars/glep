@@ -6,23 +6,25 @@ __attribute__((aligned(8))) struct {
 .b0 = {
 },
 };
-__attribute__((aligned(8))) struct { 
+__attribute__((aligned(4))) struct { 
 
-    char b0[64];
+    char b0[16];
 
 }_g1 = {
 .b0 = {
 },
 };
-__attribute__((aligned(8))) struct { 
+void *A = &_g1;
+__attribute__((aligned(4))) struct { 
 
-    char b0[48];
+    char b0[16];
 
 }_g2 = {
 .b0 = {
 },
 };
-__attribute__((aligned(8))) struct { 
+void *B = &_g2;
+__attribute__((aligned(4))) struct { 
 
     char b0[16];
 
@@ -30,506 +32,88 @@ __attribute__((aligned(8))) struct {
 .b0 = {
 },
 };
-__attribute__((aligned(8))) struct { 
+void *C = &_g3;
+__attribute__((aligned(1))) struct { 
 
-    char b0[64];
+    char b0[4];
 
 }_g4 = {
 .b0 = {
-},
+65, 58, 32, 0, },
 };
-__attribute__((aligned(8))) struct { 
+void *str0 = &_g4;
+__attribute__((aligned(1))) struct { 
 
-    char b0[16];
+    char b0[4];
 
 }_g5 = {
 .b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g6 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[200];
-
-}_g7 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[24];
-
-}_g8 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[8192];
-
-}_g9 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g10 = {
-.b0 = {
-},
-};
-__attribute__((aligned(1))) struct { 
-
-    char b0[0];
-
-}_g11 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[12];
-
-}_g12 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g13 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g14 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[68];
-
-}_g15 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[272];
-
-}_g16 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[260];
-
-}_g17 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[136];
-
-}_g18 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[72];
-
-}_g19 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g20 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[24];
-
-}_g21 = {
-.b0 = {
-},
-};
-__attribute__((aligned(1))) struct { 
-
-    char b0[4096];
-
-}_g22 = {
-.b0 = {
-},
-};
-__attribute__((aligned(1))) struct { 
-
-    char b0[512];
-
-}_g23 = {
-.b0 = {
-},
-};
-__attribute__((aligned(1))) struct { 
-
-    char b0[4096];
-
-}_g24 = {
-.b0 = {
-},
-};
-__attribute__((aligned(1))) struct { 
-
-    char b0[64];
-
-}_g25 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[256];
-
-}_g26 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[264];
-
-}_g27 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[520];
-
-}_g28 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[128];
-
-}_g29 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[340];
-
-}_g30 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[424];
-
-}_g31 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[24];
-
-}_g32 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[56];
-
-}_g33 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[8];
-
-}_g34 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[32];
-
-}_g35 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[8];
-
-}_g36 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[24];
-
-}_g37 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g38 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g39 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g40 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g41 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[144];
-
-}_g42 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[96];
-
-}_g43 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[144];
-
-}_g44 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[160];
-
-}_g45 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[232];
-
-}_g46 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[296];
-
-}_g47 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[304];
-
-}_g48 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[464];
-
-}_g49 = {
-.b0 = {
-},
-};
-__attribute__((aligned(8))) struct { 
-
-    char b0[16];
-
-}_g50 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[8];
-
-}_g51 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[16];
-
-}_g52 = {
-.b0 = {
-},
-};
-__attribute__((aligned(4))) struct { 
-
-    char b0[16];
-
-}_g53 = {
-.b0 = {
-},
-};
-void *A = &_g53;
-__attribute__((aligned(4))) struct { 
-
-    char b0[16];
-
-}_g54 = {
-.b0 = {
-},
-};
-void *B = &_g54;
-__attribute__((aligned(4))) struct { 
-
-    char b0[16];
-
-}_g55 = {
-.b0 = {
-},
-};
-void *C = &_g55;
-__attribute__((aligned(1))) struct { 
-
-    char b0[4];
-
-}_g56 = {
-.b0 = {
-65, 58, 32, 0, },
-};
-void *str0 = &_g56;
-__attribute__((aligned(1))) struct { 
-
-    char b0[4];
-
-}_g57 = {
-.b0 = {
 67, 58, 32, 0, },
 };
-void *str4 = &_g57;
+void *str4 = &_g5;
 __attribute__((aligned(1))) struct { 
 
     char b0[23];
 
-}_g58 = {
+}_g6 = {
 .b0 = {
 10, 10, 83, 117, 98, 115, 101, 113, 117, 101, 110, 116, 32, 115, 116, 97, 116, 101, 115, 58, 10, 10, 0, },
 };
-void *str8 = &_g58;
+void *str8 = &_g6;
 __attribute__((aligned(1))) struct { 
 
     char b0[17];
 
-}_g59 = {
+}_g7 = {
 .b0 = {
 83, 116, 97, 114, 116, 105, 110, 103, 32, 115, 116, 97, 116, 101, 58, 10, 0, },
 };
-void *str7 = &_g59;
+void *str7 = &_g7;
 __attribute__((aligned(1))) struct { 
 
     char b0[2];
 
-}_g60 = {
+}_g8 = {
 .b0 = {
 10, 0, },
 };
-void *str2 = &_g60;
+void *str2 = &_g8;
 __attribute__((aligned(1))) struct { 
 
     char b0[4];
 
-}_g61 = {
+}_g9 = {
 .b0 = {
 66, 58, 32, 0, },
 };
-void *str3 = &_g61;
+void *str3 = &_g9;
 __attribute__((aligned(1))) struct { 
 
     char b0[5];
 
-}_g62 = {
+}_g10 = {
 .b0 = {
 32, 37, 100, 32, 0, },
 };
-void *str1 = &_g62;
+void *str1 = &_g10;
 __attribute__((aligned(1))) struct { 
 
     char b0[51];
 
-}_g63 = {
+}_g11 = {
 .b0 = {
 83, 111, 108, 117, 116, 105, 111, 110, 32, 111, 102, 32, 84, 111, 119, 101, 114, 32, 111, 102, 32, 72, 97, 110, 111, 105, 32, 80, 114, 111, 98, 108, 101, 109, 32, 119, 105, 116, 104, 32, 37, 100, 32, 68, 105, 115, 107, 115, 10, 10, 0, },
 };
-void *str6 = &_g63;
+void *str6 = &_g11;
 __attribute__((aligned(1))) struct { 
 
     char b0[44];
 
-}_g64 = {
+}_g12 = {
 .b0 = {
 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45, 10, 0, },
 };
-void *str5 = &_g64;
+void *str5 = &_g12;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

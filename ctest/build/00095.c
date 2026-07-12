@@ -4,27 +4,9 @@ __attribute__((aligned(4))) struct {
 
 }_g0 = {
 .b0 = {
-},
-};
-void *x = &_g0;
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g1 = {
-.b0 = {
 3, 0, 0, 0, },
 };
-void *x = &_g1;
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g2 = {
-.b0 = {
-},
-};
-void *x = &_g2;
+void *x = &_g0;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;

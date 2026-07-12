@@ -70,24 +70,6 @@ __attribute__((aligned(4))) struct {
 },
 };
 void *f_ = &_g7;
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g8 = {
-.b0 = {
-},
-};
-void *e_ = &_g8;
-__attribute__((aligned(4))) struct { 
-
-    char b0[4];
-
-}_g9 = {
-.b0 = {
-},
-};
-void *f_ = &_g9;
 unsigned long long memset(unsigned long long, int, unsigned int);
 unsigned long long memcpy(unsigned long long, unsigned long long, unsigned int);
 int noop = 0;
