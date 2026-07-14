@@ -3,6 +3,9 @@ int x, x = 3, x;
 int
 main()
 {
+
+	long long bigboy123 = __builtin_clzll(10);
+
 	if (x != 3)
 		return 0;
 

@@ -194,7 +194,7 @@ register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node
 	CHAR      :: string.["char"];
 	USHORT    :: string.["unsigned", "short"];
 	UINT      :: string.["unsigned", "int"];
-	ULONG     :: string.["unsigned", "long"];
+	ULONG     :: string.["unsigned", "long", "long"];
 
 	add :: (ordinary: *Table(string, *Node), name: string, ret: []string, ret_ptr: bool, params: []Builtin_Param) #expand {
 		decl := make_builtin_decl(name, ret, ret_ptr, params);
@@ -225,6 +225,14 @@ register_builtin_decls :: (ordinary: *Table(string, *Node), builtins: *[..]*Node
 
 	add(ordinary, "__builtin_clz", UINT, false, .[
 		.{ "value",   UINT, false },
+	]);
+
+	add(ordinary, "__builtin_ctzll", ULONG, false, .[
+		.{ "value",   ULONG, false },
+	]);
+
+	add(ordinary, "__builtin_clzll", ULONG, false, .[
+		.{ "value",   ULONG, false },
 	]);
 
 	add(ordinary, "__builtin_va_start", VOID, false, .[
@@ -1033,9 +1041,6 @@ resolve_expr :: (tc: *Type_Checker, expr: *Node_Expr, sizeof := false) -> *Resol
 		case Node_Call;
 			call := expr.(*Node_Call);
 			callee_type := resolve_expr(tc, call.id);
-			if call.id.(*Node_Identifier).id.view == "__builtin_ctz" {
-				a := 5;
-			}
 
 			function_type := callee_type;
 			if function_type.kind == .Pointer && function_type.inner.kind == .Function {

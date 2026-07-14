@@ -600,15 +600,15 @@ compile_expr :: (compiler: *Compiler, expr: *Node_Expr) -> IR_Operand {
 			if call.builtin_kind != .NONE {
 				if call.builtin_kind == {
 					case .CLZ;
-						value_type := operand_type(call.args[0].resolved_type.inner);
+						dst_type := operand_type(call.resolved_type);
 						value      := compile_expr(compiler, call.args[0]);
-						dst        := ir_register(next_register(compiler), value_type);
+						dst        := ir_register(next_register(compiler), dst_type);
 						ir_emit(function, ir_clz(dst, value));
 						result = dst;
 					case .CTZ;
-						value_type := operand_type(call.args[0].resolved_type);
+						dst_type := operand_type(call.resolved_type);
 						value      := compile_expr(compiler, call.args[0]);
-						dst        := ir_register(next_register(compiler), value_type);
+						dst        := ir_register(next_register(compiler), dst_type);
 						ir_emit(function, ir_ctz(dst, value));
 						result = dst;
 					case .ATOMIC_LOAD;

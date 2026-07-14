@@ -1619,6 +1619,10 @@ parse_postfix_expr :: (p: *Parser, lhs: *Node_Expr) -> *Node_Expr {
 						call.builtin_kind = .CTZ;
 					case "__builtin_clz";
 						call.builtin_kind = .CLZ;
+					case "__builtin_ctzll";
+						call.builtin_kind = .CTZ;
+					case "__builtin_clzll";
+						call.builtin_kind = .CLZ;
 					case "__builtin_va_start";
 						call.builtin_kind = .VA_START;
 					case "__builtin_va_end";
